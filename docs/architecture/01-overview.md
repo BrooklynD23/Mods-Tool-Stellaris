@@ -42,13 +42,19 @@ flowchart TB
         CLI["smd-cli"]
         RPT["smd-report — json / md / html"]
     end
+    subgraph I["Interface"]
+        API["smd-api — Command / Query / Event, TS export"]
+    end
+    subgraph O["Orchestration"]
+        ENG["smd-engine — stage wiring, thread pool, cancellation"]
+    end
     subgraph A["Analysis"]
         POL["smd-policy — scoring, severity, explanations (data-driven)"]
         RUL["smd-rules — independent rule plugins"]
     end
     subgraph M["Model"]
         IDX["smd-index — overlay, symbol table, resolver, cache"]
-        PAR["smd-clausewitz · smd-locyml · parser registry"]
+        PAR["smd-parse — lexers, parser registry, fact emission"]
         ING["smd-ingest — discovery, descriptors, load order"]
     end
     subgraph F["Foundation"]
@@ -56,18 +62,52 @@ flowchart TB
         FS["smd-fs — paths, Steam libraries, VFS, hashing"]
         CORE["smd-core — data contracts, zero dependencies"]
     end
+    subgraph X["Outside the default build"]
+        TK["smd-testkit — fixtures (dev-dependency only)"]
+        PY["smd-py — PyO3 cdylib (feature-gated)"]
+    end
 
+    GUI --> API
+    CLI --> API
     GUI --> RPT
     CLI --> RPT
-    RPT --> POL --> RUL --> IDX --> PAR --> ING
-    ING --> FS --> CORE
-    PROF -.data.-> ING
-    PROF -.data.-> PAR
-    PROF -.data.-> POL
+    PY  --> API
+    API --> ENG
+    ENG --> POL
+    ENG --> RUL
+    ENG --> IDX
+    ENG --> PAR
+    ENG --> ING
+    POL --> IDX
+    POL --> PROF
+    RUL --> IDX
+    RUL --> PROF
+    IDX --> FS
+    PAR --> PROF
+    ING --> PROF
+    PROF --> FS
+    FS --> CORE
+    RPT --> CORE
+    TK --> CORE
 ```
 
-Dependencies point **downward only**. `smd-core` depends on nothing but `std`. This is
-enforced by a CI crate-graph test, not by convention (§ `12-testing.md`).
+Every arrow means *depends on*, and dependencies point **downward only**. `smd-core`
+depends on nothing but `std`; `smd-report` depends on nothing but `smd-core`, because the
+`ResolvedFinding` it renders has already had every interned id turned back into a string
+at the policy boundary.
+
+This diagram is *generated*. The normative artefact is `xtask/layers.toml`, which names
+every crate in the workspace and every edge it may declare, and which `xtask lint`
+validates against `cargo metadata` (§ `13-testing.md`). A hand-drawn graph that omits
+crates is worse than no graph at all, because the lint that reads it then permits
+whatever it cannot see — and `smd-engine`, which touches every layer, is the crate most
+likely to accumulate logic belonging somewhere else.
+
+Two edges are easy to get backwards. `RUL → PROF` exists because rules need
+profile-derived domain names and feature tags; the profile supplies data, never analysis.
+`ING → PROF` is one-way and must stay so: `smd-ingest` reads `[locations]` from the
+profile, and the profile therefore may not name load-order *implementations* — it names
+them as strings and `smd-ingest` resolves them (ADR-0002 §1).
 
 ## The three extension seams
 
@@ -77,12 +117,18 @@ Nothing else in the system needs to change.
 | Seam | Add by | Example future work |
 | --- | --- | --- |
 | **Parser** | implement `FileParser`, self-register | Lua parsing for Factorio; `.asset` files |
-| **Rule** | implement `Rule`, self-register | orphan-reference detection; patch-mod matching |
+| **Rule** | implement `Rule`, self-register, declare `requires() -> &[FeatureTag]` | orphan-reference detection; patch-mod matching |
 | **Game profile** | drop in a TOML file | CK3, EU4, Victoria 3; a non-Paradox Steam game |
 
+A rule names capabilities and feature tags, never a game — which is what keeps the second
+game a data problem.
+
 A new *severity weighting* is a data edit. A new *report format* is one renderer impl.
-A new *GUI panel* is one Svelte module plus one route entry. None of these touch the
-engine.
+A new *GUI panel* is one Svelte module plus one route entry. No other crate changes for
+any of them. Each seam does carry data of its own — a rule needs a weight and an
+explanation string, a profile needs a golden classification list — and ADR-0002 counts
+those edits exactly rather than pretending there are none. The point is not that the
+count is one; it is that a missed edit fails CI.
 
 ## End-to-end flow, one sentence per stage
 
@@ -94,16 +140,18 @@ engine.
    hash it.
 4. **Overlay** — compute, per path, the ordered list of contributing mods and the winner;
    apply `replace_path` directory shadowing.
-5. **Parse** — for each text file, emit a flat stream of `Fact`s (definitions, references,
-   loc keys, namespaces, defines).
+5. **Parse** — for each text file, emit a flat stream of facts (definitions, loc keys,
+   namespaces, event ids, defines). Reference extraction is gated off for v1.
 6. **Index** — fold facts into a symbol table keyed by `(domain, symbol)`, plus reverse
    indices.
-7. **Analyse** — run every enabled rule over the immutable index; each emits `Finding`s.
-8. **Score** — the policy layer turns rule outputs into a score and severity band.
+7. **Analyse** — run every enabled rule over the immutable index; each returns `Finding`s.
+8. **Score** — the policy layer resolves interned ids into `ResolvedFinding`s, then turns
+   rule outputs into a score and a severity band.
 9. **Present** — sort deterministically, paginate, render.
 
 Stages 3–7 are the pipeline described in `04-process-architecture.md`. Stages 1–2 are
-cheap and sequential. Stages 8–9 are pure functions over the finding set.
+cheap and sequential. Stage 8 is a pure function of the finding set plus the interners;
+stage 9 is a pure function of stage 8's output, and sees strings only.
 
 ## Prior art, and what we take from it
 

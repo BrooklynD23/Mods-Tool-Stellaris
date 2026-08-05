@@ -1,7 +1,30 @@
 # 04 — Process architecture
 
-How the program actually runs: processes, threads, stages, channels, cancellation,
-and the boundary between engine and UI.
+How the program actually runs: processes, pools, stages, barriers, cancellation, and the
+boundary between engine and UI.
+
+## The scheduling invariant
+
+Everything below is designed to one rule, and every departure from the obvious streaming
+design is there to keep it true:
+
+> **Invariant C1:** No stage may block on a channel while occupying a worker of a pool
+> another stage needs in order to make progress.
+
+Three consequences shape the whole pipeline:
+
+- **Channels never feed a parallel stage.** A parallel stage consumes a materialised
+  slice, never a receiver. The one adapter that bridges the two (`rayon`'s `par_bridge`)
+  parks the worker that calls it until the sender produces; a pool full of bridges is a
+  pool waiting on producers that have no worker left to run on. `par_bridge` is banned by
+  lint, with that reason recorded at the lint site.
+- **A stage that needs the complete set is a barrier, and is drawn as one.** Sorting by
+  path, folding the overlay, and sealing the index are whole-set operations. Drawing them
+  as streaming stages does not make them stream; it only hides where the pipeline stops.
+- **The only wait permitted on the CPU pool is one whose releasers are already running.**
+  The read-buffer semaphore below qualifies because it is sized so that a single worker
+  can always acquire. A wait on work that has not been scheduled yet is a deadlock
+  waiting for a thread count.
 
 ## Process topology
 
@@ -12,103 +35,211 @@ binary; it is not a service, not a daemon, and not a sidecar.
 flowchart LR
     subgraph Proc["smd-gui process"]
         direction TB
-        WV["WebView\n(Svelte UI)\nOS-owned thread"]
-        MAIN["Tauri main thread\ncommand dispatch only"]
+        WV["WebView (Svelte UI)\nOS-owned threads"]
+        MAIN["Tauri main thread\nasync dispatch only"]
         SUP["Job supervisor\n1 thread"]
-        POOL["rayon pool\nN = physical cores"]
-        IO["blocking IO pool\n≈ 2× cores, capped 16"]
-        WV <-->|"IPC: Command / Event (JSON)"| MAIN
-        MAIN --> SUP
+        CPU["CPU pool — rayon\navailable_parallelism() − 1"]
+        IO["IO threads — 4\nwalk, descriptors, export"]
+        CW["Cache writer\n1 thread"]
+        WV <-->|"IPC: Command / Query / Event (JSON)"| MAIN
+        MAIN -->|"spawn_blocking"| SUP
         SUP --> IO
-        SUP --> POOL
+        SUP --> CPU
+        CPU -. "batched facts" .-> CW
     end
 ```
 
+In the CLI there is no WebView and no main thread to protect; the supervisor runs on the
+process's main thread and the pools are identical. The pipeline is the same code.
+
 ### Why not a separate engine process
 
-Considered and rejected. A sidecar buys crash isolation, but a scan produces on the
-order of 10<sup>6</sup> facts and 10<sup>5</sup> findings; serialising that across a pipe
-would cost more than the parsing does. Crash isolation is bought more cheaply by
-(a) never panicking on input — parse errors are `Diagnostic`s, and (b)
-`catch_unwind` around each rule so one bad rule fails alone.
+Considered and rejected. A sidecar buys crash isolation, but a scan produces on the order
+of 10<sup>6</sup> facts and 10<sup>5</sup> findings; serialising that across a pipe would
+cost more than the parsing does. Isolation is bought more cheaply, and more precisely, by
+three things that also have to be true anyway:
+
+1. **Input never panics.** Parse errors are `Diagnostic`s, and the parser is iterative
+   with an explicit depth cap (§ `06`) so no input can exhaust the stack.
+2. **`Rule::run` returns `Vec<Finding>`** (§ `08`). The unwind boundary is a value
+   boundary, so `catch_unwind` is sound by type rather than by an `AssertUnwindSafe`
+   whose precondition is convention. Rules hold no `std::sync::Mutex`, so a panic cannot
+   poison state a later rule needs.
+3. **`panic = "unwind"` is pinned** in the release profile and asserted by a profile-audit
+   lint. Under `panic = "abort"` every isolation claim in this document is a no-op, and
+   nothing else in the build would say so.
+
+The residue is stated rather than papered over: a stack overflow, an allocation failure,
+or an abort in a dependency still takes the process down. The depth cap is the mitigation
+for the only one of those three that user input can reach.
 
 The one thing that *does* get its own process is the optional **Steam Workshop metadata
 fetch** (`smd-net`, post-v1), because it touches the network and should be killable and
 sandboxable independently.
 
-### Thread inventory
+### Pools
 
-| Thread(s) | Count | Blocking allowed | Purpose |
+Two pools, one of each kind, both owned by `smd-engine`.
+
+| Pool | Size | Work | Why this size |
 | --- | --- | --- | --- |
-| WebView | OS-managed | n/a | UI rendering |
-| Tauri main | 1 | **no** | Receives commands, forwards to supervisor, returns immediately |
-| Supervisor | 1 | yes | Owns job lifecycle, stage wiring, progress aggregation |
-| IO pool | min(2×cores, 16) | yes | `readdir`, `stat`, `mmap`, hashing |
-| Rayon pool | physical cores | **no** | Parse, index-merge, analyse |
-| Cache writer | 1 | yes | Batched `redb` commits, off the critical path |
+| **CPU** | `available_parallelism() − 1`, min 1 | hashing, parsing, overlay fold, index merge, rule execution, sorting, rendering | Leaves one core for the WebView and for the game the user may still have running. All of this work is compute; more threads than cores buys nothing and costs cache. |
+| **IO** | 4 (configurable 2–8) | `readdir`/`stat` during the walk, descriptor reads, launcher-DB copy, export writes | These wait on the filesystem, not on the CPU. Four is enough to keep an NVMe queue busy and few enough that a network-mounted mod directory cannot spawn a thread storm. |
 
-The main thread never does work. A command handler that takes more than a millisecond is
-a bug — it must hand off to the supervisor and return a `JobId`.
+Plus three singletons: the Tauri main thread, the job supervisor, and the cache writer.
+Peak on an 8-core box is **~14 threads**, and ~10 outside the walk.
+
+`ignore::WalkBuilder::build_parallel` insists on spawning its own threads, so the IO
+budget is a *policy* rather than a single shared pool object: the walker is constructed
+with `.threads(io_threads)` and joined before stage 4, and the engine's own IO pool of
+the same size serves everything outside stage 3. No IO thread is ever live at the same
+time as the walker's.
+
+> **Rule:** exactly one `Arc<rayon::ThreadPool>` exists, it is created by `smd-engine`,
+> and every parallel entry point runs inside `pool.install(..)`. `cargo xtask lint` fails
+> the build on `par_iter`, `par_bridge`, `rayon::scope`, or `rayon::spawn` appearing
+> outside `smd-engine`. A bare `.par_iter()` elsewhere silently targets rayon's *global*
+> pool — a third pool nobody budgeted, which would also make the varied-thread-count
+> determinism test (§ `13`) meaningless.
+
+### Thread priority
+
+The tool runs on a gaming machine, frequently while the game or launcher is open.
+Saturating every core at normal priority to answer a question about a game the user is
+currently playing is the wrong default.
+
+| Platform | Default | Mechanism |
+| --- | --- | --- |
+| Windows | below normal | `SetThreadPriority(THREAD_PRIORITY_BELOW_NORMAL)` on each pool thread at spawn |
+| Linux | `nice +5` | `setpriority(PRIO_PROCESS, tid, 5)` per thread |
+| macOS | utility QoS | `pthread_set_qos_class_self_np(QOS_CLASS_UTILITY)` |
+
+`--full-speed` (CLI) and a settings toggle (GUI) drop the adjustment for users who want
+the machine's whole attention. The budget in `12-performance.md` is stated at full speed;
+below-normal priority costs little on an otherwise idle machine and a lot on a busy one,
+which is the trade being made deliberately.
 
 ## The scan pipeline
 
 ```mermaid
-flowchart LR
-    A["1 Discover\nsequential"] --> B["2 Resolve order\nsequential"]
-    B --> C["3 Enumerate\nIO pool"]
-    C --> D["4 Overlay\nsequential fold"]
-    C --> E["5 Parse\nrayon map"]
-    E --> F["6 Index\nmap-reduce"]
-    D --> F
-    F --> G["7 Analyse\nrayon over rules"]
-    G --> H["8 Score\nsequential"]
-    H --> I["9 Render / store"]
-    CACHE[("redb cache")] -. hit .-> E
-    E -. write .-> CACHE
+flowchart TB
+    A["1 Discover\nsequential, ms"] --> B["2 Resolve order\nsequential — assigns rank"]
+    B --> C["3 Enumerate\nignore::WalkBuilder::build_parallel\nIO threads, per-thread Vec"]
+    C --> BAR1{{"barrier — complete FileEntry set\n400k × ~40 B ≈ 16 MB"}}
+    BAR1 --> S["parallel sort by (path, rank)\nCPU pool"]
+    S --> JOIN{{"rayon::join — both borrow the same slice"}}
+    JOIN --> D["4 Overlay\nfold over per-path runs\nCPU pool"]
+    JOIN --> E["5 Read + hash + parse\nfused per file\nCPU pool"]
+    D --> F["6 Index\nper-worker maps → parallel merge"]
+    E --> F
+    F --> BAR2{{"barrier — ScanIndex sealed, wrapped in Arc"}}
+    BAR2 --> G["7 Analyse\nCPU pool over rules"]
+    G --> H["8 Score\nsequential, µs"]
+    H --> I["9 Sort / paginate / render"]
+    STAT[("stat cache\nfile_id → content_hash")] -. "hit: skip read" .-> E
+    FACTS[("SQLite parse cache\ncontent_hash → facts")] -. "hit: skip parse" .-> E
+    E -. "batched write" .-> CW["cache writer thread"]
 ```
 
-Stage-by-stage concurrency strategy:
+"Needs the whole set" is the column that decides the topology: a stage that answers it
+*yes* cannot stream, and pretending otherwise is where a pipeline acquires a deadlock.
 
-| Stage | Model | Notes |
-| --- | --- | --- |
-| 1 Discover | sequential | Milliseconds. Reads registry/vdf/launcher DB. |
-| 2 Resolve order | sequential | Assigns `SourceId`s. Pure function of the playset. |
-| 3 Enumerate | `jwalk` parallel walk on the IO pool | Emits `FileEntry` batches into a bounded channel |
-| 4 Overlay | single-threaded fold over entries sorted by `PathId` | Cheap; ordering makes it trivially deterministic |
-| 5 Parse | `rayon::par_iter` over text files | **Cache-checked first**; each worker owns an arena |
-| 6 Index | map-reduce: per-worker local maps, then a parallel merge | No shared locks anywhere in the hot path |
-| 7 Analyse | `rayon::par_iter` over *rules* | Index is immutable and shared by `&`; each rule writes its own `Vec<Finding>` |
-| 8 Score | sequential | Microseconds. Table lookups. |
-| 9 Render | sequential, or streamed for HTML | Deterministic sort applied here |
+| Stage | Model | Needs the whole set | Notes |
+| --- | --- | --- | --- |
+| 1 Discover | sequential | — | Milliseconds. Registry / `libraryfolders.vdf` / launcher DB. |
+| 2 Resolve order | sequential | yes, of the playset | Assigns `SourceId` (identity) and `rank` (precedence). Pure function of the playset. |
+| 3 Enumerate | parallel walk on IO threads | no | Each walker thread appends to its own `Vec<FileEntry>`; the vectors are concatenated on join. No channel exists to contend on. |
+| 4 Overlay | parallel sort, then a fold over per-path runs | **yes** | A sort has no partial answer, and a path's contributor list is not knowable until the last mod has been walked. Contributors are contiguous after the sort, so the fold parallelises over disjoint runs. |
+| 5 Read + hash + parse | `par_iter` over the same slice | no | One worker owns a file end to end. Runs concurrently with stage 4 under one `rayon::join`. |
+| 6 Index | map-reduce: per-worker local maps, then a parallel merge | **yes**, of 4 and 5 | Joins overlay `live` flags to facts. No shared locks in the hot path. |
+| 7 Analyse | `par_iter` over *rules* | reads a sealed index | Index is immutable and shared by `&`; each rule returns its own `Vec<Finding>`. |
+| 8 Score | sequential | yes, of the findings | Microseconds. Table lookups over the finding vector. |
+| 9 Render | sequential, or streamed for HTML | yes | The total sort (§ Determinism) is applied here. |
+
+### Why stages 4 and 5 both read one slice
+
+They are the two consumers of the file set, and they are independent: the overlay needs
+paths and ranks; the parser needs bytes. Neither needs the other's output.
+
+That independence is only exploitable because the set is *materialised* at the stage-3
+barrier. Two consumers of one channel receive a **disjoint partition**, not a copy — half
+the files would be overlaid and never parsed, and nothing would report an error. Two
+consumers of one `&[FileEntry]` each see all of it. The barrier is what makes the fan-out
+legal, and it costs 16 MB: `FileEntry` is four fields totalling ~40 bytes, and 400k of
+them is a rounding error against the engine-heap budget in `12-performance.md`. Bounding
+that stream would have traded a real barrier for an imaginary saving.
+
+The one value that crosses between them is the content hash, and it crosses without a
+channel. Stage 4 knows the exact number of contributions before it starts filling them,
+so it allocates the `Blob` slots; stage 5 writes each file's hash into its own slot. Every
+slot has exactly one writer, so there is no lock and no ordering question, and all slots
+are populated by the stage-6 barrier.
+
+### Why one worker owns a file end to end
+
+Stage 5 reads, hashes, and parses one file on one worker, with no hop between them. At a
+~3 KB mean file size a thread handoff costs more than the work it schedules, and a fused
+worker touches the file's bytes exactly once while they are still in L2.
+
+The stage is also where both caches are consulted, in the order that avoids the IO:
+
+1. **Stat cache.** `(volume_id, file_id, size, mtime_ns) → content_hash`, from the
+   metadata stage 3 already collected. A hit means the file need not be read *at all* to
+   learn its hash — which is the only way the warm target is reachable, since otherwise a
+   warm scan re-reads 1.2 GB to compute its own cache keys.
+2. **Parse cache.** `content_hash → Vec<RawFact>` (§ `06`). A hit means the file need not
+   be parsed. Misses read into a pooled buffer, hash, parse, and queue the result for the
+   cache writer.
+
+Assets are hashed and never opened for parsing; classification comes from the profile
+glob, not from a file extension check in engine code.
+
+`read()` into a pooled buffer is the default. mmap is used only above a measured size
+threshold and only under the read-only game install directory, for the reasons in the
+failure table below.
 
 ### Why map-reduce for indexing rather than a sharded concurrent map
 
-A `DashMap` sharded by symbol hash was the obvious choice and is the wrong one here:
-the fact stream is *bursty and skewed* (one huge `00_species_traits.txt` produces
-thousands of facts for one domain), so shard contention spikes exactly when throughput
-matters. Per-worker local `FxHashMap`s merged pairwise at the end have no contention at
-all, and the merge is itself parallel over disjoint key ranges. Cost is transient memory
-during the merge, which the budget accommodates.
+A `DashMap` sharded by symbol hash was the obvious choice and is the wrong one here: the
+fact stream is *bursty and skewed* (one huge `00_species_traits.txt` produces thousands of
+facts for one domain), so shard contention spikes exactly when throughput matters.
+Per-worker local `FxHashMap`s merged pairwise at the end have no contention at all, and
+the merge is itself parallel over disjoint key ranges. The cost is transient memory during
+the merge, which the budget accounts for as a named line item.
 
-### Backpressure
+### Backpressure: bound bytes, not items
 
-Every inter-stage channel is bounded (`crossbeam::bounded(1024)` of *batches*, not
-items). Enumeration on a fast NVMe outruns parsing; without bounds the file list would
-materialise entirely in memory before parsing starts, spiking RSS. Bounded channels make
-the pipeline self-throttling and keep peak memory proportional to the window, not to the
-corpus.
+The thing worth bounding is **file contents in flight**, because that is the only
+quantity in the pipeline proportional to anything large. Item counts are not; the entry
+set has already been sized above.
 
-Batching matters as much as bounding: items move in `Vec` batches of ~256 so channel
-overhead stays under a percent of runtime.
+- A **byte semaphore** with a 64 MB budget guards read buffers. A worker acquires the
+  file's size before reading and releases when its facts are emitted.
+- A **32 MB per-file cap** keeps the semaphore acquirable by a single worker under any
+  schedule, which is what makes the wait legal under Invariant C1. A text file above the
+  cap is hashed (streaming, 256 KB chunks — hashing never needs the whole file resident)
+  and skipped for parsing with a `Diagnostic::Warn`.
+- Buffers are recycled through a free list. 400k reads must not be 400k allocations.
+
+The cache-writer channel is the one genuinely unbounded-risk queue, and it is bounded at
+1024 batches. It is drained by a dedicated thread that belongs to no pool, so a stalled
+cache write parks the *writer*, never a CPU worker — the invariant again.
 
 ## Job model
 
 Every long operation is a `Job`. The UI never blocks.
 
 ```rust
-pub struct JobId(u64);
+pub struct JobId(u64);        // serialised as a decimal string, never a JSON number
 
-pub enum JobState { Queued, Running { stage: Stage, pct: f32 }, Done, Failed, Cancelled }
+pub enum JobState {
+    Queued,
+    Running    { stage: Stage, pct: f32 },
+    Cancelling { since: Instant },
+    Done,
+    Failed,
+    Cancelled,
+}
 
 pub trait Job: Send {
     fn run(&mut self, ctx: &JobCtx) -> Result<JobOutput, JobError>;
@@ -120,38 +251,94 @@ pub struct JobCtx {
 }
 ```
 
-- **Cancellation** is cooperative and checked at every batch boundary — worst-case
-  latency is one batch, single-digit milliseconds. `Drop` on the token cancels children.
-- **Progress** is coalesced: workers bump an atomic counter, and the supervisor emits at
-  most **20 events/second**. Uncoalesced per-file progress events would flood the IPC
-  channel and make the UI slower than the scan.
-- **Only one scan job runs at a time**; a second request supersedes the first
-  (cancel-then-start). Query jobs run concurrently and freely.
+**Cancellation is cooperative and reaches every stage**, including the last one. The token
+is threaded into `RuleCtx` and rules check it once per outer-loop iteration (§ `08`),
+because a rule is otherwise an indivisible unit: without a token, a scan spends its whole
+analyse stage — seconds, on a large playset — uncancellable, and the user's second click
+does nothing visible.
+
+| Stage | Check point | Worst-case latency |
+| --- | --- | --- |
+| 3 Enumerate | per directory entry batch | single-digit ms |
+| 5 Parse | per file | one file |
+| 6 Index | per merge pair | tens of ms |
+| 7 Analyse | per rule outer-loop iteration | one iteration |
+
+`Cancelling` is a real state with a real duration, not a formality. Only one scan runs at
+a time and a second request supersedes the first, but the supersede cannot simply drop the
+old job: outstanding workers hold `&ScanIndex`, so the old index cannot be released and
+the new scan cannot start until every worker has returned. `Cancelling` is what the API
+reports while that join is in progress, and the UI shows it rather than appearing hung.
+Query jobs run concurrently and freely; they hold an `Arc`, not a borrow, and are
+unaffected.
+
+**Progress** is coalesced: workers bump an atomic counter and the supervisor emits at most
+**20 events/second**. Uncoalesced per-file events would flood the IPC channel and make the
+UI slower than the scan.
 
 ## Engine ⇄ UI boundary (`smd-api`)
 
-Three enums, and nothing else crosses:
-
 ```rust
-pub enum Command { StartScan(ScanRequest), Cancel(JobId), SetLoadOrder(Vec<ModKey>), Export(ExportRequest) }
+pub struct ScanEpoch(u64);     // bumped on every Arc swap
+pub struct ResultSetId(u64);
 
-pub enum Query   { Summary, Findings(FindingQuery), Symbol(SymbolRef), FileText(FileRef), ModDetail(ModKey) }
+pub enum Command {
+    StartScan(ScanRequest),
+    Cancel(JobId),
+    SetLoadOrder { epoch: ScanEpoch, order: Vec<ModKey> },
+    Export(ExportRequest),
+}
 
-pub enum Event   { Progress(JobId, Stage, f32), JobDone(JobId), Diagnostic(Diagnostic), ScanInvalidated }
+pub enum Query {
+    Summary       { epoch: ScanEpoch },
+    OpenResultSet { epoch: ScanEpoch, query: FindingQuery },
+    Page          { set: ResultSetId, offset: u32, limit: u32 },
+    Grouped       { set: ResultSetId, group_by: GroupKey, expanded: Vec<GroupId>,
+                    offset: u32, limit: u32 },
+    Symbol        { epoch: ScanEpoch, symbol: SymbolRef },
+    FileText      { epoch: ScanEpoch, file: FileRef, span: Span },
+    ModDetail     { epoch: ScanEpoch, key: ModKey },
+}
+
+pub struct ResultSet { pub id: ResultSetId, pub len: u32,
+                       pub epoch: ScanEpoch, pub facets: FacetCounts }
+
+pub enum Event {
+    Progress        { job: JobId, stage: Stage, pct: f32 },
+    JobChanged      { job: JobId, state: JobState },
+    Diagnostic(Diagnostic),
+    ScanInvalidated(ScanEpoch),
+}
 ```
 
-Four rules govern this boundary:
+Six rules govern this boundary:
 
-1. **Findings are paginated.** `FindingQuery` carries filter + sort + `offset` + `limit`
-   (default 200). A 300-mod playset can produce >100k findings; shipping them all into
-   JS would freeze the WebView. The engine holds the truth; the UI holds a window.
-2. **Types are generated, never hand-written.** `ts-rs` emits `ui/src/lib/api/types.ts`
+1. **Result sets, not offsets.** `OpenResultSet` materialises the sorted, filtered id
+   vector once and returns its length and its conditioned facet counts; `Page` walks it.
+   Sets are LRU-evicted. A bare `offset`/`limit` pair cannot express a stable sort under
+   concurrent invalidation, cannot return facet counts conditioned on the current filter,
+   and cannot describe a grouped tree at all — and a UI that computes any of those from a
+   page it already holds is computing over a window, which is the bug class `11-gui.md`
+   exists to prevent.
+2. **Every request and every response carries a `ScanEpoch`.** A mismatch returns
+   `Err(Stale { current })` rather than data. A query issued before an `Arc` swap can
+   otherwise return after it, and the virtualiser will splice two snapshots into one
+   scroll position — a bug that reproduces only under a rescan and looks like corruption.
+   `Event::ScanInvalidated(epoch)` tells the UI to reopen its result sets.
+3. **No bare `u64` crosses the boundary.** `JobId`, `ScanEpoch`, `ResultSetId`, file sizes,
+   and byte offsets all serialise as decimal strings. JSON numbers lose precision above
+   2<sup>53</sup>, silently, and only for the largest values — which is the worst possible
+   distribution of a failure.
+4. **Types are generated, never hand-written.** `ts-rs` emits `ui/src/lib/api/types.ts`
    from the Rust definitions; CI fails if the checked-in file differs from the generated
    one. Two hand-maintained copies of a schema always drift.
-3. **File text is fetched on demand.** The diff view asks for exactly the byte ranges it
-   is about to display.
-4. **Queries are pure.** A `Query` never mutates engine state, so it can be served from
-   any thread against the immutable index.
+5. **Handlers are `async`, and real work goes to `spawn_blocking`.** A command handler
+   that occupies the main thread for more than a millisecond is a bug: it must dispatch to
+   the supervisor or the CPU pool and return. A synchronous handler that opens a result
+   set over 100k findings serialises exactly the work this rule exists to move.
+6. **Queries are pure and file text is fetched on demand.** A `Query` never mutates engine
+   state, so it can be served from any thread against the immutable index. The diff view
+   asks for exactly the byte ranges it is about to display.
 
 ### Sequence of a typical interaction
 
@@ -160,18 +347,20 @@ sequenceDiagram
     participant UI
     participant Main as Tauri main
     participant Sup as Supervisor
-    participant Pool as rayon
+    participant Pool as CPU pool
     UI->>Main: Command::StartScan
-    Main->>Sup: enqueue
+    Main->>Sup: spawn_blocking(enqueue)
     Main-->>UI: JobId (immediate)
     Sup->>Pool: stages 3-7
     loop ≤20 Hz
         Sup-->>UI: Event::Progress
     end
-    Sup-->>UI: Event::JobDone
-    UI->>Main: Query::Findings{severity≥High, limit:200}
+    Sup-->>UI: Event::JobChanged(Done) + ScanEpoch
+    UI->>Main: Query::OpenResultSet{epoch, severity≥High}
+    Main-->>UI: ResultSet{id, len, facets}
+    UI->>Main: Query::Page{set, offset:0, limit:200}
     Main-->>UI: page of findings
-    UI->>Main: Query::FileText{path, span}
+    UI->>Main: Query::FileText{epoch, file, span}
     Main-->>UI: text slice for diff pane
 ```
 
@@ -179,13 +368,18 @@ sequenceDiagram
 
 | Failure | Handling |
 | --- | --- |
-| Unreadable file | `Diagnostic::Warn`, skip file, continue |
+| Unreadable file (permissions, bad symlink) | `Diagnostic::Warn`, skip file, continue |
+| **File modified, truncated, or deleted during the scan** | Short or failed `read()` → `Diagnostic::Warn`, the entry is dropped from the overlay, the scan continues. A Steam workshop update mid-scan is normal, not exceptional. |
+| **mmap page fault on a changed file** | Cannot be handled: it raises SIGBUS / `EXCEPTION_IN_PAGE_ERROR`, which `catch_unwind` does not see. Prevented rather than handled — mmap is used only under the read-only game install directory and only above the size threshold, never over mod directories. Windows additionally *locks* mapped files, which would make the tool break the user's own workshop update. |
 | Malformed script | `Diagnostic::Warn` at the offending span, keep the facts parsed so far |
+| **Nesting deeper than the parser's depth cap (256)** | `Diagnostic::Error` at the span, skip the remainder of that block, keep everything already parsed. The cap exists because a recursive parser would stack-overflow instead, and a stack overflow is uncatchable — it aborts the process regardless of panic strategy. (§ `06`, § `13`) |
+| Text file above the 32 MB parse cap | Hashed but not parsed, `Diagnostic::Warn` naming the size |
 | Missing mod directory referenced by the playset | `Diagnostic::Error`, mod marked `Unresolved`, scan continues |
-| Rule panics | `catch_unwind`, that rule's findings dropped, `Diagnostic::Error` naming the rule |
+| Rule panics | Unwound at the `Vec<Finding>` boundary, that rule's findings dropped, `Diagnostic::Error` naming the rule. Requires `panic = "unwind"`, which the profile-audit lint asserts. |
+| Rule exceeds its soft time budget | Warning naming the rule id; the rule is not killed (§ `08`) |
 | Cache corrupt / version mismatch | Delete and rebuild silently |
-| Launcher DB locked (game running) | Copy to temp, read the copy, note it in the report |
-| Out of memory | Not handled gracefully; prevented by the budget in `11-performance.md` |
+| Launcher DB locked (game running) | Copy `db`, `-wal`, and `-shm` together to temp, open read-only, `PRAGMA quick_check`, note it in the report |
+| Out of memory | Not handled gracefully; prevented by the budget in `12-performance.md` |
 
 The scan exits non-zero from the CLI only on `Error`-class diagnostics or an internal
 failure — **never** because conflicts were found. Conflicts are the expected output.
@@ -193,13 +387,28 @@ failure — **never** because conflicts were found. Conflicts are the expected o
 
 ## Determinism
 
-Reproducibility is a testability requirement, not a nicety, because snapshot tests
-depend on it. Parallelism is introduced only where results are order-independent:
+Reproducibility is a testability requirement, not a nicety, because snapshot tests depend
+on it. Parallelism is introduced only where results are order-independent, and every place
+that is not order-independent is given an explicit total order.
 
-- Parse output is keyed by `(SourceId, PathId)` and sorted before indexing.
-- Index merge is commutative; ties resolve by `SourceId` (load order), which is total.
-- Findings sort by `(severity desc, rule, subject, first participant SourceId)`.
-- No `HashMap` iteration order ever reaches output; `BTreeMap` or explicit sorts only.
+- Stage 4's sort key is `(PathId, rank)`; `rank` is total by construction and `SourceId`
+  is deliberately not `Ord`, so precedence cannot accidentally be compared through
+  identity.
+- The index merge is commutative; ties resolve by `rank`.
+- Rules run in parallel but their outputs are concatenated in **registry order**, and the
+  registry is sorted by rule id at startup (§ `08`) — so the pre-sort input is already
+  independent of scheduling.
+- Findings are sorted by the six-key total order in § `03` — down to a canonical evidence
+  hash, which exists precisely to break the ties the earlier keys leave. A sort key that
+  is total *except* in rare cases produces a determinism gate that passes most runs and
+  fails randomly, which is worse than no gate.
+- No `HashMap` iteration order ever reaches output: `BTreeMap` or an explicit sort only.
 
-`cargo test --features determinism-check` runs a scan twice with different thread counts
-and asserts byte-identical reports.
+Two tests hold this up, both run every commit:
+
+- `cargo test --features determinism-check` scans the fixture playset at thread counts
+  1, 2, 7, and 32 and asserts byte-identical reports. This is only meaningful because
+  there is exactly one pool whose size the test can vary.
+- A concurrency-stress test issues randomised cancels under load and asserts that every
+  run ends in `Cancelled` or `Done`, that no worker outlives its job, and that a
+  cancel-then-start sequence produces the same report as the start alone.

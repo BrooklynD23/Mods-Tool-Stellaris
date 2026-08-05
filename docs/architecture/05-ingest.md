@@ -45,6 +45,46 @@ as an additional candidate. Multiple Steam libraries are normal and all are scan
 shape that `smd-syntax`'s lexer primitives are reused with a different token table
 rather than pulling in a separate VDF crate.
 
+## Enumeration and the stat cache
+
+Enumeration walks the resolved roots with `ignore`'s `WalkBuilder::build_parallel` and
+emits a `FileEntry` per file. The content hash on that entry is the key the parse cache
+is addressed by — which means a warm scan that computes it the obvious way must re-read
+and re-hash 1.2 GB to discover that it already had the answer. The 2 s warm target is
+then unreachable by construction, not merely unmet.
+
+So there are **two caches, and the stat cache sits in front**:
+
+```
+(volume_id, file_id, size, mtime_ns)  →  content_hash        stat cache   (smd-ingest)
+ content_hash ‖ parser_id ‖ …         →  Vec<RawFact>        parse cache  (smd-parse, § 06)
+```
+
+| Field | Windows | Unix |
+| --- | --- | --- |
+| `volume_id` | `dwVolumeSerialNumber` | `st_dev` |
+| `file_id` | `nFileIndexHigh/Low` (128-bit on ReFS) | `st_ino` |
+| `size`, `mtime_ns` | from the same handle/`statx` call | same |
+
+Rules that make it safe:
+
+- **All four fields must match.** Identity alone is not enough — an in-place edit keeps
+  the inode. Size and nanosecond mtime together are what make the entry trustworthy.
+- A miss, a coarse mtime (some filesystems store seconds), or a clock that moved
+  backwards means *hash it*. The stat cache may never be the reason a changed file is
+  read as unchanged; it is an optimisation whose failure mode must be extra work.
+- Entries are keyed by device and inode, not by path, so a mod moving between Steam
+  libraries costs nothing.
+- The walk already `stat`s every file to decide whether it is a directory, so the input
+  is free. Only the lookup is new.
+
+Vanilla's install tree is the largest and least volatile input, and it is the case this
+layer exists for: after the first scan, hashing it again is pure waste.
+
+The stat cache lives in the same SQLite file as the parse cache, one table, and is
+written once per scan in a batch on the cache thread. Losing it is never a correctness
+problem, so it is never fsynced and never blocks.
+
 ## Descriptors
 
 Both `descriptor.mod` (inside the mod) and the launcher's `*.mod` (in `mod/`) are the
@@ -116,20 +156,73 @@ what keeps the tool useful when a launcher update breaks the DB reader: file-lev
 symbol-level collisions are still detected, only "who wins" is withheld. Degrading a
 feature beats failing to start.
 
-`rusqlite` appears in exactly one module (`smd-ingest::order::launcher_v2`). If the DB
-is locked because the launcher is open, it is copied to a temp file and read from there.
+`rusqlite` appears in exactly one module (`smd-ingest::order::launcher_v2`).
+
+### Reading `launcher-v2.sqlite` while the launcher is open
+
+The launcher runs in WAL mode, and the users most likely to have it open are exactly the
+users about to ask why their game crashed. **Recent commits — including the playset they
+just reordered — live in `launcher-v2.sqlite-wal`, not in the main file.** Copying only
+the main file therefore yields a stale or torn read *and returns no error*: a plausible
+playset, in the wrong order, feeding every verdict the tool goes on to make. That is the
+worst failure this design can have, so the read is specified rather than left to the
+obvious implementation.
+
+1. `stat` the main DB; record `(size, mtime_ns)`.
+2. Copy **`launcher-v2.sqlite`, `-wal`, and `-shm` together** into a private temp
+   directory. All three, always — the `-wal` carries the recent commits and the `-shm` is
+   the index into it.
+3. `stat` again. If size or mtime moved, the copy may be torn: discard and retry, up to
+   three times, then report the source as unavailable.
+4. Open the **copy** read-only (`file:…?mode=ro`) and let SQLite recover the WAL on first
+   read. Recovery happens against the copy; the user's database is never touched.
+5. `PRAGMA quick_check`, then probe the schema for the tables and the position column the
+   reader depends on.
+6. Delete the temp copy when the read completes or fails.
+
+| Never | Why |
+| --- | --- |
+| `immutable=1` | Tells SQLite the file cannot change, so it *ignores the WAL entirely*. Silently reads the pre-WAL state. |
+| `nolock=1` | Suppresses the locking protocol against a database another process is writing. Torn pages, no error. |
+| Reading the original in place | A read that acquires locks on a live launcher DB is a read that can block the launcher. |
+| Guessing past a failed `quick_check` | A corrupt page yields *some* rows. Refusing is the only honest answer. |
+
+**Failures are loud.** If `quick_check` fails, or the schema does not match what the
+reader expects, the chain still falls through to the next source — but the report leads
+with a named diagnostic (`ingest.launcher_schema_unknown`) carrying the launcher build
+and the tables actually found, and the load-order confidence drops to `Fallback` in the
+health strip. A launcher update that quietly demotes every user to `DirectoryScan` while
+the UI still looks fine is a bug that would take months to notice; making it a visible
+banner is what makes it a one-day fix instead.
 
 ### Precedence model
 
+Load-order position is **not** the source's identity. `SourceId` is assigned in discovery
+order and means nothing else; precedence is `SourceMeta.rank`, and comparison must route
+through it (§ `03`).
+
 ```rust
-/// Later in the playset = higher precedence. Vanilla is SourceId(0).
-fn assign_source_ids(playset: &Playset) -> Vec<SourceId>
+pub struct SourceMeta {
+    pub key:              ModKey,
+    pub name:             Box<str>,
+    pub rank:             Vec<u32>,     // precedence; lexicographic. Vanilla is [0].
+    pub enabled:          bool,
+    pub role:             SourceRole,   // Vanilla | Dlc | Mod
+    pub order_confidence: Confidence,   // from the LoadOrderSource that produced it
+    pub deps:             Vec<ResolvedDependency>,
+}
 ```
+
+`rank` is a vector rather than an integer so that a reorder can insert between two
+existing sources without renumbering — the sandbox (§ `11`) depends on that, and so does
+any future intra-source ordering rule (the `00_`/`zz_` filename convention, unmodelled in
+v1 and listed in `VERIFY.md`).
 
 The "later wins" convention is recorded in `profiles/stellaris.toml` as
 `load_order.later_wins = true`, because it is a *game* fact rather than a universal one,
 and the second game profile added will be the test of whether that assumption was
-correctly isolated.
+correctly isolated. It is unverified until M0.5 closes the first item in `VERIFY.md`;
+everything in the tool keys off it.
 
 ## Version matching
 
