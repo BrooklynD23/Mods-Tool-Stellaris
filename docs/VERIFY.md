@@ -2,11 +2,15 @@
 
 This design was written without a Stellaris installation to hand. The items below are
 the load-bearing factual claims. Each is encoded as **data** (in `profiles/stellaris.toml`)
-rather than code specifically so that correcting one is a config edit, but they must be
-confirmed before M1 ships — a wrong assumption here produces confidently wrong output,
-which is the worst failure mode this tool has.
+rather than code specifically so that correcting one is a config edit, but a wrong
+assumption here produces confidently wrong output, which is the worst failure mode this
+tool has.
 
-Confirm each, record the finding inline, and open an issue for any that differ.
+**This file is the exit criterion for M0.5 (§ `architecture/15`), which blocks M1.** Not
+"before M1 ships" — before M1 starts. Confirm each item, **record the finding inline in
+this file** next to the box, and land the answer in `profiles/stellaris.toml` where it has
+a home there. An answer recorded only in an issue or a commit message is an answer the
+next person re-derives.
 
 ## Load order semantics — **highest priority**
 
@@ -16,6 +20,14 @@ Confirm each, record the finding inline, and open an issue for any that differ.
 - [ ] Where does the current launcher store the active playset and its ordering?
       Expected: `launcher-v2.sqlite`, tables for playsets and playset↔mod with a
       position column. Confirm the schema and the column that carries order.
+- [ ] Confirm the launcher DB runs in **WAL** mode, and that a playset reordered in the
+      open launcher is visible only after `-wal` is replayed. Test the copy protocol
+      (§ `architecture/05`) against a launcher that is open and has just been used: copy
+      main-file-only and all-three, compare. If main-file-only ever returns the *new*
+      order, say why — do not assume the protocol was unnecessary.
+- [ ] Does the launcher hold a lock that prevents even a file copy on Windows?
+- [ ] Record the schema version marker (`user_version`, a migrations table, whatever
+      exists) that the reader can check to detect a launcher update.
 - [ ] Is the launcher's displayed order the load order, or is it re-sorted (by name, by
       dependency) before being handed to the game?
 - [ ] Does `dlc_load.json` still reflect the active playset in current versions, or is it
@@ -33,14 +45,36 @@ Confirm each, record the finding inline, and open an issue for any that differ.
 
 ## Directory merge behaviour
 
+**This section is the single source of truth for merge modes.** Where another document
+appears to assert one, this file wins and that document is out of date. Every entry marked
+`merge = "unknown"` in `profiles/stellaris.toml` corresponds to a box below.
+
 - [ ] For each `[[dir]]` entry in `profiles/stellaris.toml`, confirm the `merge` mode.
       The critical distinction: directories where a same-named file **replaces** the
       whole file, versus directories where entries **merge by key** across files.
 - [ ] Confirm the widely-repeated claim that same-filename replacement is the rule for
       most of `common/`, and identify the exceptions.
 - [ ] `common/defines/` specifically: does a mod's defines file replace the whole vanilla
-      set, or merge key-by-key?
-- [ ] Does `localisation/replace/` take precedence over `localisation/` as assumed?
+      set, or merge key-by-key? Two mods each shipping a one-key defines file is the test.
+      `pdx.defines_overlap` carries a base weight of 75 and this answer sets whether that
+      is right or is 75 points of noise.
+- [ ] `common/traits/` specifically: same question. It is the design's canonical example
+      and has been written both ways.
+- [ ] **Additive-body directories.** In `common/on_actions/`, when two mods both declare
+      `on_game_start`, do the `events`/`effect` lists **accumulate**, or does the later
+      declaration replace the earlier one wholesale? Which child keys accumulate and which
+      do not? The answer becomes `additive_children` in the profile. Nearly every content
+      mod hooks `on_game_start`, so getting this wrong produces one ~200-participant High
+      finding that is entirely false.
+- [ ] **Are any directories genuinely `Additive`** — duplicates coexist and *both* apply,
+      with nothing overriding anything? If so, list them. Reporting those as conflicts is
+      a false positive by construction, no matter how the rest of the model behaves.
+- [ ] Does `localisation/replace/` take precedence over `localisation/` as assumed? Does
+      it work per-key, per-file, or per-directory? This is a path relation the overlay
+      cannot currently express, so the answer decides how much machinery it needs.
+- [ ] **Intra-source ordering.** Within one mod, does the `00_`/`zz_` filename convention
+      actually affect load order, or is it convention only? If it is real, ordering inside
+      a source is a second precedence axis the model does not have.
 
 ## Paths
 

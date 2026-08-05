@@ -70,7 +70,9 @@ LTSC/N editions, and managed fleets.
 
 ## Update mechanism
 
-Tauri's updater, checking a signed manifest on GitHub Releases. Constraints:
+Tauri's updater, checking a signed manifest on GitHub Releases — and if the shell decision
+at M7 goes the other way, a version check that opens the download page, which is the same
+constraints with less machinery. Constraints:
 
 - **Off by default; opt in on first run.** A tool that phones home unasked is a tool
   people stop trusting.

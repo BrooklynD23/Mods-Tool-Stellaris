@@ -1,9 +1,12 @@
 # 08 — Rule engine
 
 This is the extension seam that will be used most often, so it gets the strictest
-contract. **Adding a rule is one Rust file, one line of `weights.toml`, and one entry per
-shipped locale in `explain/`. Removing a rule deletes exactly those.** The Rust file
-carries its own tests, because the trait requires them.
+contract. Adding a rule touches **four things and no central list**: the rule file, its
+fixtures, one `[base]` line in `weights.toml`, and one entry per shipped locale in
+`explain/`. Removing a rule removes the same four, plus any preset or suppression naming
+its id. The contract below exists so that every one of those four is *checked* — a
+stranded weight or a missing explanation is a compile or lint failure, not a rule that
+quietly never fires (ADR-0002).
 
 ## The contract
 
@@ -102,9 +105,9 @@ fn evidence(&self) -> &'static [(&'static str, EvidenceType)] {
 ```
 
 `cargo xtask lint` cross-checks every `when = { evidence = … }` in `weights.toml` and
-every `{placeholder}` in every locale against the union of declared keys plus the closed
-set of derived placeholders in `smd-core` (`{n}`, `{winner}`, `{losers}`, `{loser_first}`,
-`{symbol}`). A debug assertion catches a rule emitting a key it did not declare.
+every `{placeholder}` in every locale against the union of this rule's declared keys and
+the closed derived set defined in `smd-core` (§ `09`). A debug assertion catches a rule
+emitting a key it did not declare.
 
 ### Registration
 
