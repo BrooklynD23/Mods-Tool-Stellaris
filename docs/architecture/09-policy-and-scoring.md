@@ -147,7 +147,8 @@ modifier and no explanation ever reads, because dead evidence is usually half of
 and the other half is the bug.
 
 **Values are named, not derived.** `eq = "file_replace"` compares against a serialised
-enum name. `MergeMode`, `Role`, `Basis`, and `Confidence` therefore carry an explicit
+enum name. `MergeMode`, `Role`, `Outcome`, `Agreement`, `Mechanism`, and `Confidence`
+therefore carry an explicit
 `#[serde(rename = "…")]` on every variant, plus a snapshot test over the serialised names,
 so a Rust-side rename shows up as a failing snapshot rather than as a modifier that
 quietly stops matching.
@@ -203,7 +204,7 @@ strings serve the CLI, the GUI, and the HTML report.
 
 | Source | Members |
 | --- | --- |
-| Declared evidence | whatever the rule's `evidence()` returns — `{domain}`, `{identical}`, `{merge}`, `{basis}`, … |
+| Declared evidence | whatever the rule's `evidence()` returns — `{domain}`, `{agreement}`, `{merge}`, `{mechanism}`, `{confidence}`, … |
 | Derived, defined once in `smd-core` | `{n}`, `{subject}`, `{winner}`, `{losers}`, `{loser_first}` |
 
 `xtask lint` parses every `explain/*.toml` and fails on a `{placeholder}` that is neither.

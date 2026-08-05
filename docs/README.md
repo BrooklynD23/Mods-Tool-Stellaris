@@ -24,6 +24,7 @@ implementation will be built against.
 | 15 | [architecture/13-testing.md](architecture/13-testing.md) | Levels, fixtures, calibration harness |
 | 16 | [architecture/14-packaging.md](architecture/14-packaging.md) | Artefacts, compatibility matrix, permissions |
 | 17 | [architecture/15-roadmap.md](architecture/15-roadmap.md) | Milestones, exit criteria, deferrals |
+| — | [REVIEW-2026-08.md](REVIEW-2026-08.md) | **The M0 gate — what must be settled before the first line of code** |
 | — | [VERIFY.md](VERIFY.md) | **Assumptions that must be confirmed against a live install** |
 
 ## The design in one page

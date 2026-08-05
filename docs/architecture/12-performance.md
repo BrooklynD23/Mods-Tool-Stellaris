@@ -49,7 +49,7 @@ therefore **~1.3M interned symbols** — loc keys are symbols too.
 | Read + content hash | 9.0 s | — |
 | Parse (cold) / cache read + decode (warm) | 4.0 s | 0.6 s |
 | Index + resolve | 1.2 s | 1.2 s |
-| Analyse (all rules) | 1.5 s | 1.5 s |
+| Analyse (all rules, incl. two whole-index passes) | 1.5 s | 1.5 s |
 | Headroom | 3.0 s | 0.4 s |
 | **Full scan, end to end** | **≤ 20 s** | **≤ 5 s** |
 

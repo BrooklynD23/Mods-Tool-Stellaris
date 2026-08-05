@@ -93,7 +93,7 @@ modifier matching `eq = "file_replaced"` against a `MergeMode` fails the lint ra
 never firing.
 
 ```rust
-pub enum EvidenceType { Int, Bool, Tag(&'static str), Sym, Path, Src }
+use smd_core::EvidenceType;   // declared in § `03`, beside the value type it describes
 
 fn evidence(&self) -> &'static [(&'static str, EvidenceType)] {
     &[("domain",     EvidenceType::Sym),

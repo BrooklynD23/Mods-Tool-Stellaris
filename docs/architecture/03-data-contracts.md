@@ -265,7 +265,19 @@ pub enum EvidenceValue {
     Tag(&'static str),
     Sym(SymbolId), Path(PathId), Src(SourceId),
 }
+
+/// The declaration side of the same contract. One variant per `EvidenceValue` variant;
+/// `Tag` additionally names the enum whose serialised variants are the legal vocabulary.
+#[non_exhaustive]
+pub enum EvidenceType {
+    Int, Bool, Tag(&'static str), Sym, Path, Src,
+}
 ```
+
+`EvidenceType` lives here rather than beside the `Rule` trait because it is read from both
+ends: `smd-rules` declares with it and `smd-policy` validates against it, and a type owned
+by either would make the other depend on its neighbour. It is the schema half of the one
+contract in this design that no compiler otherwise checks (§ `08`, § `09`).
 
 `Subject` covers every shape a v1 rule reports on. Without the `LocKey`, `Event`, and
 `Directory` variants, a loc collision, a duplicate event id, and a `replace_path` shadow

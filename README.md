@@ -32,13 +32,16 @@ you see for yourself.
 
 ## Design at a glance
 
-- **Engine:** Rust — content-addressed parse cache, parallel pipeline, ~20 s cold /
-  ~2 s warm on a 300-mod playset ([budget](docs/architecture/12-performance.md)).
-- **GUI:** Tauri + Svelte — a ~12 MB installer instead of Electron's 120 MB
-  ([rationale](docs/adr/0001-tech-stack.md)).
-- **CLI:** the same engine, static binary, no runtime dependencies.
-- **Extension:** add a rule, a parser, or a game — each is one self-registering file;
-  severity and game knowledge are TOML ([contract](docs/adr/0002-extensibility-contract.md)).
+- **Engine:** Rust — two-layer parse cache, parallel pipeline, targeting ≤20 s cold /
+  ≤5 s warm on a 300-mod playset. Those are *targets against a provisional workload*, not
+  measurements; nothing is built yet ([budget](docs/architecture/12-performance.md)).
+- **CLI:** the same engine, static binary, no runtime dependencies. The compatibility
+  floor and the first shippable release.
+- **GUI:** provisional. Tauri + Svelte is the working assumption, re-decided at M7
+  against a browser-first alternative ([rationale](docs/adr/0001-tech-stack.md)).
+- **Extension:** add a rule, a parser, or a game. A rule is four small single-purpose
+  edits — the rule, its cases, a weight, an explanation — and CI fails if any is missing
+  ([contract](docs/adr/0002-extensibility-contract.md)).
 
 ## Repository layout (planned)
 

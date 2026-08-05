@@ -108,10 +108,16 @@ New `FactPayload` variants, new `Severity` levels, new `FileKind`s cannot break
 downstream `match` expressions, because downstream code is required to have a wildcard
 arm from the first commit.
 
-That applies to **every** shared enum, which means `Subject`, `Role`, `Basis`,
-`ShadowCause`, `Confidence`, `JobState`, `Op`, and `Value` carry the attribute as well.
-All eight are matched across crate boundaries and all eight will grow — `Subject` gains
-three variants at M0 alone.
+That applies to **every** shared enum, which means `Subject`, `Role`, `Outcome`,
+`Mechanism`, `ShadowCause`, `Confidence`, `JobState`, `Op`, and `Value` carry the
+attribute as well. All nine are matched across crate boundaries and all nine will grow —
+`Subject` gains three variants at M0 alone.
+
+`Agreement` is the deliberate exception. Its three states are the complete partition of
+"do the losers get an outcome they would have wanted", and a fourth would not be a new
+case so much as evidence the question was wrong. An enum that cannot grow should say so
+by staying exhaustive, so that adding to it is a compile error everywhere at once — which
+is what you want when the meaning of every discount in `weights.toml` depends on it.
 
 Two costs the mechanism carries, both of which have to be managed rather than accepted:
 
