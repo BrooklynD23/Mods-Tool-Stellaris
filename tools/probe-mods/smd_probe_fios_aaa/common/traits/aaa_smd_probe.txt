@@ -1,0 +1,10 @@
+# Probe 3 - both mods define the same trait id in DIFFERENTLY named files.
+# Read the displayed cost in the species editor: 1 -> the aaa_ file won, 5 -> zzz_ won.
+trait_smd_probe = {
+	cost = 1
+	icon = "gfx/interface/icons/traits/trait_intelligent.dds"
+	allowed_archetypes = { BIOLOGICAL }
+	modifier = {
+		pop_happiness = 0.01
+	}
+}
