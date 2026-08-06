@@ -1,0 +1,6 @@
+# Agent worktrees — harness scratch, never committed
+.claude/worktrees/
+
+# Rust
+/target/
+**/*.rs.bk
