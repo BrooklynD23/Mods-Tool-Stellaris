@@ -1,0 +1,4 @@
+# Size gates that clippy enforces directly. The file-length gate (300 code lines) has no
+# clippy equivalent and lives in `cargo xtask lint`.
+too-many-lines-threshold = 60
+too-many-arguments-threshold = 5
