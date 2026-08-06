@@ -1,0 +1,108 @@
+# The normative crate graph.
+#
+# This file — not the mermaid diagram in docs/architecture/01-overview.md — is the layer
+# map. The diagram is rendered *from* it. A hand-drawn graph that omits a crate is worse
+# than no graph, because the lint reading it then permits every edge it cannot see, and
+# `smd-engine` (which touches every layer) is the crate most likely to accumulate logic
+# belonging somewhere else. (REVIEW-2026-08 § G41.)
+#
+# `cargo xtask lint` checks four things against `cargo metadata`:
+#   1. every workspace member appears here, and every entry here is a workspace member;
+#   2. every actual workspace-internal dependency edge is declared in `deps`;
+#   3. every declared and every actual edge points to a STRICTLY LOWER layer;
+#   4. only crates with `game_names_allowed = true` may contain a game name.
+#
+# `deps` is the set of edges a crate MAY declare. A stub that has not yet grown its
+# dependency is fine; an edge that is not listed is not.
+
+[layer_names]
+0 = "foundation — contracts"
+1 = "foundation — filesystem"
+2 = "foundation — game knowledge"
+3 = "model"
+4 = "analysis"
+5 = "orchestration"
+6 = "interface"
+7 = "presentation — rendering"
+8 = "presentation — shells"
+9 = "tooling"
+
+[crates.smd-core]
+layer = 0
+deps = []
+
+[crates.smd-fs]
+layer = 1
+deps = ["smd-core"]
+
+[crates.smd-testkit]
+layer = 1
+deps = ["smd-core"]
+
+[crates.smd-profiles]
+layer = 2
+deps = ["smd-core", "smd-fs"]
+# The one crate allowed to name a game: game knowledge is this crate's entire job, and it
+# holds it as data.
+game_names_allowed = true
+
+[crates.smd-ingest]
+layer = 3
+deps = ["smd-core", "smd-fs", "smd-profiles"]
+
+[crates.smd-parse]
+layer = 3
+deps = ["smd-core", "smd-fs", "smd-profiles"]
+
+[crates.smd-index]
+layer = 3
+deps = ["smd-core", "smd-fs", "smd-profiles"]
+
+[crates.smd-rules]
+layer = 4
+deps = ["smd-core", "smd-profiles", "smd-index", "smd-testkit"]
+
+[crates.smd-policy]
+layer = 4
+deps = ["smd-core", "smd-profiles", "smd-index", "smd-testkit"]
+
+[crates.smd-engine]
+layer = 5
+deps = [
+    "smd-core",
+    "smd-fs",
+    "smd-profiles",
+    "smd-ingest",
+    "smd-parse",
+    "smd-index",
+    "smd-rules",
+    "smd-policy",
+    "smd-testkit",
+]
+
+[crates.smd-api]
+layer = 6
+deps = ["smd-core", "smd-engine", "smd-testkit"]
+
+# `smd-report` depends on `smd-core` alone — that is the whole point of `ResolvedFinding`.
+# It sits above `smd-api` only so that the two shell crates, which consume both, have
+# somewhere strictly lower to point at.
+[crates.smd-report]
+layer = 7
+deps = ["smd-core", "smd-testkit"]
+
+[crates.smd-cli]
+layer = 8
+deps = ["smd-core", "smd-api", "smd-report", "smd-testkit"]
+
+[crates.smd-gui]
+layer = 8
+deps = ["smd-core", "smd-api", "smd-report", "smd-testkit"]
+
+[crates.smd-py]
+layer = 8
+deps = ["smd-core", "smd-api"]
+
+[crates.xtask]
+layer = 9
+deps = []
