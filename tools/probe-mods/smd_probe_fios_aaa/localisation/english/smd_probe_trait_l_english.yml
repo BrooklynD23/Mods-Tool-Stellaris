@@ -1,0 +1,3 @@
+﻿l_english:
+ trait_smd_probe:0 "SMD PROBE TRAIT"
+ trait_smd_probe_desc:0 "Probe trait. Cost 1 = aaa file won. Cost 5 = zzz file won."

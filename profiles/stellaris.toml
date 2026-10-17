@@ -1,0 +1,611 @@
+# profiles/stellaris.toml
+#
+# Game profile for Stellaris. Schema: docs/architecture/10-game-profiles.md.
+#
+# PROVENANCE: this file was authored in M0.5 from prior-art corroboration, NOT from
+# observation of a running game. See docs/VERIFY.md for the finding behind every value
+# and docs/GROUND-TRUTH-PRIOR-ART.md for the sources and their licences. Nothing here was
+# copied from another project's config files; every value is restated from documented
+# behaviour.
+#
+# RULES OBSERVED WHILE WRITING THIS FILE:
+#   * `merge` is set only where docs/VERIFY.md records CORROBORATED (>= 2 independent
+#     sources). Everything else is `merge = "unknown"`, which is a first-class answer.
+#   * Every `merge = "unknown"` below maps to an open (unticked) box in
+#     docs/VERIFY.md § Directory merge behaviour — principally
+#     "For each [[dir]] entry in profiles/stellaris.toml, confirm the merge mode."
+#     Entries with a more specific open box name it in a trailing comment.
+#
+# THREE FIELDS BELOW ARE PROPOSED SCHEMA ADDITIONS, not yet in architecture/10:
+#   * [load_order].same_filename_replaces_whole_file
+#   * [load_order].filename_axis
+#   * the per-[[dir]] `order` key ("fios" / "lios")
+# They exist because M0.5 established that Stellaris precedence is two-dimensional and
+# the current MergeMode enum cannot express it. See docs/VERIFY.md, the two items marked
+# DESIGN CONTRADICTION. A loader that does not yet understand these keys should reject
+# them loudly rather than ignore them — silently dropping `order = "fios"` inverts the
+# verdict for fourteen directories.
+
+[game]
+id       = "stellaris"
+name     = "Stellaris"
+steam_id = 281990
+
+[locations]
+# NOTE: {DOCUMENTS} MUST be resolved through the OS known-folder API
+# (SHGetKnownFolderPath / FOLDERID_Documents), never by joining {USERPROFILE} + "Documents".
+# OneDrive redirection repoints the known folder; string-joining silently misses every
+# redirected user. See docs/VERIFY.md § Paths.
+user_dir.windows = "{DOCUMENTS}/Paradox Interactive/Stellaris"
+user_dir.linux   = "{XDG_DATA_HOME}/Paradox Interactive/Stellaris"
+user_dir.macos   = "{HOME}/Documents/Paradox Interactive/Stellaris"
+user_dir.proton  = "{PROTON_PREFIX}/drive_c/users/steamuser/Documents/Paradox Interactive/Stellaris"
+workshop         = "{STEAM_LIB}/steamapps/workshop/content/281990"
+install          = "{STEAM_LIB}/steamapps/common/Stellaris"
+mods_subdir      = "mod"
+
+# Steam libraries are discovered from libraryfolders.vdf in BOTH config/ and steamapps/.
+# Whether the workshop may live in a different library from the game is NEEDS THE GAME,
+# so the resolver must search every library rather than assume co-location.
+steam_library_index = ["config/libraryfolders.vdf", "steamapps/libraryfolders.vdf"]
+
+[load_order]
+sources    = ["launcher_v2_sqlite", "dlc_load_json", "directory_scan"]
+
+# CORROBORATED (Irony, CWTools, community consensus): a mod later in the playset beats an
+# earlier one, and vanilla is always lowest. This is necessary but NOT sufficient — see
+# filename_axis below.
+later_wins = true
+vanilla_is_lowest = true
+
+# PROPOSED SCHEMA ADDITION. CORROBORATED: where two sources ship files with the SAME
+# root-relative path, the winner's file replaces the loser's wholesale — keys present only
+# in the loser's copy are lost. This is not a property of a directory; it applies
+# everywhere, and it coexists with per-key merging for differently-named files in the same
+# directory. MergeMode as currently specified cannot express both at once.
+same_filename_replaces_whole_file = true
+
+# PROPOSED SCHEMA ADDITION. CORROBORATED that a filename axis exists and is real;
+# SINGLE SOURCE (Irony) for which directories invert it. Among candidates in
+# DIFFERENTLY named files, the winner is chosen by ORDINAL filename comparison
+# (case-sensitive, byte order — 'Z' sorts before 'a'), direction per-directory:
+#   "lios" (default) - last filename alphabetically wins
+#   "fios"           - first filename alphabetically wins
+# Load order breaks ties only within a single filename. A mod later in the playset can
+# and does lose a common/traits conflict to an earlier mod with a lower-sorting filename.
+filename_axis = true
+filename_compare = "ordinal"
+default_order = "lios"
+
+[syntax]
+script       = "clausewitz"
+localisation = "pdx_locyml"
+descriptor   = "clausewitz_kv"
+
+# CORROBORATED (CWTools operator enum + Irony): exactly these eight, no others.
+operators = ["=", "==", ">", "<", ">=", "<=", "!=", "?="]
+
+# Stellaris's parameterisation mechanism is common/inline_scripts + `inline_script`
+# invocation. The CK3-style "[[PARAM] ... ]" form is NOT confirmed for Stellaris and is
+# deliberately absent — see docs/VERIFY.md § Syntax.
+variables      = "at_prefix"        # @my_var
+inline_scripts = true
+
+# Encoding is not uniform even within one game: common/name_lists must be UTF-8 WITH BOM,
+# other script paths must not be. Frequency of non-UTF-8 files in the wild is unmeasured.
+encoding.default        = "utf8"
+encoding.bom_required   = ["common/name_lists/**"]
+
+[version]
+# SINGLE SOURCE (Irony): launcher-settings.json sits in the INSTALL directory beside the
+# executable. Read `rawVersion` first, fall back to `version` — Paradox is inconsistent
+# about which is populated. Validate that the value parses before accepting it.
+source  = "launcher-settings.json"
+source_dir = "install"
+fields  = ["rawVersion", "version"]
+pattern = "wildcard_dotted"    # 3.13.*
+# The set of supported_version wildcard shapes occurring in the wild is unresolved
+# (docs/VERIFY.md § Version). Best resolved by scraping workshop descriptors, not by a
+# probe mod. Until then the parser should accept unknown shapes rather than reject them.
+pattern_forms_confirmed = false
+
+# ---------------------------------------------------------------------------
+# Directory classification
+# ---------------------------------------------------------------------------
+#
+# merge = "merge_by_key" appears below only for directories covered by the CORROBORATED
+# general rule (docs/VERIFY.md: "across files with different names, entries merge and the
+# last-resolved definition of a key wins", agreed by Irony, CWTools and community
+# documentation), plus the two directories corroborated individually (defines, traits).
+#
+# Directories where the only evidence is Irony's parser assignment — its whole-text
+# parser, its OverwrittenObjectSingleFile parser, and localisation — are "unknown",
+# because one project is one source. The likely answer is recorded in a comment so the
+# probe pass has a hypothesis to test rather than a blank.
+
+# --- Individually corroborated ------------------------------------------------
+
+[[dir]]
+glob   = "common/defines/**/*.txt"
+domain = "define"
+merge  = "merge_by_key"     # CORROBORATED: one definition per define KEY, not per file.
+level  = 1
+# Scoring consequence: pdx.defines_overlap must fire on KEY collision, not file overlap.
+# Two mods each shipping a one-key defines file with different keys is a non-event.
+
+[[dir]]
+glob   = "unchecked_defines/**/*.txt"
+domain = "define"
+merge  = "merge_by_key"
+level  = 1
+
+[[dir]]
+glob   = "common/traits/**/*.txt"
+domain = "trait"
+merge  = "merge_by_key"     # CORROBORATED: unit of identity is the trait id, not the file.
+order  = "fios"             # SINGLE SOURCE (Irony). Lowest-sorting filename wins here.
+# The trait BODY does not merge: redefining a trait drops every vanilla key it omits.
+
+# --- Ordinary common/ script directories --------------------------------------
+# Covered by the corroborated general rule. Default LIOS ordering.
+
+[[dir]]
+glob   = "common/governments/civics/**/*.txt"
+domain = "civic"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/governments/councilors/**/*.txt"
+domain = "councilor"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/governments/*.txt"
+domain = "government"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/technology/**/*.txt"
+domain = "technology"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/buildings/**/*.txt"
+domain = "building"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/districts/**/*.txt"
+domain = "district"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/zones/**/*.txt"
+domain = "zone"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/pop_jobs/**/*.txt"
+domain = "pop_job"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/pop_categories/**/*.txt"
+domain = "pop_category"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/pop_faction_types/**/*.txt"
+domain = "pop_faction_type"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/planet_classes/**/*.txt"
+domain = "planet_class"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/species_archetypes/**/*.txt"
+domain = "species_archetype"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/species_classes/**/*.txt"
+domain = "species_class"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/species_rights/**/*.txt"
+domain = "species_right"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/country_types/**/*.txt"
+domain = "country_type"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/diplomatic_actions/**/*.txt"
+domain = "diplomatic_action"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/relics/**/*.txt"
+domain = "relic"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/opinion_modifiers/**/*.txt"
+domain = "opinion_modifier"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/static_modifiers/**/*.txt"
+domain = "static_modifier"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/scripted_modifiers/**/*.txt"
+domain = "scripted_modifier"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/scripted_effects/**/*.txt"
+domain = "scripted_effect"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/scripted_triggers/**/*.txt"
+domain = "scripted_trigger"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/scripted_loc/**/*.txt"
+domain = "scripted_loc"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/script_values/**/*.txt"
+domain = "script_value"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/ascension_perks/**/*.txt"
+domain = "ascension_perk"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/traditions/**/*.txt"
+domain = "tradition"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/tradition_categories/**/*.txt"
+domain = "tradition_category"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/edicts/**/*.txt"
+domain = "edict"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/policies/**/*.txt"
+domain = "policy"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/decisions/**/*.txt"
+domain = "decision"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/armies/**/*.txt"
+domain = "army"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/megastructures/**/*.txt"
+domain = "megastructure"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/deposits/**/*.txt"
+domain = "deposit"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/deposit_categories/**/*.txt"
+domain = "deposit_category"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/economic_categories/**/*.txt"
+domain = "economic_category"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/economic_plans/**/*.txt"
+domain = "economic_plan"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/game_rules/**/*.txt"
+domain = "game_rule"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/anomalies/**/*.txt"
+domain = "anomaly"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/archaeological_site_types/**/*.txt"
+domain = "archaeological_site"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/leader_classes/**/*.txt"
+domain = "leader_class"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/council_agendas/**/*.txt"
+domain = "council_agenda"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/resolutions/**/*.txt"
+domain = "resolution"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/federation_types/**/*.txt"
+domain = "federation_type"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/casus_belli/**/*.txt"
+domain = "casus_belli"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/war_goals/**/*.txt"
+domain = "war_goal"
+merge  = "merge_by_key"
+
+[[dir]]
+glob   = "common/ship_sizes/**/*.txt"
+domain = "ship_size"
+merge  = "unknown"          # Irony: OverwrittenObjectSingleFile. Hypothesis: `single`.
+
+[[dir]]
+glob   = "common/starbase_modules/**/*.txt"
+domain = "starbase_module"
+merge  = "unknown"          # Irony: OverwrittenObjectSingleFile. Hypothesis: `single`.
+
+[[dir]]
+glob   = "common/ethics/**/*.txt"
+domain = "ethic"
+merge  = "unknown"          # Irony: OverwrittenObjectSingleFile, plus a duplicate-id
+                            # tolerance for `ethic_categories`. Hypothesis: `single`.
+
+[[dir]]
+glob   = "common/strategic_resources/**/*.txt"
+domain = "strategic_resource"
+merge  = "unknown"          # Irony: OverwrittenObjectSingleFile. Hypothesis: `single`.
+order  = "fios"
+
+[[dir]]
+glob   = "common/governments/authorities/**/*.txt"
+domain = "authority"
+merge  = "unknown"          # Irony: OverwrittenObjectSingleFile + a flat-merge carve-out
+                            # for `advanced_authority_swap`. Hypothesis: `single`.
+order  = "fios"
+
+# --- FIOS directories (SINGLE SOURCE: Irony's Stellaris FIOS path list) --------
+
+[[dir]]
+glob   = "common/component_sets/**/*.txt"
+domain = "component_set"
+merge  = "merge_by_key"
+order  = "fios"
+
+[[dir]]
+glob   = "common/component_templates/**/*.txt"
+domain = "component_template"
+merge  = "merge_by_key"
+order  = "fios"
+
+[[dir]]
+glob   = "common/section_templates/**/*.txt"
+domain = "section_template"
+merge  = "merge_by_key"
+order  = "fios"
+
+[[dir]]
+glob   = "common/global_ship_designs/**/*.txt"
+domain = "ship_design"
+merge  = "merge_by_key"
+order  = "fios"
+
+[[dir]]
+glob   = "common/ship_behaviors/**/*.txt"
+domain = "ship_behavior"
+merge  = "merge_by_key"
+order  = "fios"
+
+[[dir]]
+glob   = "common/event_chains/**/*.txt"
+domain = "event_chain"
+merge  = "merge_by_key"
+order  = "fios"
+
+[[dir]]
+glob   = "common/special_projects/**/*.txt"
+domain = "special_project"
+merge  = "merge_by_key"
+order  = "fios"
+
+[[dir]]
+glob   = "common/solar_system_initializers/**/*.txt"
+domain = "system_initializer"
+merge  = "merge_by_key"
+order  = "fios"
+
+[[dir]]
+glob   = "common/start_screen_messages/**/*.txt"
+domain = "start_screen_message"
+merge  = "merge_by_key"
+order  = "fios"
+
+[[dir]]
+glob   = "common/scripted_variables/**/*.txt"
+domain = "scripted_variable"
+merge  = "merge_by_key"
+order  = "fios"
+# Irony treats this as Stellaris's "global variables" path. @-variables resolve globally,
+# so a collision here has effects far outside this directory.
+
+[[dir]]
+glob   = "events/**/*.txt"
+domain = "event"
+merge  = "merge_by_key"
+order  = "fios"
+extractor = "pdx_event"
+
+# --- on_actions: the design's headline risk ------------------------------------
+
+[[dir]]
+glob   = "common/on_actions/**/*.txt"
+domain = "on_action"
+merge  = "unknown"
+# OPEN BOX: docs/VERIFY.md § Directory merge behaviour, "Additive-body directories".
+#
+# What IS corroborated (wiki + Irony, independently): two mods hooking the same
+# on_action in DIFFERENTLY NAMED files do not conflict — the events lists accumulate and
+# fire in ASCII-betical filename order. So the feared ~200-participant false High is
+# indeed false and this directory must not be treated as file replacement in general.
+#
+# What is NOT corroborated, and why this is `unknown` rather than
+# merge_by_key_additive_body: only one source names any accumulating child, and it names
+# only `events`. `effect` and `random_events` are unsupported guesses. Shipping
+# additive_children = ["events", "effect", "random_events"] would assert two things
+# nobody has checked.
+#
+# additive_children = ["events"]   # <- uncomment only once a probe confirms the set.
+#
+# Note the exception that survives whatever the answer is: two mods both shipping
+# common/on_actions/00_on_actions.txt collide on filename identity, and the loser's whole
+# file — including the vanilla content it was extending — is dropped. That IS a severe
+# conflict and must still be reported.
+
+# --- Localisation ---------------------------------------------------------------
+
+[[dir]]
+glob   = "localisation/**/*.yml"
+domain = "loc"
+parser = "pdx_locyml"
+merge  = "unknown"          # Irony parses per YAML key. Hypothesis: merge_by_key.
+
+[[dir]]
+glob   = "localisation_synced/**/*.yml"
+domain = "loc_synced"
+parser = "pdx_locyml"
+merge  = "unknown"
+
+[[dir]]
+glob   = "localisation/replace/**/*.yml"
+domain = "loc"
+parser = "pdx_locyml"
+merge  = "unknown"
+level  = 1
+# OPEN BOX: docs/VERIFY.md § Directory merge behaviour, localisation/replace item.
+# SINGLE SOURCE (Irony): for a given loc key, if ANY source defines it under a `replace`
+# directory then every non-replace candidate is discarded, REGARDLESS of load order.
+# The unit is the individual YAML key. This is a per-key path-precedence relation the
+# overlay cannot currently express; it needs one special case, not a general mechanism.
+overrides_sibling = "localisation/**/*.yml"   # PROPOSED SCHEMA ADDITION
+
+# --- Non-script trees -----------------------------------------------------------
+
+[[dir]]
+glob   = "interface/**/*.gui"
+domain = "gui"
+merge  = "unknown"          # No source addresses .gui merge semantics.
+
+[[dir]]
+glob   = "interface/**/*.gfx"
+domain = "gui_sprite"
+merge  = "unknown"
+
+[[dir]]
+glob   = "gfx/**"
+domain = "asset"
+parser = "none"
+merge  = "file_replace"
+# CORROBORATED by the filename-identity rule: binary assets have no key structure, so the
+# only override mechanism available is same-path replacement, which both Irony and CWTools
+# resolve by root-relative path.
+
+[[dir]]
+glob   = "sound/**"
+domain = "asset"
+parser = "none"
+merge  = "file_replace"
+
+[[dir]]
+glob   = "music/**"
+domain = "asset"
+parser = "none"
+merge  = "file_replace"
+
+[[dir]]
+glob   = "fonts/**"
+domain = "asset"
+parser = "none"
+merge  = "file_replace"
+
+[[dir]]
+glob   = "flags/**"
+domain = "asset"
+parser = "none"
+merge  = "file_replace"
+
+[[dir]]
+glob   = "map/galaxy/**/*.txt"
+domain = "galaxy_setup"
+merge  = "unknown"
+
+[[dir]]
+glob   = "map/setup_scenarios/**/*.txt"
+domain = "setup_scenario"
+merge  = "unknown"
+
+[[dir]]
+glob   = "prescripted_countries/**/*.txt"
+domain = "prescripted_country"
+merge  = "unknown"          # Irony: OverwrittenObject. Hypothesis: merge_by_key.
+
+[[dir]]
+glob   = "common/name_lists/**/*.txt"
+domain = "name_list"
+merge  = "unknown"
+encoding = "utf8_bom"       # SINGLE SOURCE (Irony): BOM is REQUIRED here specifically.
+
+[[dir]]
+glob   = "common/inline_scripts/**/*.txt"
+domain = "inline_script"
+merge  = "unknown"
+# Textually substituted at parse time, so a collision here propagates into every call
+# site. Treated by Irony as a first-class Stellaris mechanism.
+
+[benign]      # never worth reporting
+paths = [
+  "thumbnail.png",
+  "descriptor.mod",
+  "readme*",
+  ".git/**",
+  "*.md",
+  "*.editorconfig",
+]
