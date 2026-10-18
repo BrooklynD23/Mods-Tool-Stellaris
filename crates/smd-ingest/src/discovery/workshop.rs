@@ -1,6 +1,5 @@
 //! Workshop content directories, each read from its own `descriptor.mod`.
 
-use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use smd_core::{Descriptor, DescriptorSource, SourceRole};
@@ -16,7 +15,8 @@ use crate::codes::{self, IngestDiagnostic};
 /// on disk: it is inventoried under its directory name, content unread, with a diagnostic.
 pub(super) fn workshop_mods(
     workshop: &Path,
-    claimed: &BTreeSet<PathBuf>,
+    claimed: &[PathBuf],
+    same: &dyn Fn(&Path, &Path) -> bool,
     sink: &mut Sink,
 ) -> Vec<Raw> {
     let root = match ReadOnlyRoot::open(workshop) {
@@ -31,7 +31,8 @@ pub(super) fn workshop_mods(
     let mut out = Vec::new();
     for e in top.entries.iter().filter(|e| e.kind == Kind::Dir) {
         let dir_name = e.text();
-        if claimed.contains(&root.path().join(&e.name)) {
+        let here = root.path().join(&e.name);
+        if claimed.iter().any(|c| same(c, &here)) {
             continue;
         }
         out.push(one_workshop_dir(&root, e, &dir_name, sink));

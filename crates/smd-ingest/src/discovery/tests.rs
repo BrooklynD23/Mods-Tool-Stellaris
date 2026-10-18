@@ -211,3 +211,51 @@ fn a_rejected_launcher_file_still_claims_its_workshop_directory() {
     assert_eq!(d.mods.len(), 1, "{:?}", d.mods.iter().map(|m| &m.dir_name).collect::<Vec<_>>());
     assert_eq!(d.mods[0].content, ContentState::Unread(UnreadReason::DescriptorInvalid));
 }
+
+fn ws_fixture() -> (World, PathBuf) {
+    let w = World::new();
+    let dir = w.workshop.join("4242");
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join("descriptor.mod"), "name=\"Twice\"\nremote_file_id=\"4242\"\n").unwrap();
+    (w, dir)
+}
+
+/// What the launcher's `path=` looks like next to the registry's workshop directory:
+/// the same directory, different case and separators, plus a trailing separator.
+fn respelled(p: &Path) -> PathBuf {
+    let s = p.to_string_lossy().to_uppercase().replace('/', "\\");
+    PathBuf::from(format!("{s}\\"))
+}
+
+fn on_windows(a: &Path, b: &Path) -> bool {
+    smd_fs::same_host_dir_with(a, b, true)
+}
+
+#[test]
+fn a_descriptor_path_differing_only_by_case_and_separators_claims_the_directory() {
+    let (w, dir) = ws_fixture();
+    let mut sink = candidate::Sink::default();
+    let none = workshop::workshop_mods(&w.workshop, &[], &on_windows, &mut sink);
+    assert_eq!(none.len(), 1, "unclaimed, the directory is inventoried once");
+    let rows = workshop::workshop_mods(&w.workshop, &[respelled(&dir)], &on_windows, &mut sink);
+    assert!(rows.is_empty(), "claimed by its respelled path: {} rows", rows.len());
+}
+
+#[test]
+fn genuinely_different_directories_are_not_claimed() {
+    let (w, _dir) = ws_fixture();
+    let other = w.workshop.join("4243");
+    let mut sink = candidate::Sink::default();
+    let rows = workshop::workshop_mods(&w.workshop, &[respelled(&other)], &on_windows, &mut sink);
+    assert_eq!(rows.len(), 1);
+}
+
+#[test]
+fn a_mod_file_and_its_workshop_directory_are_one_inventory_row() {
+    let w = World::new();
+    let dir = w.workshop_mod("4242", "Once");
+    fs::write(dir.join("descriptor.mod"), "name=\"Once\"\n").unwrap();
+    let d = discover(&w.locations(), &w.options());
+    assert_eq!(d.mods.len(), 1);
+    assert!(d.diagnostics.iter().all(|x| x.code != codes::DUPLICATE_KEY));
+}
