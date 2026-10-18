@@ -56,3 +56,20 @@ fn benign_paths_and_sources_are_read() {
     let names: Vec<String> = p.load_order_sources().iter().map(|s| s.name.to_string()).collect();
     assert_eq!(names, ["launcher_v2_sqlite", "dlc_load_json", "directory_scan"]);
 }
+
+#[test]
+fn dot_files_and_dot_directories_are_benign() {
+    let p = shipped();
+    for path in [".gitattributes", ".idea/.gitignore", ".idea/x", "gfx/.vscode/settings.json"] {
+        assert!(p.is_benign(path), "{path}");
+    }
+    assert!(!p.is_benign("common/traits/a.txt"));
+}
+
+#[test]
+fn asset_archives_are_declared_by_pattern() {
+    let p = shipped();
+    assert!(p.is_asset_archive("dlc/dlc001_symbols_of_domination/dlc001.zip"));
+    assert!(!p.is_asset_archive("dlc/readme.zip"));
+    assert!(!p.is_asset_archive("common/big.zip"));
+}

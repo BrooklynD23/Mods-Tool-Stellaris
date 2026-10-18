@@ -55,6 +55,8 @@ struct Raw {
     dir: Vec<RawDir>,
     #[serde(default)]
     benign: RawBenign,
+    #[serde(default)]
+    asset_archives: RawAssetArchives,
 }
 
 #[derive(Deserialize, Default)]
@@ -83,6 +85,12 @@ struct RawBenign {
     paths: Vec<String>,
 }
 
+#[derive(Deserialize, Default)]
+struct RawAssetArchives {
+    #[serde(default)]
+    paths: Vec<String>,
+}
+
 #[derive(Clone, PartialEq, Eq, Debug)]
 struct Dir {
     glob: Box<str>,
@@ -102,6 +110,7 @@ pub struct Profile {
     scope: ReplacePathScope,
     dirs: Vec<Dir>,
     benign: Vec<Box<str>>,
+    asset_archives: Vec<Box<str>>,
 }
 
 fn same_path(key: &'static str, v: &str) -> Result<SamePath, ProfileError> {
@@ -145,6 +154,12 @@ impl Profile {
             scope: scope(raw.load_order.replace_path_scope.as_deref())?,
             dirs,
             benign: raw.benign.paths.into_iter().map(|p| p.to_lowercase().into()).collect(),
+            asset_archives: raw
+                .asset_archives
+                .paths
+                .into_iter()
+                .map(|p| p.to_lowercase().into())
+                .collect(),
         })
     }
 
@@ -193,5 +208,13 @@ impl Profile {
     #[must_use]
     pub fn is_benign(&self, path: &str) -> bool {
         self.benign.iter().any(|p| glob::matches_basename_or_path(p, path))
+    }
+
+    /// Whether `[asset_archives] paths` declares this path an asset-only archive: a
+    /// container the profile states holds no script, so leaving it unread does not make
+    /// a scan incomplete. The caller still reports that it was not read.
+    #[must_use]
+    pub fn is_asset_archive(&self, path: &str) -> bool {
+        self.asset_archives.iter().any(|p| glob::matches_basename_or_path(p, path))
     }
 }

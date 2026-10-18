@@ -163,7 +163,7 @@ recorded per contribution in the index:
 | --- | --- | --- |
 | `Complete` | Parsed end to end with no recovery | nothing |
 | `Partial` | Brace recovery at EOF, `DepthLimit`, a block skipped as unknown syntax, or a replacement character inside a key token after the Windows-1252 fallback | any claim that a symbol is *absent* from this file, and any agreement discount over its bodies |
-| `Unparsed(reason)` | Above the 32 MB cap, unreadable, changed during the scan, refused at the ingest trust boundary (link, cloud placeholder, special file, root escape, unsafe archive entry — § `05`), or no parser accepts the path | every claim about this file's contents; only path-level and blob-level facts remain |
+| `Unparsed(reason)` | Above the 32 MB cap, unreadable, changed during the scan, refused at the ingest trust boundary (link, cloud placeholder, special file, root escape, unsafe archive entry — § `05`), or no parser accepts the path. The one exemption: a vanilla file over the cap that the profile declares an asset-only archive (`[asset_archives]`, § `10`) is `NotApplicable`, and the report lists it as not read | every claim about this file's contents; only path-level and blob-level facts remain |
 | `NotApplicable` | `parser = "none"` | nothing — no facts were ever expected |
 
 The failure this exists to prevent is specific. A mod replaces
