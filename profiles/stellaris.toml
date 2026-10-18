@@ -685,4 +685,13 @@ paths = [
   ".git/**",
   "*.md",
   "*.editorconfig",
+  # Dot-files and dot-directories are a mod author's repository and editor state
+  # (.gitattributes, .gitignore, .idea/**, .vscode/**), never game content.
+  ".*",
+  "**/.*/**",
+]
+
+[asset_archives]   # containers declared to hold no script; vanilla only, still reported unread
+paths = [
+  "dlc/*/*.zip",   # sound/, music/ and __MACOSX/ only (listed on a 4.4.6 install, Oct 2026)
 ]

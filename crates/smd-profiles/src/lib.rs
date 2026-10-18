@@ -8,7 +8,7 @@
 //!
 //! A minimal typed reader, [`Profile`], for exactly what Stage A needs: the
 //! `[load_order]` keys `same_filename_replaces_whole_file`, `replace_path_scope` and
-//! `sources`, each `[[dir]]`'s `glob` and optional `same_path`, and `[benign]`. Every other
+//! `sources`, each `[[dir]]`'s `glob` and optional `same_path`, `[benign]` and `[asset_archives]`. Every other
 //! key is ignored. Strict, stage-keyed loading with unknown-key rejection (REVIEW-2026-10
 //! H6) replaces this reader; until then a mistyped key this reader does not model is
 //! silently dropped. The shipped profile is embedded with the `profile-stellaris` feature
