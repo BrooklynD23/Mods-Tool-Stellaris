@@ -133,6 +133,36 @@ nothing downstream knows the difference — and through the same boundary: the a
 reader enforces the entry-path, link, and size rules of § Trust boundaries before a byte
 of an entry reaches a parser.
 
+### Workshop claims and host path identity
+
+Discovery reads a Workshop item either from its launcher `mod/ugc_<id>.mod` (whose `path=`
+names the content directory) or, when no launcher file claims it, straight from the
+Workshop directory. A directory is **claimed** (and so read once, from the launcher file)
+when a descriptor's resolved `path=` names the same directory, or a rejected or refused
+launcher file names it by `remote_file_id` or its `ugc_<id>` stem. The launcher writes
+`path="D:/Steam/steamapps/workshop/content/281990/<id>"` while the Workshop directory
+comes from Steam's registry as `d:/steam/steamapps/workshop/content/281990`, so claims are
+compared by **host path identity** (`smd_fs::same_host_dir`), never byte for byte;
+otherwise every Workshop mod is inventoried twice and raises `ingest.duplicate_mod_key`.
+
+Host path identity is lexical and symmetric, and is *not* the root-relative `NormPath`
+rule (§ `03`), which is about files inside a mod:
+
+- Separators: `\` is a separator, and so is `/`, when the path is Windows-style (drive
+  letter, `\\` UNC, `\\?\` prefix) or the host is Windows. On other hosts a backslash in a
+  POSIX path is an ordinary name character.
+- Repeated or trailing separators and `.` segments do not matter.
+- Case is folded when the host is Windows, or either path is Windows-style, or either lies
+  under a WSL drive mount (`/mnt/<letter>/`, drvfs, case-insensitive by default). All
+  other paths compare exactly, because ext4 and friends are case-sensitive and folding
+  there could merge two real directories. A WSL mount made case-sensitive per directory
+  is the one known miss: it would still fold.
+
+The `path=` guard is unchanged and runs first: it resolves against the user directory and
+refuses disk roots, the home directory, and ancestors of other roots. Identity is only
+used afterwards, to decide whether an already-permitted directory is the one Discovery
+was about to read anyway; it never widens what may be read.
+
 ## Trust boundaries
 
 Every byte below `ResolvedLocations` is **untrusted third-party data**: Workshop items

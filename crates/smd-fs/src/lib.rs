@@ -12,6 +12,7 @@
 #![forbid(unsafe_code)]
 
 mod hashing;
+mod hostpath;
 mod limits;
 mod normpath;
 mod record;
@@ -20,6 +21,7 @@ mod sys;
 mod walk;
 
 pub use hashing::hash_reader;
+pub use hostpath::{same_host_dir, same_host_dir_with};
 pub use limits::WalkLimits;
 pub use normpath::{NormError, NormPath, shipped_name};
 pub use record::{FsDiagnostic, Incomplete, WalkOutcome, WalkRecord, codes};

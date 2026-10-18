@@ -4,7 +4,6 @@
 //! [`KEY_INSTALL`], [`KEY_USER_DIR`] and [`KEY_WORKSHOP`]. Nothing here guesses a
 //! location; OS-default and Steam-library discovery are the resolver's job.
 
-use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use smd_core::{Descriptor, Diagnostic, ModKey, ResolvedLocations, SourceRole};
@@ -159,12 +158,14 @@ pub fn discover(loc: &ResolvedLocations, opts: &DiscoveryOptions) -> Discovery {
         let ws_canon = std::fs::canonicalize(ws).unwrap_or_else(|_| ws.clone());
         // A launcher file that was rejected or refused still names a workshop directory
         // (or its `ugc_<id>` name does); that directory is the same mod, not another.
-        let mut claimed: BTreeSet<PathBuf> =
+        // Claims compare by host path identity (`smd_fs::same_host_dir`), not bytes: the
+        // launcher writes `D:/Steam/..` where Steam's registry gives `d:/steam/..`.
+        let mut claimed: Vec<PathBuf> =
             raws.iter().filter_map(|r| r.content_root.clone()).collect();
         for r in raws.iter().filter(|r| r.content_root.is_none()) {
             claimed.extend(workshop_claims(r, &ws_canon));
         }
-        raws.extend(workshop::workshop_mods(ws, &claimed, &mut sink));
+        raws.extend(workshop::workshop_mods(ws, &claimed, &smd_fs::same_host_dir, &mut sink));
     }
     let candidate::Sink { mut diags, incomplete } = sink;
     let mods = finish(raws, &mut diags);
