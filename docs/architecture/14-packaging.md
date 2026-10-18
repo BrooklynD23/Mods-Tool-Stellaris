@@ -114,15 +114,18 @@ so it starts at M5 rather than at the release (§ `15`).
 | --- | --- |
 | Game install dir | **read only** |
 | Mod dirs (local + workshop) | **read only** |
-| Launcher DB | **read only** — always copied (`db` + `-wal` + `-shm`) and read from the copy, § `05` |
+| Launcher DB | **read only** — snapshotted through SQLite (online backup over a read-only connection, or a verified double copy of `db` + `-wal`, never `-shm`), and read from the in-memory snapshot, § `05`. Never `immutable=1` or `nolock=1` on the live file; the main file and `-wal` are never written (gate H29) |
 | OS cache dir (`%LOCALAPPDATA%`, `~/.cache`) | read/write — parse cache, stat cache |
 | OS config dir | read/write — settings, suppressions |
-| Private temp dir | read/write — launcher DB copy, deleted after the read |
+| Private temp dir (`0700`) | read/write — launcher DB copy on the fallback path only, deleted on every exit path |
 | User-chosen export path | write — reports only |
-| Network | **none at runtime in v1.** Two exceptions, both outside the running app: the Windows installer's WebView2 bootstrapper (install time), and the opt-in updater check |
+| Network | **none at runtime in v1** — including indirectly: cloud-placeholder files (OneDrive) are not hydrated, and no output loads remote content (§ `05`, § `11`). Two exceptions, both outside the running app: the Windows installer's WebView2 bootstrapper (install time), and the opt-in updater check |
 
 This is enforced structurally: `smd-fs` exposes `read_only_root()` for game and mod
-paths and there is no write API reachable from those handles. A future patch-generation
+paths and there is no write API reachable from those handles. The same handle is the
+*read* boundary (§ `05`, Trust boundaries): it is the only way to obtain bytes, it does not
+follow links or reparse points inside the root, and it refuses a handle whose final path
+leaves the root. There is no API that takes a bare path and returns content. A future patch-generation
 feature must go through a new, explicitly-named module and an explicit user confirmation,
 and must write only into a new mod directory it creates.
 
@@ -133,7 +136,9 @@ Nothing runs the game, launches Steam, or modifies the playset in v1.
 - No telemetry, no analytics, no crash reporting to a server.
 - **Redaction is on by default for every export** — HTML, JSON, Markdown, clipboard —
   with `--no-redact` for local use. Redaction replaces the home directory prefix with `~`
-  and drops the account name from every path. The default is this way round because the
+  and drops the account name and Steam account ids from every path, in every field —
+  diagnostics and OS error text included — and is proven by a corpus test, not by review
+  (§ `11`, Output safety; gate H26). The default is this way round because the
   formats users attach to a bug report are the file exports, not the clipboard summary;
   defaulting the machine-readable format to "unredacted" and the human one to "redacted"
   gets it backwards from how they are actually shared.

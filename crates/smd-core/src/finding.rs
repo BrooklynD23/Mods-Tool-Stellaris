@@ -1,9 +1,16 @@
 //! Findings — what a rule produces and what everything downstream consumes.
 
+use smallvec::SmallVec;
+
 use crate::evidence::EvidenceBag;
 use crate::facts::EventOrdinal;
 use crate::files::Site;
+use crate::gap::ResolutionGap;
 use crate::ids::{LangId, PathId, SourceId, SymbolId, SymbolKey};
+
+mod certainty;
+
+pub use certainty::{ActivationCertainty, Certainty, Completeness, SemanticCertainty};
 
 /// A stable, namespaced rule id. Never reused. Appears in reports, config, suppressions.
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
@@ -143,6 +150,10 @@ pub struct Finding {
     /// Structured k/v for the renderer. Every key must be declared by the rule's
     /// `evidence()`.
     pub facts: EvidenceBag,
+    /// The meet of rule and inputs; never raised. Defaults to the least certain value.
+    pub certainty: Certainty,
+    /// Copied from the `Resolution`.
+    pub gaps: SmallVec<[ResolutionGap; 1]>,
     /// Filled by `smd-policy`; **0 from the rule**.
     pub score: i32,
     /// Filled by `smd-policy`; **`Info` from the rule**.
@@ -176,6 +187,8 @@ impl Finding {
             subject: Subject::Path(PathId(0)),
             participants: Vec::new(),
             facts: EvidenceBag::new(),
+            certainty: Certainty::default(),
+            gaps: SmallVec::new(),
             score: 0,
             severity: Severity::Info,
         }

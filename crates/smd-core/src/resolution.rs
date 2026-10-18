@@ -6,23 +6,31 @@
 
 use smallvec::SmallVec;
 
+use crate::gap::ResolutionGap;
 use crate::ids::SourceId;
+use crate::precedence::Contender;
 
 /// The outcome of resolving one subject across its participants.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Resolution {
     /// What happened. Not every collision has a loser.
     pub outcome: Outcome,
-    /// The single live participant, when there is exactly one.
-    pub winner: Option<SourceId>,
+    /// The single live participant, when there is exactly one. A [`Contender`] rather than
+    /// a source: a source alone cannot say which of a mod's two trait files won.
+    pub winner: Option<Contender>,
     /// Participants that exist on disk but do not reach the game.
-    pub discarded: SmallVec<[SourceId; 2]>,
+    pub discarded: SmallVec<[Contender; 2]>,
     /// How far the bodies agree, over live participants only.
     pub agreement: Agreement,
     /// Which rule decided the outcome.
     pub mechanism: Mechanism,
-    /// How far the load order behind the decision is to be trusted.
-    pub confidence: Confidence,
+    /// Why no outcome could be stated, one entry per input the verdict depended on and
+    /// could not establish. Empty means the outcome is stated.
+    ///
+    /// There is no `confidence` here: order and activation confidence are scan-wide
+    /// ([`PlaysetProvenance`](crate::PlaysetProvenance)), and what one resolution needs to
+    /// say is whether they *mattered*, which this field says exactly.
+    pub gaps: SmallVec<[ResolutionGap; 1]>,
 }
 
 /// What actually happens to the participants. Not every collision has a loser.
@@ -36,14 +44,19 @@ pub struct Resolution {
 pub enum Outcome {
     /// One live participant reaches the game; the rest are discarded.
     SingleWinner,
-    /// All live participants reach the game (`Additive`, `MergeByKeyAdditiveBody`).
+    /// All live participants reach the game (`Additive`, or `MergeByKeyAdditiveBody` with
+    /// equal residuals). Not every additive-body overlap is `Coexist`: unequal residuals
+    /// are `PartiallyMerged`.
     Coexist,
-    /// The participants combine and none is discarded (`MergeByKey` across distinct keys,
-    /// `Single`).
+    /// Every participant's additive children reach the game; non-additive children come
+    /// from the winner only. Nobody is wholly discarded, so nobody is `Shadowed`.
+    PartiallyMerged,
+    /// The participants combine and none is discarded (`Single`).
     MergedInternally,
     /// Participants exist on disk and none of them is live.
     Deleted,
-    /// No order is known, or the path is [`MergeMode::Unknown`](crate::MergeMode::Unknown).
+    /// A gap prevents a stated outcome; [`Resolution::gaps`] says which (for example no
+    /// known order, or a path whose [`MergeMode`](crate::MergeMode) is `Unknown`).
     #[default]
     Unknown,
 }
@@ -55,6 +68,7 @@ impl Outcome {
         match self {
             Outcome::SingleWinner => "single_winner",
             Outcome::Coexist => "coexist",
+            Outcome::PartiallyMerged => "partially_merged",
             Outcome::MergedInternally => "merged_internally",
             Outcome::Deleted => "deleted",
             Outcome::Unknown => "unknown",
@@ -72,7 +86,8 @@ impl Outcome {
     }
 }
 
-/// How far the bodies agree. Computed over live participants only.
+/// How far the bodies agree. Computed over live participants only; under
+/// `MergeByKeyAdditiveBody` over `residual_hash` rather than `body_hash`.
 ///
 /// **Deliberately exhaustive — the one shared enum in this crate that is.** Its three
 /// states are the complete partition of "do the losers get an outcome they would have
@@ -106,15 +121,22 @@ impl Agreement {
     }
 }
 
-/// Which rule decided the outcome — the mechanism axis, separate from confidence.
+/// Which stage and component decided the outcome — the mechanism axis, separate from
+/// certainty.
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
 #[non_exhaustive]
 pub enum Mechanism {
-    /// Precedence by rank.
-    LoadOrder,
-    /// A `replace_path` declaration dropped a contributor.
+    /// Stage A: a `replace_path` declaration dropped a contributor.
     ReplacePath,
-    /// The directory's merge mode combined the participants.
+    /// Stage A: the same path shipped by a higher-precedence source replaced the file.
+    SamePath,
+    /// Stage D: the path-class tier decided (`localisation/replace/**`).
+    ReplaceTier,
+    /// Stage D: the filename key decided.
+    FilenameOrder,
+    /// Stage D: load order (`rank`) decided.
+    LoadOrder,
+    /// Stage C combined the participants without a winner.
     DirectoryMerge,
     /// No mechanism could be established.
     #[default]
@@ -126,8 +148,11 @@ impl Mechanism {
     #[must_use]
     pub const fn as_tag(self) -> &'static str {
         match self {
-            Mechanism::LoadOrder => "load_order",
             Mechanism::ReplacePath => "replace_path",
+            Mechanism::SamePath => "same_path",
+            Mechanism::ReplaceTier => "replace_tier",
+            Mechanism::FilenameOrder => "filename_order",
+            Mechanism::LoadOrder => "load_order",
             Mechanism::DirectoryMerge => "directory_merge",
             Mechanism::Undetermined => "undetermined",
         }
@@ -169,41 +194,14 @@ impl Confidence {
 pub enum ShadowCause {
     /// The named source declared a `replace_path` covering it.
     ReplacePath(SourceId),
-    /// The named source shipped the same path under `FileReplace`.
-    FileReplace(SourceId),
+    /// The named source shipped the same path (Stage A). Was `FileReplace` in the M0
+    /// skeleton.
+    SamePath(SourceId),
+    /// A higher-precedence definition of the same key overrode it.
+    KeyOverride(Contender),
+    /// A candidate under a higher path-class tier beat it.
+    ReplaceTier(Contender),
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn invariant_r1_only_permits_shadowed_where_something_is_lost() {
-        assert!(Outcome::SingleWinner.permits_shadowed_participants());
-        assert!(Outcome::Deleted.permits_shadowed_participants());
-        assert!(!Outcome::Coexist.permits_shadowed_participants());
-        assert!(!Outcome::MergedInternally.permits_shadowed_participants());
-        assert!(!Outcome::Unknown.permits_shadowed_participants());
-    }
-
-    #[test]
-    fn defaults_are_the_no_claim_variants() {
-        assert_eq!(Outcome::default(), Outcome::Unknown);
-        assert_eq!(Mechanism::default(), Mechanism::Undetermined);
-        assert_eq!(Confidence::default(), Confidence::Fallback);
-        assert_eq!(Agreement::default(), Agreement::Differs);
-    }
-
-    #[test]
-    fn agreement_is_the_deliberate_exhaustive_exception() {
-        // Exhaustive without a wildcard arm: this match is the assertion. If `Agreement`
-        // ever gains `#[non_exhaustive]` or a fourth variant, this stops compiling —
-        // which is exactly the property ADR-0002 § 3 asks for.
-        let tag = match Agreement::LosersMatchWinner {
-            Agreement::AllIdentical => "all_identical",
-            Agreement::LosersMatchWinner => "losers_match_winner",
-            Agreement::Differs => "differs",
-        };
-        assert_eq!(tag, Agreement::LosersMatchWinner.as_tag());
-    }
-}
+mod tests;

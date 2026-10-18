@@ -6,6 +6,12 @@
 use crate::files::{Site, Span};
 use crate::ids::{DomainId, LangId, SymbolId};
 
+mod class;
+mod merge;
+
+pub use class::ExtractionClass;
+pub use merge::{MergeMode, SamePath};
+
 /// Parser output. **File-local and string-based**: the only form that may be serialised,
 /// and therefore the only form the parse cache stores.
 ///
@@ -116,6 +122,23 @@ pub enum FactPayload<S> {
         /// blake3 over the value text, truncated.
         value_hash: [u8; 16],
     } = 5,
+    /// Emitted immediately after a `Definition` on a path whose classification names
+    /// `additive_children`.
+    ///
+    /// `residual_hash` covers the body with every named additive child removed;
+    /// `additive_count` is how many such children were removed. Equal residuals mean the
+    /// participants differ only in children that accumulate; unequal residuals mean the
+    /// winner's non-additive children replace the losers'. (Invariant A1, doc 03.)
+    AdditiveSplit {
+        /// Which kind of object.
+        domain: DomainId,
+        /// Its name.
+        symbol: S,
+        /// blake3 over the body with every additive child removed, truncated.
+        residual_hash: [u8; 16],
+        /// How many additive children were removed.
+        additive_count: u16,
+    } = 6,
 }
 
 impl<S> FactPayload<S> {
@@ -129,6 +152,7 @@ impl<S> FactPayload<S> {
             FactPayload::Namespace { .. } => 3,
             FactPayload::EventId { .. } => 4,
             FactPayload::DefineKey { .. } => 5,
+            FactPayload::AdditiveSplit { .. } => 6,
         }
     }
 }
@@ -146,64 +170,6 @@ pub enum EventOrdinal<S> {
     Num(u32),
     /// `my_mod.setup`
     Name(S),
-}
-
-/// How a directory's contents combine across mods — the concept that makes risk
-/// assessment possible.
-///
-/// Paradox directories do not all behave alike, and treating them alike is why naive
-/// conflict tools drown users in noise. Two mods each shipping the same filename under
-/// [`FileReplace`](MergeMode::FileReplace) is a hard conflict; two mods shipping
-/// *differently named* files in a [`MergeByKey`](MergeMode::MergeByKey) directory is
-/// usually fine. Same raw observation, opposite verdicts. The distinction comes from the
-/// game profile, not from rule code.
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[non_exhaustive]
-pub enum MergeMode {
-    /// Same filename anywhere later in load order replaces the whole file. The vanilla
-    /// file is gone even if the mod only wanted to change one entry.
-    FileReplace,
-    /// Entries across all files in the directory are merged; the last definition of a
-    /// given key wins, other keys from the losing file survive.
-    MergeByKey,
-    /// Merged by key, but same-key *bodies* accumulate rather than replace.
-    ///
-    /// Selected by `additive_children = true` on a `merge_by_key` directory.
-    /// `common/on_actions/` is what it exists for: every mod hooking `on_game_start`
-    /// contributes effects and all of them run. Without this mode that is one
-    /// 200-participant collision — the loudest finding in the report, and entirely false.
-    /// (REVIEW-2026-08 § G4.)
-    MergeByKeyAdditiveBody,
-    /// Entries accumulate; duplicates coexist rather than override.
-    Additive,
-    /// The directory is read as exactly one logical file.
-    Single,
-    /// The profile does not classify this path. No merge claim can be made, and no rule
-    /// may assert an outcome for it.
-    ///
-    /// The default, deliberately: defaulting to [`MergeByKey`](MergeMode::MergeByKey)
-    /// would produce confident verdicts about directories nobody has modelled.
-    #[default]
-    Unknown,
-}
-
-impl MergeMode {
-    /// The `snake_case` name a `weights.toml` modifier compares against.
-    ///
-    /// Values are named, not derived: `eq = "file_replace"` has to match something, and
-    /// this is the something.
-    #[must_use]
-    pub const fn as_tag(self) -> &'static str {
-        match self {
-            MergeMode::FileReplace => "file_replace",
-            MergeMode::MergeByKey => "merge_by_key",
-            MergeMode::MergeByKeyAdditiveBody => "merge_by_key_additive_body",
-            MergeMode::Additive => "additive",
-            MergeMode::Single => "single",
-            MergeMode::Unknown => "unknown",
-        }
-    }
 }
 
 #[cfg(test)]

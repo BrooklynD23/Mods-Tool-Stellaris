@@ -27,10 +27,15 @@ smd-rules = { path = "crates/smd-rules" }
 smd-testkit = { path = "crates/smd-testkit" }
 
 bitflags = "2.13"
+blake3 = "1.8"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+rusqlite = { version = "0.37", features = ["bundled", "backup"] }
+rustix = { version = "1.0", features = ["fs"] }
 smallvec = "1.15"
+tempfile = "3.20"
 toml = "0.9"
+unicode-normalization = "0.1.24"
 
 [workspace.lints.rust]
 rust_2018_idioms = { level = "warn", priority = -1 }

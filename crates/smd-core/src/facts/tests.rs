@@ -27,6 +27,12 @@ fn sample_payloads() -> Vec<FactPayload<Box<str>>> {
             key: "MAX_FLEETS".into(),
             value_hash: [3; 16],
         },
+        FactPayload::AdditiveSplit {
+            domain: DomainId(4),
+            symbol: "on_game_start".into(),
+            residual_hash: [4; 16],
+            additive_count: 2,
+        },
     ]
 }
 
@@ -35,7 +41,8 @@ fn sample_payloads() -> Vec<FactPayload<Box<str>>> {
 /// decodes every cached fact as the wrong kind.
 #[test]
 fn fact_payload_discriminants_are_pinned() {
-    let expected: [u8; 6] = [0, 1, 2, 3, 4, 5];
+    // Definition, LocKey, Reference, Namespace, EventId, DefineKey, AdditiveSplit.
+    let expected: [u8; 7] = [0, 1, 2, 3, 4, 5, 6];
     let actual: Vec<u8> = sample_payloads().iter().map(FactPayload::discriminant).collect();
     assert_eq!(actual, expected);
     assert_eq!(crate::CONTRACT_VERSION, 1, "discriminant snapshot is pinned to contract v1");
@@ -44,7 +51,7 @@ fn fact_payload_discriminants_are_pinned() {
 #[test]
 fn merge_mode_tags_are_snake_case_and_distinct() {
     let all = [
-        MergeMode::FileReplace,
+        MergeMode::PathOnly,
         MergeMode::MergeByKey,
         MergeMode::MergeByKeyAdditiveBody,
         MergeMode::Additive,
@@ -56,6 +63,58 @@ fn merge_mode_tags_are_snake_case_and_distinct() {
     tags.dedup();
     assert_eq!(tags.len(), all.len());
     assert_eq!(MergeMode::default(), MergeMode::Unknown);
+    assert_eq!(MergeMode::PathOnly.as_tag(), "path_only");
+}
+
+fn class() -> ExtractionClass {
+    ExtractionClass {
+        kind: crate::FileKind::Script,
+        parser: "clausewitz",
+        extractor: "depth_key",
+        level: 0,
+        domain: Some("trait".into()),
+        additive_children: Box::new(["a".into(), "b".into()]),
+    }
+}
+
+#[test]
+fn extraction_class_key_bytes_are_canonical() {
+    let base = class();
+    let other_domain = ExtractionClass { domain: Some("civic".into()), ..class() };
+    assert_ne!(base.key_bytes(), other_domain.key_bytes());
+
+    let reordered =
+        ExtractionClass { additive_children: Box::new(["b".into(), "a".into()]), ..class() };
+    assert_eq!(base.key_bytes(), reordered.key_bytes());
+
+    let ab_c =
+        ExtractionClass { additive_children: Box::new(["ab".into(), "c".into()]), ..class() };
+    let a_bc =
+        ExtractionClass { additive_children: Box::new(["a".into(), "bc".into()]), ..class() };
+    assert_ne!(ab_c.key_bytes(), a_bc.key_bytes());
+
+    let once = ExtractionClass { additive_children: Box::new(["a".into()]), ..class() };
+    let twice =
+        ExtractionClass { additive_children: Box::new(["a".into(), "a".into()]), ..class() };
+    assert_eq!(once.key_bytes(), twice.key_bytes(), "a set, not a multiset");
+
+    let none = ExtractionClass { domain: None, ..class() };
+    let empty = ExtractionClass { domain: Some("".into()), ..class() };
+    assert_ne!(none.key_bytes(), empty.key_bytes());
+}
+
+/// `FileKind` is a parse-cache key component: its numbers are pinned, never renumbered.
+#[test]
+fn file_kind_discriminants_are_pinned() {
+    use crate::FileKind::*;
+    let actual = [Script, Localisation, Asset, Descriptor, Gui, Unknown].map(|k| k as u8);
+    assert_eq!(actual, [0, 1, 2, 3, 4, 5]);
+}
+
+#[test]
+fn same_path_tags() {
+    assert_eq!(SamePath::Replace.as_tag(), "replace");
+    assert_eq!(SamePath::default(), SamePath::Unknown);
 }
 
 /// Invariant C1, positive half: `RawFact` is the *only* fact form the cache stores, so it

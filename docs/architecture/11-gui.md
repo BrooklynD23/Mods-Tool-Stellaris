@@ -69,8 +69,11 @@ Not a conflict dump. A verdict and a shortlist:
 
 - One headline: *"3 issues likely to affect your game."*
 - The three, expanded, each with mods involved and a suggested action.
-- Playset health strip: mods scanned, outdated, unresolved dependencies, order source
-  used and its confidence.
+- Playset health strip: mods scanned, outdated, unresolved dependencies, the order source
+  used, and **two separate badges** — order certainty and activation certainty — plus the
+  snapshot method (§ `05`). Under a `Fallback` activation source the headline is not a
+  verdict: findings are *conditional* ("would conflict if both are enabled"), and "no
+  issues" is never shown.
 - "Everything else" as a single collapsed row leading to Conflicts.
 
 A 300-mod playset produces thousands of findings, and a wall of them is
@@ -95,8 +98,8 @@ indistinguishable from noise. The overview's entire job is to be short.
     why it ships in M7 with the rest of this screen rather than after it,
   - impact: who else references this symbol — **post-v1**, gated with reference
     extraction (§ `08`); v1's detail pane ends at the diff,
-  - actions: suppress, copy citation, open containing file, search the Workshop for a
-    patch.
+  - actions: suppress, copy citation, **reveal** containing file (never *open* it — see
+    Output safety), search the Workshop for a patch.
 
 ### Load order — a sandbox
 
@@ -146,7 +149,8 @@ symbol count. The neighbours list is the fastest route to "which two mods actual
 
 ### Report — export
 
-Markdown / JSON / HTML / clipboard summary. The clipboard summary is deliberately shaped
+Markdown / JSON / clipboard summary, and HTML once H27 closes (M10; Output safety below).
+The clipboard summary is deliberately shaped
 for pasting into a Discord support channel or a Workshop comment: ten lines, mod names,
 no paths.
 
@@ -166,6 +170,43 @@ actually be used in, and `--no-redact` is the local-debugging escape (§ `14`).
 | Every severity is text + icon, never colour alone | Accessibility; ~8% of the male player base is colour-blind |
 | Diff pane loads byte ranges on demand | Some conflicting files are megabytes |
 | A response carrying a stale `ScanEpoch` is discarded, never rendered | An in-flight query can land after a rescan; splicing two snapshots into one scroll position shows rows that never coexisted |
+
+## Output safety
+
+Every name, path, tag, version, dependency string, diagnostic message, and diff line the
+tool shows was written by a stranger (§ `05`, Trust boundaries). The rule for every
+output — terminal, Markdown, JSON, HTML report, GUI, clipboard — is the same: **data is
+rendered as text, never as markup or control**, and the escaping happens in one place
+per format, in `smd-report` / the shared Svelte components, never at call sites.
+
+| Output | Rule |
+| --- | --- |
+| Terminal (CLI table) | C0/C1 control characters, `ESC` (ANSI sequences — a mod named `\x1b]8;;…` can forge hyperlinks or rewrite the screen), and bidirectional overrides and isolates (U+202A–202E, U+2066–2069 — "Trojan Source" reordering) are printed as visible `\u{…}` escapes. Colour comes only from the tool, and is off when stdout is not a TTY |
+| Markdown, clipboard summary | Markdown metacharacters in data are backslash-escaped; code spans use a fence longer than any backtick run in the content; **no raw HTML passes through**; no link is generated from data — a mod named `[Fix](https://…)` must arrive in Discord as those characters, not as a link. Same control-character escaping as the terminal |
+| JSON | `serde_json`, always valid UTF-8 (raw non-Unicode names carried as an escaped lossy string plus a flag); no `NaN`. When inlined into the HTML report it goes in `<script type="application/json">` with `<`, `>`, `&`, U+2028, and U+2029 escaped as `\u` sequences, and is read with `JSON.parse`, never evaluated |
+| HTML report (M10) and GUI | All data reaches the DOM as text nodes: Svelte's default escaping, and `{@html}` is banned by lint outside one audited component that renders tool-authored catalogue prose. The diff pane's highlighter emits token spans built from text, never an HTML string. **No remote content**: no remote scripts, styles, fonts, or images — the report is self-contained, and the GUI loads only its bundled assets. Strict CSP: `default-src 'none'; script-src` and `style-src` by hash (report) or `'self'` (GUI); `img-src data:`; `connect-src 'none'` (report) / the IPC origin only (GUI); `form-action 'none'; base-uri 'none'; frame-ancestors 'none'` |
+| Links | The only URLs the tool emits are **constructed**, never taken from data: a Workshop item URL from a `remote_file_id` validated as `^[0-9]{1,20}$`, and a Workshop search URL with a percent-encoded query on a fixed host. They open only on an explicit click, in the OS browser, with `rel="noopener noreferrer"` |
+| "Reveal containing file" | Takes a `PathId`, which the engine resolves to a path *inside a known root* and passes to the platform's reveal-in-file-manager call. Never the OS "open" verb, and never a shell: a mod can ship `notes.txt.bat` or a `.lnk`, and "open" executes it. The Tauri capability set exposes no generic `shell.open` |
+| `smd-cli serve` (if D1 chooses it) | Binds `127.0.0.1` only, on a random port, with a per-launch 128-bit token in the URL it opens; every request checks the token, a `Host` of `127.0.0.1:<port>` or `localhost:<port>` (DNS rebinding), and the `Origin`; no CORS headers. A local web server without these is readable by every page the user visits |
+
+**Redaction** (on by default for every export, § `14`) is a final pass over the
+serialised output model, not a per-field habit: it covers diagnostics, OS error messages
+(which embed paths), descriptor `path=` values, and the JSON, as well as the obvious path
+columns. It replaces the home directory prefix with `~`, the account name wherever it
+appears in a path (including Proton prefixes and Windows profile folders), and Steam
+account ids in `userdata/<id>` paths. Workshop item ids and mod names are not personal and
+are kept. Its proof is a test, not a review: a fixture install under a home directory and
+account name chosen to be unique strings, every export format generated, and the build
+fails if either string appears in any output byte.
+
+### Gates (REVIEW-2026-10)
+
+| Gate | Closes when | Milestone |
+| --- | --- | --- |
+| **H25** | Terminal, Markdown, and JSON escaping implemented in `smd-report`, with a fixture playset whose names and paths carry ANSI/OSC sequences, bidi overrides, Markdown links, HTML, and backtick runs; snapshot tests prove each renders inert | M1 (the first static output) |
+| **H26** | Redaction corpus test (above) over every export format and the diagnostics stream | M1 |
+| **H27** | HTML/GUI rendering: CSP as above, no remote loads (a test serves the report with networking denied and asserts zero requests), `{@html}` lint, reveal-not-open, constructed-links-only | M7 for the GUI; M10 for the HTML report. **No HTML output ships before it closes** |
+| **H28** | `serve` hardening as above, with a DNS-rebinding and cross-origin test | M7, only if D1 chooses `serve` |
 
 ## State ownership
 

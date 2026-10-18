@@ -4,9 +4,30 @@
 //!
 //! **Must never:** Format output, hardcode a score, or name a game.
 //!
-//! Stub. This crate is scaffolding at M0: the workspace, the layer map, and the size and
-//! dependency-direction gates are live from commit one so that nothing lands before the
-//! rules that constrain it. Its contents arrive at the milestone named in
-//! `docs/architecture/15-roadmap.md`.
+//! # Registration, for now
+//!
+//! Doc 08 specifies `register_rule!` over `inventory`, a const assertion that a rule's
+//! fixtures cover every [`CaseKind`], and a `--selftest` diff against `registry.lock`
+//! (H36). None of that exists yet. Until it does, [`registry`] is an explicit function
+//! returning the rules sorted by id, and each rule file holds its own
+//! `const _: () = RuleCase::assert_covers_all_kinds(..)`, so the compile-time half of the
+//! coverage gate is already live. A new rule is one file plus one line in [`registry`].
+//!
+//! The fan-out over rules belongs to `smd-engine`; [`run_all`] is deliberately
+//! sequential.
 
 #![forbid(unsafe_code)]
+
+mod case;
+mod registry;
+pub mod rule;
+pub mod rules;
+mod runner;
+
+#[cfg(test)]
+mod tests;
+
+pub use case::{CaseKind, Expectation, RuleCase, WinnerExpect, run_case};
+pub use registry::registry;
+pub use rule::{CancellationToken, Rule, RuleCtx};
+pub use runner::{RULE_PANICKED, RulePanic, RunOutput, check_finding, run_all, run_one};

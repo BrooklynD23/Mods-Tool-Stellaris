@@ -98,7 +98,7 @@ time as the walker's.
 > **Rule:** exactly one `Arc<rayon::ThreadPool>` exists, it is created by `smd-engine`,
 > and every parallel entry point runs inside `pool.install(..)`. `cargo xtask lint` fails
 > the build on `par_iter`, `par_bridge`, `rayon::scope`, or `rayon::spawn` appearing
-> outside `smd-engine`. A bare `.par_iter()` elsewhere silently targets rayon's *global*
+> outside `smd-engine` (not yet built; gated H37, M2 — § `13` lint ledger). A bare `.par_iter()` elsewhere silently targets rayon's *global*
 > pool — a third pool nobody budgeted, which would also make the varied-thread-count
 > determinism test (§ `13`) meaningless.
 
@@ -137,7 +137,7 @@ flowchart TB
     G --> H["8 Score\nsequential, µs"]
     H --> I["9 Sort / paginate / render"]
     STAT[("stat cache\nfile_id → content_hash")] -. "hit: skip read" .-> E
-    FACTS[("SQLite parse cache\ncontent_hash → facts")] -. "hit: skip parse" .-> E
+    FACTS[("SQLite parse cache\n(content_hash, class) → parse")] -. "hit: skip parse" .-> E
     E -. "batched write" .-> CW["cache writer thread"]
 ```
 
@@ -147,8 +147,8 @@ flowchart TB
 | Stage | Model | Needs the whole set | Notes |
 | --- | --- | --- | --- |
 | 1 Discover | sequential | — | Milliseconds. Registry / `libraryfolders.vdf` / launcher DB. |
-| 2 Resolve order | sequential | yes, of the playset | Assigns `SourceId` (identity) and `rank` (precedence). Pure function of the playset. |
-| 3 Enumerate | parallel walk on IO threads | no | Each walker thread appends to its own `Vec<FileEntry>`; the vectors are concatenated on join. No channel exists to contend on. |
+| 2 Resolve order | sequential | yes, of the playset | Assigns `SourceId` (identity, canonical order — § Determinism), `rank` (precedence), and activation. Pure function of the playset. |
+| 3 Enumerate | parallel walk on IO threads | no | Each walker thread appends to its own `Vec<FileEntry>` and interns into its own local path table; the vectors are concatenated on join and global `PathId`s are assigned at the barrier, in path order. No channel exists to contend on. |
 | 4 Overlay | parallel sort, then a fold over per-path runs | **yes** | A sort has no partial answer, and a path's contributor list is not knowable until the last mod has been walked. Contributors are contiguous after the sort, so the fold parallelises over disjoint runs. |
 | 5 Read + hash + parse | `par_iter` over the same slice | no | One worker owns a file end to end. Runs concurrently with stage 4 under one `rayon::join`. |
 | 6 Index | map-reduce: per-worker local maps, then a parallel merge | **yes**, of 4 and 5 | Joins overlay `live` flags to facts. No shared locks in the hot path. |
@@ -187,9 +187,10 @@ The stage is also where both caches are consulted, in the order that avoids the 
    metadata stage 3 already collected. A hit means the file need not be read *at all* to
    learn its hash — which is the only way the warm target is reachable, since otherwise a
    warm scan re-reads 1.2 GB to compute its own cache keys.
-2. **Parse cache.** `content_hash → Vec<RawFact>` (§ `06`). A hit means the file need not
-   be parsed. Misses read into a pooled buffer, hash, parse, and queue the result for the
-   cache writer.
+2. **Parse cache.** `(content_hash, ExtractionClass) → CachedParse` (§ `06`) — facts,
+   diagnostics, and `ParseCompleteness` together. A hit means the file need not be parsed
+   and replays the cold parse's diagnostics. Misses read into a pooled buffer, hash, parse,
+   and queue the result for the cache writer.
 
 Assets are hashed and never opened for parsing; classification comes from the profile
 glob, not from a file extension check in engine code.
@@ -218,7 +219,9 @@ set has already been sized above.
 - A **32 MB per-file cap** keeps the semaphore acquirable by a single worker under any
   schedule, which is what makes the wait legal under Invariant C1. A text file above the
   cap is hashed (streaming, 256 KB chunks — hashing never needs the whole file resident)
-  and skipped for parsing with a `Diagnostic::Warn`.
+  and skipped for parsing with a `Diagnostic::Warn`, and its contribution is
+  `Unparsed(Oversize)` (§ `06`) — a gap on every claim about its contents, never an empty
+  file.
 - Buffers are recycled through a free list. 400k reads must not be 400k allocations.
 
 The cache-writer channel is the one genuinely unbounded-risk queue, and it is bounded at
@@ -368,17 +371,17 @@ sequenceDiagram
 
 | Failure | Handling |
 | --- | --- |
-| Unreadable file (permissions, bad symlink) | `Diagnostic::Warn`, skip file, continue |
-| **File modified, truncated, or deleted during the scan** | Short or failed `read()` → `Diagnostic::Warn`, the entry is dropped from the overlay, the scan continues. A Steam workshop update mid-scan is normal, not exceptional. |
+| Unreadable file (permissions, bad symlink) | `Diagnostic::Warn`, contribution kept as `Unparsed(Unreadable)`, continue |
+| **File modified, truncated, or deleted during the scan** | Short or failed `read()` → `Diagnostic::Warn`, the scan continues. The entry **stays in the overlay** as `Unparsed(ChangedDuringScan)`: it was there when the walk saw it, and dropping it would silently promote the next-ranked copy to winner and let its absence read as a deletion. Path-level findings over it state no winner; content claims carry `ResolutionGap::ParseIncomplete`. A Steam workshop update mid-scan is normal, not exceptional. (H17) |
 | **mmap page fault on a changed file** | Cannot be handled: it raises SIGBUS / `EXCEPTION_IN_PAGE_ERROR`, which `catch_unwind` does not see. Prevented rather than handled — mmap is used only under the read-only game install directory and only above the size threshold, never over mod directories. Windows additionally *locks* mapped files, which would make the tool break the user's own workshop update. |
-| Malformed script | `Diagnostic::Warn` at the offending span, keep the facts parsed so far |
+| Malformed script | `Diagnostic::Warn` at the offending span, keep the facts parsed so far, file is `Partial` |
 | **Nesting deeper than the parser's depth cap (256)** | `Diagnostic::Error` at the span, skip the remainder of that block, keep everything already parsed. The cap exists because a recursive parser would stack-overflow instead, and a stack overflow is uncatchable — it aborts the process regardless of panic strategy. (§ `06`, § `13`) |
-| Text file above the 32 MB parse cap | Hashed but not parsed, `Diagnostic::Warn` naming the size |
+| Text file above the 32 MB parse cap | Hashed but not parsed, `Diagnostic::Warn` naming the size, `Unparsed(Oversize)` |
 | Missing mod directory referenced by the playset | `Diagnostic::Error`, mod marked `Unresolved`, scan continues |
 | Rule panics | Unwound at the `Vec<Finding>` boundary, that rule's findings dropped, `Diagnostic::Error` naming the rule. Requires `panic = "unwind"`, which the profile-audit lint asserts. |
 | Rule exceeds its soft time budget | Warning naming the rule id; the rule is not killed (§ `08`) |
 | Cache corrupt / version mismatch | Delete and rebuild silently |
-| Launcher DB locked (game running) | Copy `db`, `-wal`, and `-shm` together to temp, open read-only, `PRAGMA quick_check`, note it in the report |
+| Launcher DB busy, locked, or on a filesystem without working locks | Snapshot via the online backup API against a read-only connection; if that is refused, the stable-double-copy path (§ 05); if neither verifies, fall through the order chain with `ingest.launcher_snapshot_unverified` and order/activation certainty from the next source |
 | Out of memory | Not handled gracefully; prevented by the budget in `12-performance.md` |
 
 The scan exits non-zero from the CLI only on `Error`-class diagnostics or an internal
@@ -391,15 +394,31 @@ Reproducibility is a testability requirement, not a nicety, because snapshot tes
 on it. Parallelism is introduced only where results are order-independent, and every place
 that is not order-independent is given an explicit total order.
 
-- Stage 4's sort key is `(PathId, rank)`; `rank` is total by construction and `SourceId`
-  is deliberately not `Ord`, so precedence cannot accidentally be compared through
-  identity.
+- **Scan-local ids are assigned deterministically.** They are never serialised (Invariant
+  C1), but a table numbered in scheduling order is a table whose iteration order differs
+  between two runs of one input, and every place that iterates one inherits the
+  difference. So: `SourceId`s in canonical discovery order — vanilla, then DLC, then
+  mods, each group by `ModKey` bytes, never filesystem enumeration order; `PathId`s at the
+  stage-3 barrier in ascending `NormPath` byte order, from the per-walker local tables;
+  `SymbolId`s at the stage-6 merge in ascending text byte order, which the merge's
+  partition over disjoint key ranges already produces run by run. Finding and result-set
+  ids are positions in the sorted vector, assigned after the sort. (H16)
+- Stage 4's sort key is `(PathId, rank, SourceId::index())`. `rank` compares
+  lexicographically and an empty rank sorts before every non-empty one, so ties — and
+  every comparison under `DirectoryScan` — fall to the canonical `SourceId` (P1). This
+  sort only groups a path's contributors and orders them deterministically; it makes no
+  precedence claim. Precedence is the resolver's (§ `07`), where an empty rank is an
+  `OrderUnknown` gap, not a loss. `SourceId` is deliberately not `Ord` for precedence;
+  its `index()` is used here as an identity tie-break only.
 - The index merge is commutative; ties resolve by `rank`.
 - Rules run in parallel but their outputs are concatenated in **registry order**, and the
   registry is sorted by rule id at startup (§ `08`) — so the pre-sort input is already
   independent of scheduling.
-- Findings are sorted by the six-key total order in § `03` — down to a canonical evidence
-  hash, which exists precisely to break the ties the earlier keys leave. A sort key that
+- Findings are sorted by the total order in § `03` — over `ResolvedFinding`, on text, down
+  to participant role and span length and a canonical hash of the *resolved* evidence.
+  No interned id's numeric value is a sort key anywhere downstream of detection: an order
+  over raw `SymbolId`s is total within a run and different between runs, which is the
+  failure below, and canonical assignment is defence in depth, not the guarantee. (H15) A sort key that
   is total *except* in rare cases produces a determinism gate that passes most runs and
   fails randomly, which is worse than no gate.
 - No `HashMap` iteration order ever reaches output: `BTreeMap` or an explicit sort only.

@@ -195,3 +195,22 @@ fn severity_declaration_order_is_severity_order() {
     assert!(Severity::High < Severity::Critical);
     assert_eq!(Severity::default(), Severity::Info);
 }
+
+#[test]
+fn certainty_default_is_least_certain() {
+    let d = Certainty::default();
+    assert_eq!(d.completeness, Completeness::Unparsed);
+    assert_eq!(d.activation, ActivationCertainty::Conditional);
+    assert_eq!(d.order, crate::Confidence::Fallback);
+    assert_eq!(d.semantics, SemanticCertainty::Unmodelled);
+
+    let best = Certainty {
+        completeness: Completeness::Complete,
+        activation: ActivationCertainty::Certain,
+        order: crate::Confidence::Exact,
+        semantics: SemanticCertainty::Verified,
+    };
+    assert_eq!(best.cmp(&d), std::cmp::Ordering::Less);
+    assert_eq!(Finding::unscored().certainty, d);
+    assert!(Finding::unscored().gaps.is_empty());
+}

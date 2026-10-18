@@ -8,8 +8,10 @@ numbers produces a green pipeline that certifies nothing.
 
 ## Reference workload
 
-The workload must be **measured across three real 200–400 mod playsets** before M1, and
-this section replaced with those figures plus the by-extension histogram they produce.
+The workload must be **measured across three real 200–400 mod playsets at M0.5** — the
+milestone that acquires those playsets, and the last one before any design decision that
+inherits the mean file size is built (§ `15`, H32) — and this section replaced with those
+figures plus the by-extension histogram they produce.
 Until then the numbers below are a provisional shape, chosen to be internally consistent
 rather than to be right.
 
@@ -48,9 +50,9 @@ therefore **~1.3M interned symbols** — loc keys are symbols too.
 | Enumerate + stat | 1.0 s | 1.0 s |
 | Read + content hash | 9.0 s | — |
 | Parse (cold) / cache read + decode (warm) | 4.0 s | 0.6 s |
-| Index + resolve | 1.2 s | 1.2 s |
+| Index + resolve — four stages, incl. canonical id assignment (below) | 1.5 s | 1.5 s |
 | Analyse (all rules, incl. two whole-index passes) | 1.5 s | 1.5 s |
-| Headroom | 3.0 s | 0.4 s |
+| Headroom | 2.7 s | **0.1 s** |
 | **Full scan, end to end** | **≤ 20 s** | **≤ 5 s** |
 
 | Other operations | Target |
@@ -66,6 +68,22 @@ of it was wrong in all three.
 
 **The columns sum.** Every row is a budget, the rows add to the total, and the headroom
 row is where variance lives rather than being hidden inside the stage estimates.
+
+**Canonical ids are inside the index row, not free.** Determinism (§ `04`, H16) adds a
+sort of the ~154k unique paths at the stage-3 barrier — negligible — and canonical
+`SymbolId` assignment over ~1.3M strings at the stage-6 merge, estimated at ≤ 150 ms on
+8 cores and **unmeasured**. Both are charged to "Index + resolve"; if the M0.5-restated
+budget cannot absorb the symbol half, the row grows and headroom shrinks, visibly.
+
+**Resolution is four stages now, and the row grew to say so.** The August 1.2 s was
+budgeted for a one-pass resolver. The pipeline in § `07` adds a surviving-files pass, key
+resolution by `merge`, and a four-field precedence comparison per contender, plus the
+canonical-id sorts above. The row is raised to 1.5 s as an **unmeasured estimate**, taken
+from headroom so the columns still sum — which leaves the warm column with 0.1 s of
+headroom. That is not a budget; it is a statement that the ≤ 5 s warm target is at risk
+until M0.5 restates the workload and M2 measures the resolver. If the measurement says
+the row is larger, the warm target moves in a reviewed change to this file, not in a
+footnote.
 
 **Index and analyse cost the same warm as cold.** They consume facts; they do not care
 where the facts came from. Any warm target below the sum of those two stages is

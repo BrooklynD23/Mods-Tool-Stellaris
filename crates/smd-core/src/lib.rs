@@ -60,10 +60,12 @@ mod evidence;
 mod facts;
 mod files;
 mod finding;
+mod gap;
 mod hash;
 mod ids;
 mod locations;
 mod placeholder;
+mod precedence;
 mod resolution;
 mod resolved;
 mod sortkey;
@@ -73,19 +75,34 @@ mod version;
 
 pub use capability::{Capabilities, FeatureTag};
 pub use descriptor::{Descriptor, DescriptorSource};
-pub use diagnostic::{DiagSeverity, Diagnostic};
+pub use diagnostic::{
+    ContentIncompleteReason, DiagSeverity, Diagnostic, RawDiagnostic, ScanCompleteness,
+};
 pub use evidence::{EvidenceBag, EvidenceType, EvidenceValue};
-pub use facts::{EventOrdinal, Fact, FactPayload, MergeMode, RawFact};
-pub use files::{Blob, FileEntry, FileKind, Site, Span};
-pub use finding::{Finding, Participant, Role, RuleId, Severity, Subject};
+pub use facts::{EventOrdinal, ExtractionClass, Fact, FactPayload, MergeMode, RawFact, SamePath};
+pub use files::{Blob, FileEntry, FileKind, ParseCompleteness, Site, Span, UnparsedReason};
+pub use finding::{
+    ActivationCertainty, Certainty, Completeness, Finding, Participant, Role, RuleId,
+    SemanticCertainty, Severity, Subject,
+};
+pub use gap::ResolutionGap;
 pub use hash::{ContentHash, Hasher128};
 pub use ids::{DomainId, LangId, ModKey, PathId, SourceId, SymbolId, SymbolKey};
 pub use locations::ResolvedLocations;
 pub use placeholder::{DERIVED_PLACEHOLDERS, is_derived_placeholder};
+pub use precedence::{Contender, FileKey, FileOrder, Precedence, RankRef};
 pub use resolution::{Agreement, Confidence, Mechanism, Outcome, Resolution, ShadowCause};
-pub use resolved::{ResolvedEvidence, ResolvedFinding, ResolvedParticipant};
-pub use sortkey::{FindingSortKey, canonical_evidence_hash, sort_findings};
-pub use sources::{ResolvedDependency, SourceMeta, SourceRole, SourceTable};
+pub use resolved::{
+    ResolvedEvidence, ResolvedFinding, ResolvedOrdinal, ResolvedParticipant, SubjectPart,
+};
+pub use sortkey::{
+    FindingSortKey, ResolvedSortKey, canonical_evidence_hash, canonical_resolved_evidence_hash,
+    sort_findings, sort_resolved_findings,
+};
+pub use sources::{
+    Activation, PlaysetProvenance, ResolvedDependency, SnapshotMethod, SourceMeta, SourceRole,
+    SourceTable,
+};
 pub use spec::{
     DescriptorReader, LoadOrderSource, OrderError, Playset, PlaysetEntry, SourceSpec, VersionReader,
 };

@@ -96,7 +96,8 @@ depends on nothing but `std`; `smd-report` depends on nothing but `smd-core`, be
 `ResolvedFinding` it renders has already had every interned id turned back into a string
 at the policy boundary.
 
-This diagram is *generated*. The normative artefact is `xtask/layers.toml`, which names
+This diagram is to be *generated* (not yet built; gated H39, M1 — § `13` lint ledger;
+until then it is hand-maintained). The normative artefact is `xtask/layers.toml`, which names
 every crate in the workspace and every edge it may declare, and which `xtask lint`
 validates against `cargo metadata` (§ `13-testing.md`). A hand-drawn graph that omits
 crates is worse than no graph at all, because the lint that reads it then permits

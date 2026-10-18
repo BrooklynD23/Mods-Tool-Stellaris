@@ -118,8 +118,8 @@ routine `rustup update` turns CI red on code nobody touched. "Public items per m
 A gate that has to be switched off once stays off; the 300-line gate reaches what both
 were aimed at.
 
-The layer graph in `01-overview.md` is rendered *from* `xtask/layers.toml`, not
-maintained alongside it. A graph that omits a crate is worse than no graph, because the
+The layer graph in `01-overview.md` is to be rendered *from* `xtask/layers.toml`, not
+maintained alongside it (not yet built; gated H39, M1 — § `13` lint ledger). A graph that omits a crate is worse than no graph, because the
 lint reading it permits every edge it cannot see.
 
 ### What this looks like in practice

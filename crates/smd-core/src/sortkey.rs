@@ -1,32 +1,37 @@
-//! The finding sort key, and the hand-written `Ord` on [`Subject`] it rests on.
+//! Sort keys.
+//!
+//! **Output order** is [`sort_resolved_findings`], defined over [`ResolvedFinding`] text
+//! (doc 03, "Ordering must be total"; REVIEW-2026-10 H15):
 //!
 //! | # | Key | Direction |
 //! | --- | --- | --- |
 //! | 1 | `severity` | descending |
 //! | 2 | `score` | descending |
-//! | 3 | `rule` | lexicographic |
-//! | 4 | `subject` | ascending |
-//! | 5 | participant vector, each as `(source.index(), path, span.offset)` | lexicographic |
-//! | 6 | canonical evidence hash over the `EvidenceBag` sorted by key | ascending |
+//! | 3 | `rule` | byte-lexicographic |
+//! | 4 | `subject` variant discriminant, then each field's resolved text in declaration order (`EventOrdinal`: `Num` before `Name`, `Num` numerically) | ascending |
+//! | 5 | `certainty`, four axes best-first | ascending |
+//! | 6 | participants as `(mod_key, path, span.offset, span.len, role)` | lexicographic |
+//! | 7 | canonical hash over the resolved evidence (and the gaps) | ascending |
 //!
-//! Keys 1–4 are what a reader wants. Keys 5 and 6 make the order **total**: both are
-//! functions of the finding's entire content, so two findings that compare equal are the
-//! same finding. A partial key over values drawn from `HashMap` iteration is consistent
-//! within a run and different between runs, which makes the determinism gate pass most of
-//! the time and fail at random — the worst behaviour available to a guard.
-//! (REVIEW-2026-08 § G5.)
+//! No interned id's numeric value is an output key. [`FindingSortKey`] / [`sort_findings`]
+//! order the *unresolved* [`Finding`] by interned ids and are for in-engine use (stable
+//! within one scan) only; they must not decide what a user sees.
 //!
-//! Nothing here reads a `HashMap`, and nothing here reads an interner's assignment order
-//! beyond the ids already stored in the finding.
+//! Nothing here reads a `HashMap`.
 
 use std::cmp::Ordering;
 
 use crate::evidence::{EvidenceBag, EvidenceValue};
 use crate::facts::EventOrdinal;
-use crate::finding::{Finding, Subject};
+use crate::finding::{Certainty, Finding, Subject};
 use crate::hash::{ContentHash, Hasher128};
 
+mod resolved;
+#[cfg(test)]
+mod resolved_tests;
 mod subject_ord;
+
+pub use resolved::{ResolvedSortKey, canonical_resolved_evidence_hash, sort_resolved_findings};
 
 /// The comparable projection of a [`Finding`], in the documented key order.
 ///
@@ -37,6 +42,7 @@ pub struct FindingSortKey {
     score_desc: std::cmp::Reverse<i32>,
     rule: &'static str,
     subject: Subject,
+    certainty: Certainty,
     participants: Vec<(u32, u32, u32)>,
     evidence: ContentHash,
 }
@@ -50,6 +56,7 @@ impl FindingSortKey {
             score_desc: std::cmp::Reverse(f.score),
             rule: f.rule.as_str(),
             subject: f.subject.clone(),
+            certainty: f.certainty,
             participants: f.participants.iter().map(|p| p.site.sort_key()).collect(),
             evidence: canonical_evidence_hash(&f.facts),
         }
@@ -63,6 +70,7 @@ impl Ord for FindingSortKey {
             .then_with(|| self.score_desc.cmp(&other.score_desc))
             .then_with(|| self.rule.cmp(other.rule))
             .then_with(|| self.subject.cmp(&other.subject))
+            .then_with(|| self.certainty.cmp(&other.certainty))
             .then_with(|| self.participants.cmp(&other.participants))
             .then_with(|| self.evidence.cmp(&other.evidence))
     }

@@ -6,6 +6,23 @@ use crate::ids::{ModKey, SourceId};
 use crate::resolution::Confidence;
 
 /// Everything the engine knows about one mod, keyed by its [`SourceId`].
+///
+/// There is no per-source `enabled` flag and no per-source order confidence: activation is
+/// the three-valued [`Activation`], and order and activation confidence are scan-wide in
+/// [`PlaysetProvenance`], so there is no copy to disagree with it. (Doc 03, H7.)
+///
+/// ```compile_fail
+/// use smd_core::{Activation, ModKey, SourceMeta, SourceRole};
+/// let _ = SourceMeta {
+///     key: ModKey("k".into()),
+///     name: "n".into(),
+///     rank: Vec::new(),
+///     activation: Activation::Active,
+///     role: SourceRole::Local,
+///     deps: Vec::new(),
+///     enabled: true,
+/// };
+/// ```
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct SourceMeta {
     /// Stable across runs and machines.
@@ -21,12 +38,11 @@ pub struct SourceMeta {
     /// insert between two existing sources without renumbering, and so a reorder rewrites
     /// 300 short vectors and nothing else. (REVIEW-2026-08 § G2.)
     pub rank: Vec<u32>,
-    /// Whether the playset has it switched on.
-    pub enabled: bool,
+    /// Whether the playset has it switched on. `DirectoryScan` yields
+    /// [`Unknown`](Activation::Unknown) for every source: found on disk is not enabled.
+    pub activation: Activation,
     /// Where it came from.
     pub role: SourceRole,
-    /// How far the load order that produced [`rank`](SourceMeta::rank) is to be trusted.
-    pub order_confidence: Confidence,
     /// Declared dependencies, matched as far as they could be.
     pub deps: Vec<ResolvedDependency>,
 }
@@ -98,6 +114,51 @@ impl SourceTable {
     }
 }
 
+/// Whether a source is in the enabled set. Independent of the order's confidence: an order
+/// can be exact while activation is not, and vice versa.
+///
+/// `Inactive` sources are inventoried but contribute to no resolution; a contender whose
+/// activation is `Unknown` is never a stated winner.
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
+#[non_exhaustive]
+pub enum Activation {
+    /// In the enabled set.
+    Active,
+    /// Present but switched off.
+    Inactive,
+    /// Not established. The honest default.
+    #[default]
+    Unknown,
+}
+
+/// How a launcher database was read.
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
+#[non_exhaustive]
+pub enum SnapshotMethod {
+    /// The SQLite online-backup API.
+    OnlineBackup,
+    /// A stable copy of the database files.
+    StableFileCopy,
+    /// The order source reads no snapshot.
+    #[default]
+    NotApplicable,
+}
+
+/// Scan-wide provenance of the load order, from the `LoadOrderSource` chain (doc 05).
+///
+/// The only home of order and activation confidence.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct PlaysetProvenance {
+    /// The registry key of the source that answered.
+    pub order_source: &'static str,
+    /// How far [`SourceMeta::rank`] is trusted.
+    pub order: Confidence,
+    /// How far the enabled set is trusted.
+    pub activation: Confidence,
+    /// How the underlying data was read.
+    pub snapshot: SnapshotMethod,
+}
+
 /// Where a source came from.
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -147,9 +208,8 @@ mod tests {
             key: ModKey("k".into()),
             name: "n".into(),
             rank,
-            enabled: true,
+            activation: Activation::Active,
             role: SourceRole::Workshop,
-            order_confidence: Confidence::Exact,
             deps: Vec::new(),
         }
     }

@@ -195,6 +195,15 @@ in `Cargo.toml`.
 
 `cargo xtask lint` runs in CI and fails the build on:
 
+> **Status, Oct 2026 (REVIEW-2026-10 finding 11).** Five gates are live today:
+> `file-length`, `dependency-direction`, `game-name`, `doc-link`, and `profile-audit`
+> (which also checks that the delegated clippy limits — function length and parameter
+> count, `deny` in `[workspace.lints.clippy]` — are still wired). "A `Rule` impl with no
+> `cases()`" will be a compiler error, not a lint, once the `Rule` trait declares
+> `cases()` with no default; that trait does not exist yet. Everything else below is
+> scheduled, each with a gate id and milestone, in the lint ledger in `13-testing.md`.
+> A gate listed here that is not live in that ledger is a promise, not a protection.
+
 **Structure**
 
 - file > 300 code lines, function > 60 code lines, > 5 parameters;

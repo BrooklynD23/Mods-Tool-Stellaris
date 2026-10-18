@@ -35,11 +35,12 @@ non-developers** (item 6). Raw parse throughput is *not* one of them — see bel
 | Toolchain | Stable for build, test, clippy, and release. Nightly **for the `cargo-fuzz` job only** — no other job may require it |
 | Release profile | `panic = "unwind"`, `lto = "thin"`, `codegen-units = 1` |
 | Data parallelism | `rayon` (CPU stages), dedicated blocking pool (IO stage), both driven from one engine-owned pool |
-| Directory traversal | `ignore` (`WalkBuilder::build_parallel`) |
+| Directory traversal | `ignore` (`WalkBuilder::build_parallel`), `follow_links(false)`; every open goes through `smd-fs`'s root handle (§ `05-ingest.md`, Trust boundaries) |
+| Archive reading | `zip`, read in place behind the bounded reader of § `05` (entry-path validation, decompressed-byte caps); never extracted to disk |
 | File reads | `read()` into a pooled per-thread buffer; `FILE_FLAG_SEQUENTIAL_SCAN` on Windows. mmap only above a measured size threshold and only under the game install directory |
 | Hashing | `blake3` (content addressing + cache keys) |
 | Local cache | SQLite via `rusqlite` (`bundled`), WAL mode |
-| Paradox launcher DB | `rusqlite` with `bundled`, isolated behind one trait |
+| Paradox launcher DB | `rusqlite` with `bundled` and the `backup` feature, isolated behind one trait; snapshotted with the online backup API, never read in place (§ `05`) |
 | GUI shell | **Provisional:** Tauri 2 (system WebView) |
 | GUI front-end | Svelte 5 + TypeScript + `tanstack-virtual` for large tables |
 | IPC types | `ts-rs`, generated from the Rust types; no bare `u64` across the boundary |
@@ -141,7 +142,7 @@ application or as a document plus an optional local server. **Decision D1 in
 | --- | --- | --- |
 | Delivery | Signed installer per OS | One static binary; the report is a single `.html` the OS browser opens |
 | Front-end | Svelte bundle in a WebView | The same Svelte bundle, findings JSON inlined |
-| Live engine | Always | Only under `smd-cli serve` (binds localhost, opens a browser, Jupyter-style) |
+| Live engine | Always | Only under `smd-cli serve` (binds `127.0.0.1`, random port, per-launch token, `Host`/`Origin` checks — § `11-gui.md`, Output safety; opens a browser, Jupyter-style) |
 | Removed if chosen | — | WebView2's trilemma, WebKitGTK skew, the NVIDIA/DMA-BUF blank window, 76–100 MB AppImages, macOS notarisation and its $99/yr prerequisite, the generated-type IPC seam, the Playwright job |
 | Cost if chosen | — | The reorder sandbox and on-demand diff fetch need `serve`; a static report can only carry a bounded slice of findings inline |
 

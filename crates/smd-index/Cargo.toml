@@ -12,6 +12,7 @@ publish.workspace = true
 smd-core = { workspace = true }
 smd-fs = { workspace = true }
 smd-profiles = { workspace = true }
+smallvec = { workspace = true }
 
 [lints]
 workspace = true

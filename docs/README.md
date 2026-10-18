@@ -1,7 +1,9 @@
 # Stellaris Mod Doctor — design documentation
 
-Design phase. No implementation yet; these documents are the specification the
-implementation will be built against.
+Design phase, with the M0 skeleton in place: `smd-core` contracts as stubs and the
+`xtask lint` gates. These documents are the specification the implementation is built
+against. Where a document describes a gate or a guarantee that is not built yet, the
+lint ledger in [architecture/13-testing.md](architecture/13-testing.md) says so.
 
 ## Read in this order
 
@@ -25,7 +27,9 @@ implementation will be built against.
 | 16 | [architecture/14-packaging.md](architecture/14-packaging.md) | Artefacts, compatibility matrix, permissions |
 | 17 | [architecture/15-roadmap.md](architecture/15-roadmap.md) | Milestones, exit criteria, deferrals |
 | — | [REVIEW-2026-08.md](REVIEW-2026-08.md) | **The M0 gate — what must be settled before the first line of code** |
+| — | [REVIEW-2026-10.md](REVIEW-2026-10.md) | **The October register — the H-gates on resolution, completeness, boundaries, and exit criteria** |
 | — | [VERIFY.md](VERIFY.md) | **Assumptions that must be confirmed against a live install** |
+| — | [GROUND-TRUTH-PRIOR-ART.md](GROUND-TRUTH-PRIOR-ART.md) | What documented prior art says about those assumptions — corroboration, not observation |
 
 ## The design in one page
 
@@ -34,7 +38,8 @@ The launcher shows none of it, and the failure usually surfaces hours into a gam
 
 **Approach.** Read the playset, build a model of what the game will actually load, find
 every place two mods contend, decide who wins, and rank the outcomes by how likely they
-are to matter.
+are to matter. Ranking arrives at M5; the first release (M1) reports conflicts and their
+certainty unscored (`REVIEW-2026-10.md`, H34).
 
 **Stack.** Rust engine (parse throughput, one static binary), Tauri + Svelte GUI (dense
 data UI without an Electron-sized download), TOML for everything game-specific.

@@ -148,6 +148,48 @@ single field powers the most valuable noise reduction in the tool: two mods defi
 same symbol with byte-identical bodies (extremely common, because mod A vendored mod B's
 file) is scored down to `Info` instead of shouting `High`.
 
+That discount is only as good as the body it hashed. A definition whose block was closed
+by brace recovery or cut by the depth cap hashes a truncated body, and two truncations can
+agree where the real bodies do not. Such a file is `ParseCompleteness::Partial`, and policy
+refuses every reassuring modifier on a finding whose completeness is not `Complete`
+(§ `09`, H18).
+
+## Completeness — what the parser did not see
+
+Every file the overlay knows about leaves stage 5 with a `ParseCompleteness` (§ `03`),
+recorded per contribution in the index:
+
+| Value | Set when | What it rules out |
+| --- | --- | --- |
+| `Complete` | Parsed end to end with no recovery | nothing |
+| `Partial` | Brace recovery at EOF, `DepthLimit`, a block skipped as unknown syntax, or a replacement character inside a key token after the Windows-1252 fallback | any claim that a symbol is *absent* from this file, and any agreement discount over its bodies |
+| `Unparsed(reason)` | Above the 32 MB cap, unreadable, changed during the scan, refused at the ingest trust boundary (link, cloud placeholder, special file, root escape, unsafe archive entry — § `05`), or no parser accepts the path | every claim about this file's contents; only path-level and blob-level facts remain |
+| `NotApplicable` | `parser = "none"` | nothing — no facts were ever expected |
+
+The failure this exists to prevent is specific. A mod replaces
+`common/technology/00_eng_tech.txt` with a 40 MB file. The file is skipped for parsing;
+the overlay correctly marks vanilla's copy dead; vanilla's definitions now have no live
+site; and `core.symbol_deleted` reports every engineering tech as gone, at the highest
+base weight in the catalogue — about the one mod that may well define all of them. "We
+did not read it" became "it is not there". An unparsed or partial file is therefore a
+stated gap on every negative claim whose scope includes it (`ResolutionGap::ParseIncomplete`,
+§ `07`): the scope of a key in a `merge_by_key` directory is every surviving file in that
+directory, because any filename can define it. Absence of findings is not a clean bill
+either; the report states `ScanCompleteness` — counts of `Partial` and `Unparsed` files
+and the domains they touch — beside the findings, even when there are none (§ `08`).
+
+Some gaps have no file to hang on. A source whose tree exceeded an enumeration bound, a
+directory link refused at the trust boundary (its subtree is never walked), or an archive
+refused whole or not yet read (§ `05`), has files the scan never listed, so no
+per-file record exists to mark. Such a source is **content-incomplete**: it could define
+any key in any directory, so every negative claim in a scope it could contribute to — in
+practice, every `Deleted` while it is not `Inactive` — carries `ParseIncomplete`, and
+`ScanCompleteness` counts it separately as *sources truncated or content-unread*. Harsh,
+and correct: the alternative is a deletion verdict about a mod whose files were not read.
+
+Encoding fallback alone is `Complete`: Windows-1252 decodes every byte except five, and a
+replacement character only matters where it lands inside an identifier.
+
 ## Localisation parsing
 
 `.yml` under `localisation/` is Paradox's own format, not YAML — a real YAML parser
@@ -179,7 +221,8 @@ inventory::submit!(&ClausewitzScriptParser as &dyn FileParser);
 Registration is via the `inventory` crate: **adding a parser adds a file and nothing
 else** — no central list to edit, no merge conflicts between contributors adding parsers
 in parallel. The registry resolves ties by explicit priority, and `cargo xtask lint`
-fails on two parsers claiming the same `(kind, glob)` at the same priority.
+fails on two parsers claiming the same `(kind, glob)` at the same priority (not yet
+built; gated H37, M2 — § `13` lint ledger).
 
 `ParseInput` hands the parser a `&[u8]` borrowed from a pooled per-thread read buffer,
 not a mapping. § `12-performance.md` records why that is the default and the two
@@ -206,10 +249,11 @@ the API boundary.**
 Value encoding is rkyv or postcard — one `Vec<RawFact>` per file, decoded with zero or
 near-zero copying.
 
-### Layer 2 — content hash → facts
+### Layer 2 — content hash and classification → facts
 
 ```
 blake3(file bytes) ‖ parser_id ‖ parser_version ‖ CONTRACT_VERSION ‖ profile_hash
+                   ‖ ExtractionClass::key_bytes()
 ```
 
 Because the key is content-addressed, the cache survives mod updates, path changes,
@@ -217,6 +261,33 @@ reinstalls, and even the same file vendored by five different mods (one entry, f
 hits). Bumping `parser_version` invalidates exactly the affected entries and nothing
 else. The `profile_hash` term is what makes editing `stellaris.toml` safe — changing a
 directory's domain correctly invalidates the facts derived under the old mapping.
+
+**Content is not the only input to a parse, and the key must name every input.** The facts
+a file yields depend on its bytes *and* on where it sits: the cached `Definition` carries a
+`domain`, the `level` decides which keys are definitions, the extractor decides whether
+`id = x.1` is an event, and `additive_children` decides whether an `AdditiveSplit` is
+emitted (§ `03`). `profile_hash` covers none of that, because it is one value for every
+path. Without the `ExtractionClass` term, a file vendored into `common/traits/` and the
+same bytes dropped into `common/civics/` share an entry — whichever was parsed first
+supplies the other's facts, under the other's domain, on every warm scan, and the tool
+reports trait collisions among civics. The term is the effective classification of the
+path (`kind`, parser, extractor, `level`, domain name, the `additive_children` set),
+encoded canonically; two paths with equal classifications still share an entry, which is
+the vendoring case the cache exists for. A fixture pins it: identical bytes under two
+directories with different domains must produce two entries and two different fact sets
+(H10).
+
+The cached value is the parse, not just its facts:
+
+```rust
+struct CachedParse { facts: Vec<RawFact>, diags: Vec<RawDiagnostic>, completeness: ParseCompleteness }
+```
+
+A cache of facts alone makes the warm scan forget every recovery the cold scan performed:
+the malformed file's diagnostics vanish and its `Partial` becomes an implicit `Complete`,
+so the incompleteness guard above holds on the first run and fails on every run after
+it. `Unparsed` results are never cached — the reason (`ChangedDuringScan`, `Unreadable`)
+belongs to the scan, not to the bytes.
 
 ### Layer 1 — stat → content hash
 

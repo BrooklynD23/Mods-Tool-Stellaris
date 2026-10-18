@@ -4,9 +4,16 @@
 //!
 //! **Must never:** Contain domain logic. The engine is a library first; the CLI is a thin adapter.
 //!
-//! Stub. This crate is scaffolding at M0: the workspace, the layer map, and the size and
-//! dependency-direction gates are live from commit one so that nothing lands before the
-//! rules that constrain it. Its contents arrive at the milestone named in
-//! `docs/architecture/15-roadmap.md`.
+//! # What exists so far
+//!
+//! `smd scan`. [`run`] parses hand-rolled arguments ([`args`]), runs the scan through
+//! `smd-api`, maps the text-only outcome onto `smd-report`'s model ([`model`]), and prints
+//! the report. The binary (`src/main.rs`) only supplies the process environment.
 
 #![forbid(unsafe_code)]
+
+pub mod args;
+pub mod model;
+mod run;
+
+pub use run::{Env, run};

@@ -18,6 +18,7 @@ use crate::files::Site;
 use crate::ids::ModKey;
 use crate::locations::ResolvedLocations;
 use crate::resolution::Confidence;
+use crate::sources::SnapshotMethod;
 use crate::version::{GameVersion, VersionPattern};
 
 /// A load-order source **named**, with its configuration — never constructed.
@@ -51,6 +52,11 @@ pub struct PlaysetEntry {
     /// [`SourceMeta::rank`](crate::SourceMeta::rank) by `smd-ingest`.
     pub position: u32,
     /// Whether the playset has it switched on.
+    ///
+    /// Only as trustworthy as [`Playset::activation`]. When that is
+    /// [`Confidence::Fallback`], as under `DirectoryScan`, this flag is a placeholder and
+    /// `smd-ingest` must map the source to `Activation::Unknown` whatever it says: found
+    /// on disk is not enabled, and no such source is ever `Active`.
     pub enabled: bool,
 }
 
@@ -61,8 +67,12 @@ pub struct Playset {
     pub name: Box<str>,
     /// Entries, in the order the source gave them.
     pub entries: Vec<PlaysetEntry>,
-    /// How far this source's answer is to be trusted.
-    pub confidence: Confidence,
+    /// How far the entries' positions (the load order) are to be trusted.
+    pub order: Confidence,
+    /// How far the per-entry `enabled` flags are to be trusted.
+    pub activation: Confidence,
+    /// How the underlying data was read.
+    pub snapshot: SnapshotMethod,
 }
 
 /// Why an order source could not answer.
@@ -98,8 +108,9 @@ pub trait LoadOrderSource: Sync {
     /// The registry key this implementation answers to.
     fn id(&self) -> &'static str;
 
-    /// How far this source's answers are to be trusted, before it is even tried.
-    fn confidence(&self) -> Confidence;
+    /// The best this source can claim, as `(order, activation)`. A run may report less
+    /// (an unverified snapshot never yields `Exact`).
+    fn ceiling(&self) -> (Confidence, Confidence);
 
     /// Try to read a playset. `Err` means "try the next source", loudly.
     fn try_load(&self, locations: &ResolvedLocations) -> Result<Playset, OrderError>;
@@ -139,8 +150,8 @@ mod tests {
         fn id(&self) -> &'static str {
             "directory_scan"
         }
-        fn confidence(&self) -> Confidence {
-            Confidence::Fallback
+        fn ceiling(&self) -> (Confidence, Confidence) {
+            (Confidence::Fallback, Confidence::Fallback)
         }
         fn try_load(&self, _locations: &ResolvedLocations) -> Result<Playset, OrderError> {
             Err(OrderError::NotPresent)
@@ -155,7 +166,7 @@ mod tests {
         let locations = ResolvedLocations::new();
         for source in &chain {
             assert_eq!(source.id(), "directory_scan");
-            assert_eq!(source.confidence(), Confidence::Fallback);
+            assert_eq!(source.ceiling(), (Confidence::Fallback, Confidence::Fallback));
             assert_eq!(source.try_load(&locations), Err(OrderError::NotPresent));
         }
     }

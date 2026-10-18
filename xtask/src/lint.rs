@@ -15,6 +15,13 @@
 //! wired up. `clippy::cognitive_complexity` is deliberately absent — it is a nursery lint
 //! that misfires and moves between toolchain releases, so a routine `rustup update` would
 //! turn CI red on code nobody touched.
+//!
+//! These five are the whole list. The design documents describe further gates — shared-enum
+//! wildcards, struct literals, referential integrity across `weights.toml` / `explain/*` /
+//! `suppress.toml`, the rayon ban, parser priority collisions — and none of them is built
+//! yet. Each is scheduled, with a gate id and a milestone, in the lint ledger in
+//! `docs/architecture/13-testing.md` § "Lint guarantees: live versus gated"
+//! (REVIEW-2026-10 H35–H39). A gate is added here and marked live there in the same change.
 
 mod allowances;
 mod deps;

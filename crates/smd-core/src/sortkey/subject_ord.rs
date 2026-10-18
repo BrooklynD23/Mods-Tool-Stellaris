@@ -5,6 +5,10 @@
 //! projected to its raw `u32` — sources through [`SourceId::index`](crate::SourceId::index)
 //! — behind a variant discriminant. The result is an arbitrary but stable total order over
 //! identity, and it means nothing else.
+//!
+//! **For in-engine maps and equality only. It must never order output**: interned ids are
+//! minted during parallel stages, so their numeric order is a property of one run. Output
+//! order is defined over resolved text ([`sort_resolved_findings`](super::sort_resolved_findings)).
 
 use std::cmp::Ordering;
 
@@ -15,7 +19,7 @@ use crate::finding::Subject;
 ///
 /// Declaration order, so a new variant appended to `Subject` sorts last and does not
 /// renumber the existing ones.
-const fn variant(s: &Subject) -> u8 {
+pub(crate) const fn variant(s: &Subject) -> u8 {
     match s {
         Subject::Path(_) => 0,
         Subject::Symbol(_) => 1,

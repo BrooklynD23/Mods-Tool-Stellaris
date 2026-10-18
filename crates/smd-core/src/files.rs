@@ -56,23 +56,27 @@ pub struct Blob {
 }
 
 /// What a file is, as far as dispatch is concerned. Assigned by the game profile.
+///
+/// Discriminants are explicit and part of the parse-cache key
+/// ([`ExtractionClass::key_bytes`](crate::ExtractionClass::key_bytes)): a new kind takes
+/// the next unused number and an existing number is never reused.
 #[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[non_exhaustive]
 pub enum FileKind {
     /// Clausewitz script.
-    Script,
+    Script = 0,
     /// Paradox-flavoured YAML localisation.
-    Localisation,
+    Localisation = 1,
     /// Binary or otherwise unparsed content: textures, models, sounds.
-    Asset,
+    Asset = 2,
     /// `descriptor.mod` or a launcher `*.mod`.
-    Descriptor,
+    Descriptor = 3,
     /// `.gui` interface definitions.
-    Gui,
+    Gui = 4,
     /// Not classified. The honest default; never a guess.
     #[default]
-    Unknown,
+    Unknown = 5,
 }
 
 /// One file belonging to one mod, as the enumeration stage produces it.
@@ -85,10 +89,49 @@ pub struct FileEntry {
     /// Windows and Linux mod archives disagree on case, and a case-sensitive comparison
     /// would report thousands of phantom non-conflicts on Linux.
     pub path: PathId,
+    /// The as-shipped spelling, directory-relative, Unicode NFC only. **A sort key, never
+    /// identity**: the FIOS/LIOS filename axis is an ordinal, case-sensitive comparison
+    /// (`Z` sorts before `a`), and lowercasing into [`path`](FileEntry::path) destroys
+    /// exactly the information it needs.
+    pub raw_name: Box<str>,
     /// Content address.
     pub blob: Blob,
     /// Dispatch class.
     pub kind: FileKind,
+}
+
+/// How completely one file's facts were extracted. Cached beside the facts.
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[non_exhaustive]
+pub enum ParseCompleteness {
+    /// Parsed end to end with no recovery.
+    Complete,
+    /// Parsed with recovery: the facts emitted are real, but facts may be missing.
+    Partial,
+    /// Contributes to the overlay but no facts were extracted.
+    Unparsed(UnparsedReason),
+    /// Hash-only by design (`parser = "none"`). Facts are not expected.
+    NotApplicable,
+}
+
+/// Why a file contributes no facts.
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[non_exhaustive]
+pub enum UnparsedReason {
+    /// Larger than the size bound.
+    Oversize,
+    /// Could not be read.
+    Unreadable,
+    /// Its content changed while the scan ran.
+    ChangedDuringScan,
+    /// No parser accepts it.
+    NoParser,
+    /// The trust boundary declined to read it: a link or reparse point inside a root, a
+    /// cloud placeholder that would need hydration, a non-regular file, a handle that
+    /// resolved outside its root, or an unsafe archive entry (doc 05, Trust boundaries).
+    Refused,
 }
 
 #[cfg(test)]

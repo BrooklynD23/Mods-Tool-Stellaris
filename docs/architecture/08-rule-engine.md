@@ -89,7 +89,8 @@ does not fail; it silently never matches, forever.
 
 `EvidenceType` mirrors `EvidenceValue` (§ `03`) one variant for one variant, and `Tag`
 additionally names the enum whose `snake_case` variant names are the legal values — so a
-modifier matching `eq = "file_replaced"` against a `MergeMode` fails the lint rather than
+modifier matching `eq = "file_replace"` (the retired name) against a `MergeMode` fails the lint
+(not yet built; gated H38, M5 — § `13` lint ledger) rather than
 never firing.
 
 ```rust
@@ -99,15 +100,15 @@ fn evidence(&self) -> &'static [(&'static str, EvidenceType)] {
     &[("domain",     EvidenceType::Sym),
       ("agreement",  EvidenceType::Tag("Agreement")),
       ("merge",      EvidenceType::Tag("MergeMode")),
-      ("mechanism",  EvidenceType::Tag("Mechanism")),
-      ("confidence", EvidenceType::Tag("Confidence"))]
+      ("mechanism",  EvidenceType::Tag("Mechanism"))]
 }
 ```
 
 `cargo xtask lint` cross-checks every `when = { evidence = … }` in `weights.toml` and
 every `{placeholder}` in every locale against the union of this rule's declared keys and
-the closed derived set defined in `smd-core` (§ `09`). A debug assertion catches a rule
-emitting a key it did not declare.
+the closed derived set defined in `smd-core` (§ `09`) (not yet built: placeholders gated
+H36, M1; `when.evidence` gated H38, M5 — § `13` lint ledger). A debug assertion catches a
+rule emitting a key it did not declare.
 
 ### Registration
 
@@ -186,7 +187,8 @@ pub fn run_one(rule: &dyn Rule, ctx: &RuleCtx<'_>) -> Result<Vec<Finding>, RuleP
 
 The fan-out over rules belongs to `smd-engine`, which owns the process's only thread pool
 (§ `04`). A `par_iter` here would target rayon's global pool — a third pool nobody
-budgeted — so `xtask lint` bans rayon entry points outside `smd-engine` and this function
+budgeted — so `xtask lint` bans rayon entry points outside `smd-engine` (not yet built;
+gated H37, M2 — § `13` lint ledger) and this function
 is deliberately sequential.
 
 - Each rule is a pure function of `&ScanIndex` into `Vec<Finding>`, so the `catch_unwind`
@@ -209,17 +211,16 @@ is deliberately sequential.
 | --- | --- | --- |
 | `core.file_overwrite` | ≥2 sources contribute the same path | Downgraded to `Info` when blobs are identical |
 | `core.symbol_collision` | ≥2 live definitions of one `(domain, symbol)` | Downgraded when the losers agree with the winner |
-| `core.symbol_deleted` | A `(domain, symbol)` with ≥1 definition and **no live one** | Base weight above `core.symbol_collision` — a symbol the game can no longer see is worse than one it resolves the wrong way. Backed by `ScanIndex::all_dead()` and `Outcome::Deleted`. |
+| `core.symbol_deleted` | A `(domain, symbol)` with ≥1 definition and **no live one** | Base weight above `core.symbol_collision` — a symbol the game can no longer see is worse than one it resolves the wrong way. Backed by `ScanIndex::all_dead()` and `Outcome::Deleted`. With a `ParseIncomplete` gap in the symbol's scope **or a Stage A gap on any of the symbol's paths** it reports *could not verify*, never *deleted* (§ Completeness and certainty). |
 | `core.loc_collision` | Same loc key in ≥2 sources | Split by value-equal vs value-differs |
 | `pdx.event_id_dup` | Same `namespace.ordinal` in ≥2 sources | Near-certain breakage; high base weight |
 | `pdx.namespace_share` | Unrelated mods sharing an event namespace | Signals future collisions even without one today |
-| `pdx.defines_overlap` | Same define key from ≥2 sources | `common/defines` is `FileReplace`-shaped and unforgiving |
+| `pdx.defines_overlap` | Same define key from ≥2 sources | `common/defines` replaces by `same_path` and is unforgiving |
 | `pdx.replace_path_shadow` | A `replace_path` silently drops another mod's files | Usually intentional by the declaring mod, usually a surprise to the user |
 | `dep.missing` | Declared dependency not in the playset | Fuzzy name match; carries candidates |
 | `dep.order` | Dependency loads *after* its dependent | Deterministic and highly actionable |
 | `meta.version_drift` | `supported_version` excludes the installed version | Low alone; amplified in combination |
 | `meta.descriptor_mismatch` | `.mod` disagrees with `descriptor.mod` | Stale launcher metadata |
-| `meta.patch_candidate` | An installed mod looks like a patch for a detected conflict pair | Suppresses the conflict it covers |
 
 `core.symbol_deleted` is the one rule in the set that is not "≥2 of something". Every
 other v1 rule reports a *contest*; this one reports an *absence* — a file replaced
@@ -228,7 +229,8 @@ supplies. The result is a symbol referenced by name and defined nowhere the game
 look, which is both structurally unreachable and exactly the class of bug that makes a
 player open the tool. A catalogue made only of contests cannot see it.
 
-Post-v1, each still one file: `pdx.on_action_overlap`,
+Post-v1, each still one file: `meta.patch_candidate` (M9; informational only, suppresses
+and discounts nothing — H13), `pdx.on_action_overlap`,
 `pdx.scripted_effect_signature_change`, `meta.workshop_delisted`,
 `core.gui_element_collision`, `pdx.tech_tree_orphan`, and `core.dangling_reference` —
 the last blocked on `Capabilities::REFERENCES`, which stays off until reference
@@ -253,6 +255,9 @@ impl SymbolCollision {
                    expect: Expectation::fires_without_winner() },
         RuleCase { name: "sole definer replaced away", kind: CaseKind::Deletion,
                    build: fixtures::last_definer_shadowed, expect: Expectation::None },
+        RuleCase { name: "winner file oversize", kind: CaseKind::Incomplete,
+                   build: fixtures::winning_file_unparsed,
+                   expect: Expectation::fires_without_winner() },
     ];
 }
 
@@ -266,8 +271,7 @@ impl Rule for SymbolCollision {
         &[("domain",     EvidenceType::Sym),
           ("agreement",  EvidenceType::Tag("Agreement")),
           ("merge",      EvidenceType::Tag("MergeMode")),
-          ("mechanism",  EvidenceType::Tag("Mechanism")),
-          ("confidence", EvidenceType::Tag("Confidence"))]
+          ("mechanism",  EvidenceType::Tag("Mechanism"))]
     }
 
     fn run(&self, ctx: &RuleCtx<'_>) -> Vec<Finding> {
@@ -275,21 +279,23 @@ impl Rule for SymbolCollision {
         for (key, sites) in ctx.index.defs.multi_defined() {
             if ctx.cancel.is_cancelled() { return out; }
 
-            let live: Vec<_> = sites.iter().filter(|d| d.live).collect();
+            // Stated *or possible* survivors: under DirectoryScan nearly every site is only
+            // possibly surviving, and the collision must still be reported (conditionally).
+            let live: Vec<_> = sites.iter().filter(|d| ctx.index.derived.contends(d.slot)).collect();
             if live.len() < 2 { continue; }
 
             let res = ctx.index.resolve_symbol(key);
             out.push(Finding {
                 rule: self.id(),
-                subject: Subject::Symbol { domain: key.domain, symbol: key.symbol },
+                subject: Subject::Symbol(key),
                 participants: participants_from(&live, &res),
                 facts: evidence! {
                     "domain"     => ctx.domain_name(key.domain),
                     "agreement"  => res.agreement,
-                    "merge"      => live[0].merge,
+                    "merge"      => ctx.index.dir_rules_of(live[0].site.path).merge,
                     "mechanism"  => res.mechanism,
-                    "confidence" => res.confidence,
                 },
+                gaps: res.gaps.clone(),   // certainty is derived from these by the engine
                 ..Finding::unscored()
             });
         }
@@ -303,12 +309,58 @@ register_rule!(SymbolCollision);
 Note what is absent: no numbers, no severity, no user-facing sentence, no knowledge of
 which game it is running against. Those are three other people's jobs. Note also what is
 *present* and could not be omitted: the cancellation check, the declared evidence keys,
-and all four case kinds — things the compiler or a lint demands before this file builds.
+and all five case kinds — things the compiler or a lint demands before this file builds.
 
 The `Deletion` case is the instructive one. This rule's honest answer to "the only mod
 defining X had its file replaced" is *I do not fire* — the finding belongs to
 `core.symbol_deleted`. Requiring every rule to state that answer is what stops the 1→0
 case from falling between two rules, each assuming the other covers it.
+
+## Completeness and certainty
+
+A finding is a claim, and a claim made from partial evidence must say so. Every `Finding`
+carries `certainty: Certainty` — four independent axes — and `gaps`, the
+`ResolutionGap`s behind them (§ `03`, § `07`):
+
+| Axis | Values, best first | Worst when | Derived from |
+| --- | --- | --- | --- |
+| `completeness` | `Complete`, `Partial`, `Unparsed` | a contribution in the subject's scope was not fully parsed | `ParseCompleteness` of the scope (§ `06`); gap `ParseIncomplete` |
+| `activation` | `Certain`, `Inferred`, `Conditional` | a participant's enabled state is `Unknown` | `SourceMeta.activation` and the activation certainty of the order source (§ `05`); gap `ActivationUnknown` |
+| `order` | `Exact`, `Inferred`, `Fallback` | the load order came from `DirectoryScan` | `Confidence` of the order source; gap `OrderUnknown` |
+| `semantics` | `Verified`, `Assumed`, `Unmodelled` | the merge behaviour of the path is not modelled | gaps `MergeModeUnknown`, `SamePathUnknown`, `ChildDigestsUnavailable`, `IdentityCollision`, `FileKeyTie` → `Unmodelled`; `FilenameKeyForm`, `VanillaFilenameAxis`, `ReplacePathScope`, `InFileOrder`, or a `[[dir]]` entry whose `verified = "<VERIFY id or probe id> @ <game version>"` is absent or whose version does not match the installed build's major.minor (§ `10`) → `Assumed`. `Verified` is earned per entry, never defaulted |
+
+**The engine computes it, the rule cannot raise it.** After `run_one` returns, `smd-engine`
+sets each finding's certainty to the meet of what the rule supplied and what its
+participants support — the worst value on every axis over every participant source and
+every file in the subject's scope. A rule can lower an axis (it knows something the
+participants do not); it cannot claim more than its inputs. `Certainty::default()` is the
+worst value on every axis, so a field nobody filled under-claims rather than over-claims.
+
+The axes stay separate for the reason `Outcome` and `Confidence` do (§ `07`): "these mods
+collide, but your launcher could not be read", "this symbol may be gone, but one file was
+too large to read", and "the game's merge rule here is unverified" are three different
+statements, and each suggests a different action. A single `confidence: u8` would let any
+one of them hide the others.
+
+Two claims are **definitive negatives** and are never made on incomplete evidence:
+
+- **"Deleted."** `Outcome::Deleted` requires that no site of the key is surviving **or
+  possibly surviving**, that every path holding a site of the key has a *stated* Stage A
+  outcome dropping it (no Stage A gap), *and* that no contribution in the subject's scope
+  is `Partial` or `Unparsed` (including content-incomplete sources). Otherwise the outcome
+  is `Unknown` with the blocking gaps — the paths' Stage A gaps, or `ParseIncomplete` —
+  and `core.symbol_deleted` still fires — as a
+  finding whose explanation is *could not verify*, capped by policy (§ `09`). Silence would
+  hide a possibly real deletion; certainty would invent one.
+- **"Safe."** No finding about a subject means nothing about it when its scope was
+  incomplete. Every report — CLI table, JSON, HTML, GUI health strip — carries
+  `ScanCompleteness` (counts of `Partial` and `Unparsed` files by reason, the domains
+  they fall in, and sources truncated or content-unread — § `06`), the order certainty, and the activation certainty, and prints them when
+  there are zero findings. A report that says "no conflicts" above a hidden list of 40
+  unread files is the one output this tool must never produce.
+
+Every rule's case set includes an incomplete-input fixture asserting that the rule emits
+no definitive negative from it (`CaseKind::Incomplete`, § `13`).
 
 ## Suppressions
 
@@ -316,7 +368,8 @@ Three layers, all data:
 
 1. **Policy suppressions** (shipped, in `policy/suppress.toml`) — e.g. `core.file_overwrite`
    is suppressed for paths where `pdx.replace_path_shadow` already fired on the same
-   subject, because reporting both is telling the user the same thing twice.
+   subject, because reporting both is telling the user the same thing twice. No shipped
+   suppression keys on `meta.patch_candidate` (§ `09`, H13).
 2. **Profile suppressions** — known-benign paths per game (`thumbnail.png`,
    `descriptor.mod`, `.git/**`, `readme*`).
 3. **User suppressions** (`~/.config/smd/suppress.toml`) — by rule id, by mod, by

@@ -19,7 +19,8 @@
 use smallvec::SmallVec;
 
 use crate::files::Span;
-use crate::finding::{Role, RuleId, Severity, Subject};
+use crate::finding::{Certainty, Role, RuleId, Severity, Subject};
+use crate::gap::ResolutionGap;
 use crate::ids::ModKey;
 
 /// A finding with every interned id turned back into text.
@@ -32,14 +33,45 @@ pub struct ResolvedFinding {
     pub subject: Subject,
     /// The subject, rendered.
     pub subject_text: Box<str>,
+    /// The subject's fields as resolved text, in declaration order, for sort key 4. A
+    /// producer fills this; empty (the `Default`) falls back to comparing
+    /// [`subject_text`](Self::subject_text) bytes.
+    pub subject_parts: Vec<SubjectPart>,
     /// Participants, flattened.
     pub participants: Vec<ResolvedParticipant>,
     /// Evidence, typed and resolved.
     pub facts: SmallVec<[(&'static str, ResolvedEvidence); 4]>,
+    /// The meet of rule and inputs; never raised.
+    pub certainty: Certainty,
+    /// Why the resolution could not name a winner, copied from the `Finding`.
+    pub gaps: SmallVec<[ResolutionGap; 1]>,
     /// Written by `smd-policy`.
     pub score: i32,
     /// Written by `smd-policy`.
     pub severity: Severity,
+}
+
+/// One field of a resolved [`Subject`], comparable without any interner.
+///
+/// Derived `Ord` gives the documented order: `Text` fields by bytes, and within an
+/// [`Ordinal`](SubjectPart::Ordinal), `Num` before `Name` and `Num` numerically.
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[non_exhaustive]
+pub enum SubjectPart {
+    /// A symbol, path, language, mod key, or other textual field.
+    Text(Box<str>),
+    /// An event ordinal: numeric where the script wrote a number.
+    Ordinal(ResolvedOrdinal),
+}
+
+/// A resolved [`EventOrdinal`](crate::EventOrdinal).
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[non_exhaustive]
+pub enum ResolvedOrdinal {
+    /// `ns.9`. Compared numerically, and before any name.
+    Num(u32),
+    /// A non-numeric ordinal, as text.
+    Name(Box<str>),
 }
 
 /// One participant, with its mod identified by a stable key rather than a scan-local id.

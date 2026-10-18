@@ -18,5 +18,8 @@ smd-index = { workspace = true }
 smd-rules = { workspace = true }
 smd-policy = { workspace = true }
 
+[dev-dependencies]
+tempfile = { workspace = true }
+
 [lints]
 workspace = true

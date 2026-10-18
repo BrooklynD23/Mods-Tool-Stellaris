@@ -13,5 +13,13 @@ smd-core = { workspace = true }
 smd-api = { workspace = true }
 smd-report = { workspace = true }
 
+[[bin]]
+name = "smd"
+path = "src/main.rs"
+
+[dev-dependencies]
+tempfile = { workspace = true }
+serde_json = { workspace = true }
+
 [lints]
 workspace = true

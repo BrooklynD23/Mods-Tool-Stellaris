@@ -1,6 +1,6 @@
 [package]
 name = "smd-report"
-description = "Renderers over `ResolvedFinding`: json, markdown, html, table."
+description = "Renderers over `ResolvedFinding`: table, json, markdown (html arrives with H27)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,6 +10,8 @@ publish.workspace = true
 
 [dependencies]
 smd-core = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 
 [lints]
 workspace = true

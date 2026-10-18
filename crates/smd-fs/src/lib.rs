@@ -1,12 +1,26 @@
-//! `smd-fs` — OS path resolution, path normalisation, and content hashing.
+//! `smd-fs` — path normalisation, the secure read-only walk, and content hashing.
 //!
-//! **Owns:** OS path resolution, `libraryfolders.vdf`, path normalisation, `blake3` hashing.
+//! **Owns:** path normalisation, the read-only root handle, the link-refusing walk, and
+//! `blake3` hashing. (OS default discovery and `libraryfolders.vdf` arrive later.)
 //!
 //! **Must never:** Know what any particular game is.
 //!
-//! Stub. This crate is scaffolding at M0: the workspace, the layer map, and the size and
-//! dependency-direction gates are live from commit one so that nothing lands before the
-//! rules that constrain it. Its contents arrive at the milestone named in
-//! `docs/architecture/15-roadmap.md`.
+//! Trust boundary (doc 05, "Filesystem"): every byte below a root is untrusted. Links are
+//! never followed, FIFOs and devices are never opened, type/size/mtime come from the
+//! opened handle, and every bound that trips is a diagnostic plus an incompleteness.
 
 #![forbid(unsafe_code)]
+
+mod hashing;
+mod limits;
+mod normpath;
+mod record;
+mod root;
+mod sys;
+mod walk;
+
+pub use hashing::hash_reader;
+pub use limits::WalkLimits;
+pub use normpath::{NormError, NormPath, shipped_name};
+pub use record::{FsDiagnostic, Incomplete, WalkOutcome, WalkRecord, codes};
+pub use root::ReadOnlyRoot;

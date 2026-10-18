@@ -24,8 +24,9 @@ data-driven game-profile seam.
 | Load order | Who wins, and — via the reference index — who was relying on the loser |
 | Metadata | Missing dependencies, dependencies loading too late, version drift |
 
-Every finding is scored, ranked, explained in plain language, and backed by the exact
-bytes that produced it.
+Every finding is explained in plain language and backed by the exact bytes that produced
+it. From M5, findings are also scored and ranked; the first release (M1) lists them
+unscored, with how certain each one is.
 
 ## What it is not
 

@@ -10,7 +10,13 @@ whether its source could be read, where the sources disagreed, and what still ne
 game.** The findings themselves live inline in `docs/VERIFY.md`; the profile values live
 in `profiles/stellaris.toml`.
 
-Date of pass: 2026-08-06.
+Date of pass: 2026-08-06 (baseline `PA-2026-08` in `VERIFY.md`). Re-read in part on
+2026-10-17 (baseline `PA-2026-10`), after Stellaris 4.5. See § 7, which corrects one
+August conclusion.
+
+**Nothing in this document is an observation of the game.** It is corroboration, and
+`VERIFY.md` keeps it in a separate *Prior art* record under each item. A box there is
+ticked only by an *Observed* record stamped with game and launcher version (H40).
 
 ---
 
@@ -142,10 +148,14 @@ mutually exclusive properties of a directory. This is § 5's first contradiction
 
 | State | Count |
 | --- | ---: |
-| `CORROBORATED` (2+ independent sources; box ticked) | 7 |
-| `SINGLE SOURCE` (one source; box unticked) | 22 |
-| `NEEDS THE GAME` (sources disagree or silent; box unticked) | 7 |
+| `CORROBORATED` (2+ independent sources) | 7 |
+| `SINGLE SOURCE` (one source) | 22 |
+| `NEEDS THE GAME` (sources disagree or silent) | 7 |
 | **Total** | **36** |
+
+*As of August. Under the October evidence model these are prior-art states only, and none
+ticks a box. V09 has since moved from CORROBORATED to SINGLE SOURCE (§ 7), and five
+items were added (V37–V41). The current tally is in `VERIFY.md` § Status.*
 
 36 rather than 35: prior art surfaced a question the original list did not know to ask —
 the FIOS/LIOS filename axis — and it is now a box of its own.
@@ -159,8 +169,11 @@ observation, and a strong argument for not deferring the empirical pass indefini
 because the corroborated core is enough to start building.
 
 The headline question — **does a mod later in the playset override an earlier one?** — is
-**CORROBORATED: later wins**, from three independent sources, with vanilla always lowest.
-The design's `later_wins = true` and `SourceId(0)` assumptions are both **confirmed**.
+**CORROBORATED: later wins**, from three independent sources. In August this section also
+said "with vanilla always lowest" and called the `SourceId(0)` assumption **confirmed**.
+**That was an overreach** (§ 7.2). Both sources speak to same-path collisions. For
+differently named files, Irony keeps vanilla *in* the filename sort. And corroboration
+was never confirmation in the first place.
 
 ---
 
@@ -171,6 +184,8 @@ other than `profiles/stellaris.toml` (authored fresh) has been edited to match. 
 a decision.
 
 ### 5.1 `MergeMode` cannot express the actual rule — **structural, highest impact**
+
+> *October: addressed in design by `REVIEW-2026-10` H1 (file overlay before key resolution, § `architecture/07`). Still unobserved: V15.*
 
 `file_replace` and `merge_by_key` are specified in § `architecture/03` and
 § `architecture/10` as mutually exclusive properties **of a directory**. Observed
@@ -196,6 +211,8 @@ proposed schema addition.
 
 ### 5.2 Precedence has a second axis the model does not have — **structural**
 
+> *October: addressed in design by `REVIEW-2026-10` H2 (the precedence tuple). Still unobserved: V02, V09, V37.*
+
 Precedence is `(load-order index, filename)`, not load-order index alone, and the filename
 comparison direction is **per directory**:
 
@@ -218,6 +235,8 @@ and `[load_order].filename_axis` as proposed additions.
 
 ### 5.3 `common/traits` is a bad canonical example — **documentation**
 
+> *October: § `architecture/03`'s example switched to `common/buildings`.*
+
 The design uses a trait collision as its canonical "later mod wins" illustration.
 `common/traits` is FIOS, so in that directory the later mod frequently does **not** win.
 It is close to the worst available example. Recommend switching the canonical example to
@@ -233,6 +252,8 @@ both shipping `00_defines.txt`, which is genuinely severe). The rule needs re-sc
 not re-weighting.
 
 ### 5.5 `additive_children` is two-thirds unsupported — **profile data**
+
+> *October: `REVIEW-2026-10` H4 gates `merge_by_key_additive_body` on child-level hashing as well as on V18.*
 
 The design proposes `additive_children = ["events", "effect", "random_events"]` for
 `common/on_actions`. Only `events` has any source behind it. `effect` in particular is
@@ -293,8 +314,66 @@ probe at all.
 
 ### Not worth probing
 
-- **Load-order direction** (later wins) and **vanilla precedence** (always lowest) are
-  corroborated by three and two independent sources respectively. Confirm them incidentally
-  as part of probe 2's control, but do not spend a dedicated probe on either.
+- **Load-order direction** (later wins) is corroborated by three independent sources.
+  Confirm it incidentally (probe P1), but do not spend more than that on it.
+  *Withdrawn in October:* **vanilla precedence** was listed here too. It is not settled
+  for differently named files (§ 7.2) and now has a dedicated probe (P4).
 - **Operator set** — corroborated against a working Clausewitz parser's own enumeration.
   Settled.
+
+---
+
+## 7. October 2026 re-read (`PA-2026-10`, 2026-10-17)
+
+A partial re-read prompted by the October review (`docs/REVIEW-2026-10.md`). This one
+read through fetch summaries with quoted lines, not a local clone. The licence position
+is unchanged, and again nothing was copied.
+
+### 7.1 What the sources now target
+
+- **Stellaris 4.5 "Cygnus"** shipped 2026-09-22. 4.5.1 (`358e`) followed on 2026-09-24
+  and 4.5.2 (`9776`) on 2026-10-06. Source: the Steam announcements feed for app 281990;
+  links in `VERIFY.md` § Stellaris 4.5 refresh.
+- **Irony.** The stable notes still advertise *"Stellaris 4.2 CS support"*. The newest
+  build is `v1.28.97-alpha`, a pre-release published on 4.5's release day, which claims
+  only *"Latest Stellaris CS support"*. `master`'s last commit is 2026-07-29. So every
+  Irony-derived finding in this document describes Irony's model of **≤ 4.4**, not of 4.5.
+  This is the main reason the empirical pass is not optional.
+- The FIOS path list at `v1.28.97-alpha` is **unchanged**: the same fourteen directories
+  as § 5.2.
+- **Launcher schema.** Irony's newest (`v4`) models add `playsets.isRemoved` and
+  `playsets.createdOn` to the August picture. The only second source the review named,
+  `Pseudorizer/paradox-launcher-playset-exporter`, is a HOI4 exporter whose README
+  confirms the file name `launcher-v2.sqlite` and nothing else. It names no tables and
+  has no releases. No source addresses WAL, locking, or the launcher shipped with 4.5.x.
+
+### 7.2 Correction: vanilla is *not* always lowest in Irony's own model
+
+August recorded "vanilla is always lowest" as CORROBORATED by CWTools and Irony. A closer
+reading splits it:
+
+- CWTools' `Overwrote`/`Overwritten` is decided per **logical path**, so it speaks only to
+  same-path collisions.
+- Irony's non-localisation priority evaluation removes a vanilla definition only when a
+  mod definition **shares its filename**. That grouping is case-insensitive, while the
+  sort is ordinal. A vanilla definition in a uniquely named file **stays in the ordinal
+  filename sort** and can win: `00_…` beats a mod's `zzz_…` in a FIOS directory, and a
+  mod's `!!!_…` in a LIOS one. Vanilla is pushed last only in the no-winner fallback.
+  Localisation is the exception: there vanilla is excluded from the ordering.
+
+So the corroborated claim is "vanilla loses same-path collisions". For differently named
+files, the single source says vanilla participates. The review's point that this was
+unestablished is **upheld**, and the design's `SourceId(0)`-is-lowest assumption is
+restricted to same-path collisions until probe P4 runs. The same read shows Irony
+compares the **basename without extension** on the filename axis, not the relative path.
+That is a new single-source item, V37.
+
+### 7.3 What changes in § 6
+
+- Vanilla's place on the filename axis is now a probe (P4), not "confirm incidentally".
+- The filename comparison key (V37), in-file duplicate keys (V38) and same-path
+  localisation (V39) have probes too (P5–P7). On ≥ 4.5.1 the engine logs duplicate keys
+  as errors, so `error.log` becomes a readout.
+- Every probe in § 6 is amended in one way: it takes keys no other probe touches, and it
+  runs on an **isolated playset containing only its own mods** (`tools/probe-mods/README.md`,
+  H45). The August probe set had two probes overriding the same localisation key.

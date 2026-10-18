@@ -11,6 +11,13 @@ publish.workspace = true
 [dependencies]
 smd-core = { workspace = true }
 smd-fs = { workspace = true }
+serde = { workspace = true }
+toml = { workspace = true }
+
+[features]
+default = ["profile-stellaris"]
+# Embeds `profiles/stellaris.toml` (relative to the workspace root) into the binary.
+profile-stellaris = []
 
 [lints]
 workspace = true
