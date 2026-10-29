@@ -35,6 +35,7 @@ steam_id = 281990
 [locations]
 user_dir.windows = "{DOCUMENTS}/Paradox Interactive/Stellaris"
 user_dir.linux   = "{XDG_DATA_HOME}/Paradox Interactive/Stellaris"
+# macOS deferred (owner decision 2026-10-29); kept as reference.
 user_dir.macos   = "{HOME}/Documents/Paradox Interactive/Stellaris"
 workshop         = "{STEAM_LIB}/steamapps/workshop/content/281990"
 install          = "{STEAM_LIB}/steamapps/common/Stellaris"

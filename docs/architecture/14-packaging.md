@@ -13,8 +13,8 @@ this document is written so that the CLI row alone is a shippable product.
 | `smd-x64.msi` | Windows | ≤ 15 MB | Managed/enterprise installs; same WebView2 requirement |
 | `smd_amd64.deb` / `.rpm` | Debian/Ubuntu, Fedora | ≤ 12 MB | Declares WebKitGTK 4.1 dep |
 | `smd-x86_64.AppImage` | Linux, glibc ≥ build host | **80–110 MB** | Bundles WebKitGTK and its closure |
-| `smd-aarch64.dmg` | macOS 14+ | ≤ 20 MB | Signed + notarised, or not shipped |
-| `smd-x86_64.dmg` | macOS 14+ | ≤ 20 MB | Separate artefact, not Universal2 |
+| `smd-aarch64.dmg` | macOS 14+ | ≤ 20 MB | **Deferred (owner decision 2026-10-29).** Signed + notarised, or not shipped |
+| `smd-x86_64.dmg` | macOS 14+ | ≤ 20 MB | **Deferred (owner decision 2026-10-29).** Separate artefact, not Universal2 |
 | `<name>-*.whl` | all | small | PyO3 binding, optional |
 
 Three of those numbers were wrong in an earlier draft and are worth stating plainly,
@@ -53,7 +53,7 @@ because each was load-bearing for a decision:
 | Ubuntu 22.04+ / Fedora 38+ | Supported | WebKitGTK 4.1 required |
 | Steam Deck (SteamOS) | Supported via AppImage | Read-only rootfs; AppImage is the right shape |
 | Other Linux | Best effort | CLI first, AppImage second — and the AppImage may fail to render on distributions newer than the build host |
-| macOS 14+ | **CLI only until the Apple Developer account exists** | See § Code signing; the GUI cannot be shipped un-notarised |
+| macOS 14+ (**deferred, owner decision 2026-10-29**) | **CLI only until the Apple Developer account exists** | See § Code signing; the GUI cannot be shipped un-notarised |
 | Proton/Wine Windows install on Linux | Supported | Prefix path probing in `smd-fs` (§ `05`) |
 
 ### WebView2, accurately
@@ -91,6 +91,10 @@ Unsigned Windows binaries trigger SmartScreen, which reads to a non-technical us
 3. For v0.x: option 2 plus a `README` section explaining the warning honestly.
 
 ### macOS: the workaround no longer exists
+
+> **Deferred (owner decision 2026-10-29).** Windows is the target platform and macOS
+> development waits for owner approval. This section is kept as the design for when it is
+> approved; nothing here is scheduled.
 
 The familiar advice — "Control-click the app and choose Open" — **was removed in macOS 15
 Sequoia.** A user who downloads an un-notarised app now gets a blocked dialog with no

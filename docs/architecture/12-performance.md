@@ -222,7 +222,7 @@ comfortable figure and one that needs defending on a 16 GB machine with a game r
 **Measurement.** The two numbers need two mechanisms, and conflating them is how the
 previous budget under-counted. Engine heap comes from an allocator hook. Process-tree RSS
 comes from the OS — `/proc/self/smaps_rollup` on Linux, `GetProcessMemoryInfo` over the
-job object on Windows, `proc_pid_rusage` on macOS — walking children, because allocator
+job object on Windows, `proc_pid_rusage` on macOS (deferred, owner decision 2026-10-29) — walking children, because allocator
 statistics cannot see mmap'd pages, SQLite's page cache, or any of the WebView's
 processes. Two assertions in the integration test, not one.
 

@@ -278,7 +278,7 @@ prose in `09` hedges precisely because of it.
 | --- | --- | --- |
 | test-windows | `windows-latest` | Path casing, `\` separators, `%USERPROFILE%`, launcher DB, WAL copy |
 | test-linux | `ubuntu-latest` | Case sensitivity, XDG paths, Proton prefix probing |
-| test-macos | `macos-14` and `macos-latest` | Case-insensitive HFS+/APFS, `~/Documents`. **These are the macOS versions the project may claim to support** |
+| test-macos (**deferred, owner decision 2026-10-29**; not in CI until approved) | `macos-14` and `macos-latest` | Case-insensitive HFS+/APFS, `~/Documents`. **These are the macOS versions the project may claim to support** |
 | lint | ubuntu | `clippy -D warnings`, `fmt --check`, `cargo xtask lint` — exactly the gates marked **live** in § "Lint guarantees" below |
 | bench-cpu | ubuntu | Lexer, extraction, index build. 10% regression gate |
 | bench-pipeline | **windows** | Full scan including IO. Trend-reported, no hard gate |
@@ -296,7 +296,7 @@ which means it gets disabled within a month and then protects nothing. Hence: **
 gate only where the measurement is CPU-bound and reproducible, and a tracked trend where
 it is not.** A trend nobody can silence beats a gate everybody learns to override.
 
-macOS is claimed only for the versions in that row. "macOS 11+" was never exercised
+macOS support is deferred (owner decision 2026-10-29). When it is approved, it is claimed only for the versions in that row. "macOS 11+" was never exercised
 anywhere and would have been a support promise made by a document rather than by a test.
 
 ## Release validation

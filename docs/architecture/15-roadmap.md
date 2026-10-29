@@ -12,7 +12,8 @@ in.
 ## Schedule, honestly
 
 One experienced Rust developer, working days, excluding certificate and notarisation lead
-times and excluding the re-run of review R5.
+times and excluding the re-run of review R5. **The macOS items are out of this estimate
+until the owner approves them (owner decision 2026-10-29).**
 
 | Order | Milestone | Days |
 | --- | --- | --- |
@@ -317,7 +318,8 @@ the interruption.
   written under the OS config dir, versioned, human-editable, and shared as a file.
 - `cargo xtask calibrate` with the committed regression corpus, the ranking metric, and
   the 20% holdout; `cargo xtask ground-truth` with its checked-in manifest (§ `13`).
-- **Start the Apple Developer enrolment and the code-signing certificate paperwork here.**
+- **Deferred (owner decision 2026-10-29): the Apple Developer enrolment, until macOS is approved.**
+  Start the code-signing certificate paperwork here.
   Both have lead times measured in weeks, and neither blocks anything until it is the only
   thing blocking a release.
 
@@ -433,7 +435,7 @@ on the artefacts CI produced for that tag:
 Then:
 
 - Per-target build matrix, artefact naming, checksums, provenance attestations.
-- Windows signing; macOS signing and notarisation in CI (blocked on the M5 paperwork).
+- Windows signing; macOS signing and notarisation in CI (**deferred, owner decision 2026-10-29**; was blocked on the M5 paperwork).
 - The updater manifest, its signing key handling, and the opt-in flow.
 - A download page that routes a user to the right artefact — including the
   no-WebView2-and-offline case, which routes to the CLI (§ `14`).

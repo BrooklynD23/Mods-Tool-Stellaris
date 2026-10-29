@@ -580,6 +580,7 @@ profile comments say which kind.
       *Observed — NOT RUN.*
 
 - [ ] **V24 — macOS path, and whether the workshop directory differs in shape.**
+      *Deferred (owner decision 2026-10-29): macOS waits for owner approval; not scheduled.*
       *Prior art — SINGLE SOURCE (Irony; PA-2026-08), and only half-answered.*
       `~/Documents/Paradox Interactive`. The workshop shape is unaddressed. 4.5 ships native
       Apple Silicon builds (release post), which is a reason to check this on 4.5 rather

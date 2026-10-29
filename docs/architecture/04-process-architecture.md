@@ -112,7 +112,7 @@ currently playing is the wrong default.
 | --- | --- | --- |
 | Windows | below normal | `SetThreadPriority(THREAD_PRIORITY_BELOW_NORMAL)` on each pool thread at spawn |
 | Linux | `nice +5` | `setpriority(PRIO_PROCESS, tid, 5)` per thread |
-| macOS | utility QoS | `pthread_set_qos_class_self_np(QOS_CLASS_UTILITY)` |
+| macOS (deferred, owner decision 2026-10-29) | utility QoS | `pthread_set_qos_class_self_np(QOS_CLASS_UTILITY)` |
 
 `--full-speed` (CLI) and a settings toggle (GUI) drop the adjustment for users who want
 the machine's whole attention. The budget in `12-performance.md` is stated at full speed;
