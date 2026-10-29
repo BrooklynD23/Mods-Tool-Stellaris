@@ -21,7 +21,24 @@ pub(super) const CAP: u64 = 256 * 1024 * 1024;
 pub(super) const ONLINE_STEP: &str = "online_backup";
 
 fn uri(path: &Path) -> String {
-    let text = path.to_string_lossy().replace('\\', "/");
+    uri_of(&path.to_string_lossy())
+}
+
+/// Strip the Windows verbatim prefix: `\\?\C:\x` is `C:\x`, `\\?\UNC\h\s` is `\\h\s`.
+/// Left in, SQLite reads `//?/` as a URI authority of `?` ("invalid uri authority: %3F")
+/// and refuses to open the file, which silently sent every verbatim path to path B.
+fn without_verbatim(text: &str) -> String {
+    if let Some(rest) = text.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{rest}")
+    } else if let Some(rest) = text.strip_prefix(r"\\?\") {
+        rest.to_owned()
+    } else {
+        text.to_owned()
+    }
+}
+
+fn uri_of(raw: &str) -> String {
+    let text = without_verbatim(raw).replace('\\', "/");
     let mut s = String::from("file:");
     if !text.starts_with('/') {
         s.push('/');
@@ -162,4 +179,17 @@ fn open_copy(path: &Path) -> Result<Connection, Fail> {
     let mem = to_memory(&conn, "backup")?;
     drop(conn);
     Ok(mem)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::uri_of;
+
+    #[test]
+    fn a_windows_verbatim_path_has_no_question_mark_authority() {
+        assert_eq!(uri_of(r"\\?\C:\Users\a b\x.sqlite"), "file:/C:/Users/a%20b/x.sqlite");
+        assert_eq!(uri_of(r"C:\Users\x.sqlite"), "file:/C:/Users/x.sqlite");
+        assert_eq!(uri_of(r"\\?\UNC\h\s\x.sqlite"), "file://h/s/x.sqlite");
+        assert_eq!(uri_of("/home/a#b/x.sqlite"), "file:/home/a%23b/x.sqlite");
+    }
 }

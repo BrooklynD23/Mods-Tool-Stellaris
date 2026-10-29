@@ -65,6 +65,15 @@ fn wal_only_reorder() -> (World, Launcher) {
     (w, l)
 }
 
+/// What path A itself says about the fixture, for assertion messages: path A's failure
+/// falls back to path B silently, so a mismatch alone does not say why.
+fn why_not_online(w: &World) -> String {
+    match snapshot::online(&w.user.join(super::FILE)) {
+        Ok(_) => "path A opens the fixture fine".to_owned(),
+        Err(f) => format!("path A fails at step {}: {}", f.step, f.detail),
+    }
+}
+
 #[test]
 fn a_naive_main_file_copy_would_return_the_old_order() {
     let (w, l) = wal_only_reorder();
@@ -88,7 +97,7 @@ fn h20_wal_only_commit_path_a() {
     let run = source(&w, true, Hooks::default()).run(&w.locations());
     let p = run.attempt.result.expect("path A answers");
     assert_eq!(order(&p), ["333", "111", "222"]);
-    assert_eq!(p.snapshot, SnapshotMethod::OnlineBackup);
+    assert_eq!(p.snapshot, SnapshotMethod::OnlineBackup, "{}", why_not_online(&w));
     assert_eq!((p.order, p.activation), (Confidence::Exact, Confidence::Exact));
     assert_eq!(run.temp_dir, None, "path A makes no private directory");
     drop(l);
@@ -199,7 +208,7 @@ fn h29_fixture_launcher_files_untouched() {
         } else {
             SnapshotMethod::StableFileCopy
         };
-        assert_eq!(p.snapshot, want);
+        assert_eq!(p.snapshot, want, "{}", why_not_online(&w));
         let after = (blake(&main), blake(&wal), files_in(&w.user));
         assert_eq!(before.0, after.0, "main file bytes (online={allow_online})");
         assert_eq!(before.1, after.1, "-wal bytes (online={allow_online})");
@@ -225,7 +234,12 @@ fn a_launcher_that_keeps_committing_is_reported_changing() {
     let hooks = Hooks { after_snapshot: Some(hook), ..Hooks::default() };
     let run = source(&w, true, hooks).run(&w.locations());
     assert!(run.attempt.result.is_ok());
-    assert!(codes_of(&run).contains(&codes::LAUNCHER_CHANGING), "{:?}", codes_of(&run));
+    assert!(
+        codes_of(&run).contains(&codes::LAUNCHER_CHANGING),
+        "{:?}; {}",
+        codes_of(&run),
+        why_not_online(&w)
+    );
 }
 
 #[test]
