@@ -67,6 +67,17 @@ fn dot_files_and_dot_directories_are_benign() {
 }
 
 #[test]
+fn root_level_files_are_benign_and_subdirectory_files_are_not() {
+    let p = shipped();
+    for path in ["bigpicture.jpg", "thumbnail.png"] {
+        assert!(p.is_benign(path), "{path}");
+    }
+    for path in ["common/traits/x.txt", "gfx/a.dds"] {
+        assert!(!p.is_benign(path), "{path}");
+    }
+}
+
+#[test]
 fn asset_archives_are_declared_by_pattern() {
     let p = shipped();
     assert!(p.is_asset_archive("dlc/dlc001_symbols_of_domination/dlc001.zip"));

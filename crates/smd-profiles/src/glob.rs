@@ -11,9 +11,13 @@ pub(crate) fn matches(pattern: &str, path: &str) -> bool {
     match_segments(&pat, &segs)
 }
 
-/// A pattern with no `/` matches the last segment of the path, at any depth.
+/// A pattern with no `/` matches the last segment of the path, at any depth. A leading `/`
+/// anchors the rest of the pattern to the source root, so `/*` names only root-level files:
+/// `*` never crosses a `/`, and a bare `*` would match every file.
 pub(crate) fn matches_basename_or_path(pattern: &str, path: &str) -> bool {
-    if pattern.contains('/') {
+    if let Some(anchored) = pattern.strip_prefix('/') {
+        matches(anchored, path)
+    } else if pattern.contains('/') {
         matches(pattern, path)
     } else {
         path.rsplit('/').next().is_some_and(|name| segment(pattern, name))
@@ -83,6 +87,15 @@ mod tests {
         assert!(matches_basename_or_path("*.md", "notes.md"));
         assert!(matches_basename_or_path(".git/**", ".git/config"));
         assert!(!matches_basename_or_path("thumbnail.png", "gfx/thumbnail2.png"));
+    }
+
+    #[test]
+    fn a_leading_slash_anchors_a_pattern_to_the_source_root() {
+        assert!(matches_basename_or_path("/*", "bigpicture.jpg"));
+        assert!(!matches_basename_or_path("/*", "gfx/a.dds"));
+        assert!(matches_basename_or_path("/*.jpg", "a.jpg"));
+        assert!(!matches_basename_or_path("/*.jpg", "gfx/a.jpg"));
+        assert!(matches_basename_or_path("*.jpg", "gfx/a.jpg"), "bare patterns still float");
     }
 
     #[test]
