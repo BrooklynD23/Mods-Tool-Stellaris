@@ -77,7 +77,11 @@ fn a_naive_main_file_copy_would_return_the_old_order() {
     assert_eq!(first, "111", "the fixture is only meaningful if main lacks the new order");
 }
 
+// Path A needs `mount::is_local` to recognise the temp dir, which it can only do on Linux
+// (via /proc/self/mountinfo) and Windows (non-UNC path). On macOS there is no mount-type
+// probe, so path B is always used and this test's premise does not hold.
 #[test]
+#[cfg(any(target_os = "linux", windows))]
 fn h20_wal_only_commit_path_a() {
     let (w, l) = wal_only_reorder();
     assert!(mount::is_local(&w.user), "this test needs a local filesystem under the temp dir");
@@ -176,7 +180,11 @@ fn h20_corrupt_page_fails_integrity_check() {
 
 #[test]
 fn h29_fixture_launcher_files_untouched() {
-    for allow_online in [true, false] {
+    // Path A is only reachable where `mount::is_local` can say yes (Linux, Windows); on
+    // macOS path B is always taken, so only the path B pass is meaningful there.
+    let modes: &[bool] =
+        if cfg!(any(target_os = "linux", windows)) { &[true, false] } else { &[false] };
+    for &allow_online in modes {
         let (w, l) = wal_only_reorder();
         let (main, wal) = (l.path.clone(), snapshot::wal_of(&l.path));
         let before = (blake(&main), blake(&wal), files_in(&w.user));
@@ -203,7 +211,9 @@ fn h29_fixture_launcher_files_untouched() {
     }
 }
 
+// Exercises path A's live-digest comparison, which macOS never reaches (see above).
 #[test]
+#[cfg(any(target_os = "linux", windows))]
 fn a_launcher_that_keeps_committing_is_reported_changing() {
     let (w, l) = wal_only_reorder();
     let writer = Arc::new(std::sync::Mutex::new(l));

@@ -25,10 +25,11 @@ fn io_err(e: Errno) -> io::Error {
 }
 
 // `st_dev`/`st_mtime` widths differ across Unix targets; the conversions are not
-// redundant everywhere.
-#[allow(clippy::useless_conversion)]
+// redundant everywhere. `st_dev` is `i32` on macOS, which has no `u64: From<i32>`, so
+// it is cast (the value is only ever compared for equality).
+#[allow(clippy::useless_conversion, clippy::unnecessary_cast)]
 fn dev_of(st: &Stat) -> u64 {
-    u64::from(st.st_dev)
+    st.st_dev as u64
 }
 
 #[allow(clippy::useless_conversion)]

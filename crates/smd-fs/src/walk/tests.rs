@@ -1,7 +1,5 @@
-use std::ffi::OsStr;
 use std::fs;
 use std::io::Write;
-use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::symlink;
 use std::path::Path;
 use std::time::Duration;
@@ -82,14 +80,10 @@ fn h22_dir_symlink_makes_source_content_incomplete() {
 fn h22_fifo_never_opened() {
     let root = tempfile::tempdir().unwrap();
     put(root.path(), "a.txt", b"a");
-    rustix::fs::mknodat(
-        rustix::fs::CWD,
-        root.path().join("pipe"),
-        rustix::fs::FileType::Fifo,
-        rustix::fs::Mode::from_raw_mode(0o600),
-        0,
-    )
-    .unwrap();
+    // `rustix::fs::mknodat` is not available on macOS, so use the `mkfifo` utility, which
+    // exists on every Unix this test compiles for.
+    let made = std::process::Command::new("mkfifo").arg(root.path().join("pipe")).status();
+    assert!(made.unwrap().success(), "mkfifo failed");
     let path = root.path().to_path_buf();
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || tx.send(walk_root(&path, &WalkLimits::default())));
@@ -100,7 +94,10 @@ fn h22_fifo_never_opened() {
     assert!(find(&out, "a.txt").blob.is_some());
 }
 
+// macOS (APFS) and Windows are case- and normalization-insensitive, so `A.txt`/`a.txt` and
+// NFC/NFD names would be one file there; the collision cannot be staged off Linux.
 #[test]
+#[cfg(target_os = "linux")]
 fn h22_case_and_nfc_collisions_kept() {
     let root = tempfile::tempdir().unwrap();
     put(root.path(), "A.txt", b"upper");
@@ -125,8 +122,13 @@ fn h22_case_and_nfc_collisions_kept() {
     assert!(!raw.contains(&"e\u{301}.txt"));
 }
 
+// APFS refuses file names that are not valid UTF-8, so the name cannot be created on macOS.
 #[test]
+#[cfg(target_os = "linux")]
 fn h22_invalid_unicode_name() {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
     let root = tempfile::tempdir().unwrap();
     let name = OsStr::from_bytes(b"bad\xff.txt");
     fs::write(root.path().join(name), b"data").unwrap();
@@ -184,7 +186,7 @@ fn changed_during_scan_detected() {
 fn walk_is_deterministic() {
     let a = tempfile::tempdir().unwrap();
     let b = tempfile::tempdir().unwrap();
-    let files = ["z/1.txt", "a/b/2.txt", "M.txt", "a/B/2.txt", "common/x.txt"];
+    let files = ["z/1.txt", "a/b/2.txt", "M.txt", "a/C/2.txt", "common/x.txt"];
     for f in files {
         put(a.path(), f, f.as_bytes());
     }
