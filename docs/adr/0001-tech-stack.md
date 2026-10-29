@@ -16,7 +16,7 @@ The application is a **local desktop tool** that:
 3. Builds cross-mod indices and runs dozens of analysis rules over them.
 4. Presents the result in a **GUI** with dense, filterable, virtualised tables and
    side-by-side text diffs.
-5. Must run on the machines Stellaris runs on: Windows (dominant), Linux, macOS.
+5. Must run on the machines Stellaris runs on: Windows (the target platform), Linux (dev and CI host). macOS is deferred (owner decision 2026-10-29) until the owner approves it.
 6. Must be installable by a non-technical player — ideally one download, no runtime.
 7. Must survive being extended to other Paradox titles and later other Steam games
    without a rewrite.
@@ -122,7 +122,7 @@ front-end onto a desktop; § "The GUI delivery fork" covers the other.
 | --- | --- | --- | --- |
 | Windows 10 1803+ / 11 | WebView2 (Evergreen) | Pre-installed since 2021 via Edge, but the machines that lack it force a trilemma: the ~2 MB bootstrapper needs network at install time; the fixed-version runtime adds ~130 MB to the download; shipping neither means a blank window and no error | Bundle the bootstrapper in the NSIS installer, detect its failure explicitly, and fall back to telling the user to run the CLI |
 | Linux | WebKitGTK 4.1 | Distro version skew, and — on NVIDIA drivers — a blank window from the DMA-BUF renderer, still live in 2026 and disproportionately common in a *gaming* audience | Set `WEBKIT_DISABLE_DMABUF_RENDERER=1` in `main()` **before** the webview is initialised; `.deb`/`.rpm` declare the dependency; AppImage for the rest, at a realistic 76–100 MB once WebKitGTK and its GTK stack are bundled; **the CLI is a static musl binary with no GUI deps** |
-| macOS 11+ | WKWebView | Runtime is fine; distribution is not. Notarisation is mandatory in practice and presumes a $99/yr Apple Developer account before the first user exists | Universal2 build, notarised; start the account and certificate paperwork at M5, not at release |
+| macOS 11+ (**Deferred, owner decision 2026-10-29**: kept as reference) | WKWebView | Runtime is fine; distribution is not. Notarisation is mandatory in practice and presumes a $99/yr Apple Developer account before the first user exists | Universal2 build, notarised; start the account and certificate paperwork at M5, not at release |
 
 **The escape hatch is the browser, not `egui`.** If a WebView runtime proves
 untenable, the answer is to render the same Svelte bundle into a file or serve it on
@@ -221,5 +221,6 @@ custom checks. The GUI never depends on it.
   only the fuzzing driver nightly-gated.
 - Code signing is an unsolved cost: unsigned Windows binaries hit SmartScreen. Ship
   unsigned for v0.x with a documented checksum, and revisit once the project has users.
+  **Deferred (owner decision 2026-10-29): the Apple paperwork waits until macOS is approved.**
   The Apple side has a lead time and a fee and must start at M5 regardless of D1, unless
   D1 lands on the report and macOS ships as a CLI only.

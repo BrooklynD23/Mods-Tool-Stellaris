@@ -22,6 +22,7 @@ Silent auto-detection that guesses wrong is worse than asking.
 
 ### Where things live
 
+<!-- macOS column: deferred (owner decision 2026-10-29), kept as reference. -->
 | Item | Windows | Linux | macOS |
 | --- | --- | --- | --- |
 | User mods | `%USERPROFILE%\Documents\Paradox Interactive\Stellaris\mod\` | `~/.local/share/Paradox Interactive/Stellaris/mod/` | `~/Documents/Paradox Interactive/Stellaris/mod/` |

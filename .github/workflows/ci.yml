@@ -23,10 +23,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Windows is the dominant platform for this tool's users and the one every
-        # platform-sensitive decision is budgeted on, so it is a first-class matrix entry
-        # rather than an afterthought.
-        os: [windows-latest, ubuntu-latest, macos-latest]
+        # Windows is the target platform and the one every platform-sensitive decision is
+        # budgeted on. Ubuntu is the dev and CI host and catches portable bugs cheaply.
+        # macOS is deferred (owner decision 2026-10-29) until the owner approves the work;
+        # add macos-latest back to this list then.
+        os: [windows-latest, ubuntu-latest]
     steps:
       - uses: actions/checkout@v4
       - name: Install toolchain
