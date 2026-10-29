@@ -353,6 +353,9 @@ flowchart TB
    launcher has the DB open — so nothing is created beside the user's file), and the
    directory is on a local filesystem whose locks the launcher's SQLite also honours (see
    "never" below).
+   (Windows: the URI is built from the path with any `\\?\` verbatim prefix stripped.
+   Left in, SQLite reads `//?/` as a URI authority of `?` ("invalid uri authority: %3F"),
+   the open fails, and every such path would silently fall back to path B.)
 3. Open the **live** database as `file:…?mode=ro` with `SQLITE_OPEN_READONLY`, a 250 ms
    `busy_timeout`, and no other URI flags.
 4. `sqlite3_backup_init` into a `:memory:` database and `sqlite3_backup_step(-1)` — the
