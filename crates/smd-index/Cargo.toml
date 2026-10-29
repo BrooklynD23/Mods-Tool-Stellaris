@@ -1,0 +1,18 @@
+[package]
+name = "smd-index"
+description = "Overlay table, symbol table, resolver, interners, and the on-disk cache."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+smd-core = { workspace = true }
+smd-fs = { workspace = true }
+smd-profiles = { workspace = true }
+smallvec = { workspace = true }
+
+[lints]
+workspace = true

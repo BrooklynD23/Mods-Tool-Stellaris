@@ -1,0 +1,10 @@
+# Probe P5 - basename vs directory-relative path. File: common/traits/b_smd/aaa_smd_probe5.txt
+# Cost 8 in both orders -> basename compared (aaa_ sorts first). Cost 2 in both -> relative path compared (a_smd/ sorts first).
+trait_smd_probe5 = {
+	cost = 8
+	icon = "gfx/interface/icons/traits/trait_intelligent.dds"
+	allowed_archetypes = { BIOLOGICAL }
+	modifier = {
+		pop_happiness = 0.01
+	}
+}

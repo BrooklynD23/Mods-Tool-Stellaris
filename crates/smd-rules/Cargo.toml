@@ -1,0 +1,18 @@
+[package]
+name = "smd-rules"
+description = "The rule engine and one file per rule."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+smd-core = { workspace = true }
+smd-index = { workspace = true }
+smd-profiles = { workspace = true }
+smallvec = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,0 +1,25 @@
+[package]
+name = "smd-cli"
+description = "The command-line adapter over the engine."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+smd-core = { workspace = true }
+smd-api = { workspace = true }
+smd-report = { workspace = true }
+
+[[bin]]
+name = "smd"
+path = "src/main.rs"
+
+[dev-dependencies]
+tempfile = { workspace = true }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

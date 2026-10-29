@@ -1,0 +1,63 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "xtask"]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+# Edition 2024 and `resolver = "3"` both require 1.85. Pinned rather than floating so a
+# contributor's older toolchain fails with a version message instead of a syntax error.
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/BrooklynD23/Mods-Tool-Stellaris"
+publish = false
+
+[workspace.dependencies]
+smd-api = { path = "crates/smd-api" }
+smd-core = { path = "crates/smd-core" }
+smd-engine = { path = "crates/smd-engine" }
+smd-fs = { path = "crates/smd-fs" }
+smd-index = { path = "crates/smd-index" }
+smd-ingest = { path = "crates/smd-ingest" }
+smd-parse = { path = "crates/smd-parse" }
+smd-policy = { path = "crates/smd-policy" }
+smd-profiles = { path = "crates/smd-profiles" }
+smd-report = { path = "crates/smd-report" }
+smd-rules = { path = "crates/smd-rules" }
+smd-testkit = { path = "crates/smd-testkit" }
+
+bitflags = "2.13"
+blake3 = "1.8"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+rusqlite = { version = "0.37", features = ["bundled", "backup"] }
+rustix = { version = "1.0", features = ["fs"] }
+smallvec = "1.15"
+tempfile = "3.20"
+toml = "0.9"
+unicode-normalization = "0.1.24"
+
+[workspace.lints.rust]
+rust_2018_idioms = { level = "warn", priority = -1 }
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+# Function length and parameter count are delegated to clippy rather than reimplemented
+# in `cargo xtask lint`; the thresholds live in `clippy.toml` (60 lines, 5 params).
+too_many_lines = "deny"
+too_many_arguments = "deny"
+# `clippy::cognitive_complexity` is deliberately NOT enabled. It is a nursery lint: it
+# misfires, and its output moves between toolchain releases, so a routine `rustup update`
+# turns CI red on code nobody touched (ADR-0002 § 7, doc 02 § Size discipline).
+undocumented_unsafe_blocks = "deny"
+
+[profile.release]
+# `panic = "unwind"` is LOAD-BEARING and must not be changed for binary size.
+# Rule isolation (docs/architecture/08-rule-engine.md) is built on `catch_unwind`; under
+# `panic = "abort"` that call is a no-op and one panicking rule takes the whole scan down
+# — green CI, dead user. See ADR-0001 and REVIEW-2026-08 § G18. `cargo xtask lint`
+# audits these three keys and fails the build if they drift.
+panic = "unwind"
+lto = "thin"
+codegen-units = 1

@@ -1,0 +1,16 @@
+[package]
+name = "smd-py"
+description = "The optional PyO3 binding. Feature-gated, not in a default build."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+smd-core = { workspace = true }
+smd-api = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,0 +1,12 @@
+# Probe P4 (buildings, LIOS per prior art). This file name sorts BEFORE every vanilla
+# building file ('!' is 0x21, below every digit and letter).
+#
+# PREPARE before the run - the probe is void until this is done:
+#   1. In your game install, find the vanilla definition of building_research_lab_1
+#      (grep -rn "^building_research_lab_1" common/buildings/). If it does not exist in
+#      your version, use any tier-1 building with a visible minerals cost and say which.
+#      Record the vanilla FILE NAME in the run log.
+#   2. Paste that whole block below, VERBATIM, then change only its minerals build cost
+#      to 777.
+
+# --- paste vanilla building block here, with minerals cost = 777 ---
