@@ -685,6 +685,10 @@ paths = [
   ".git/**",
   "*.md",
   "*.editorconfig",
+  # Files directly at a source root (bigpicture.jpg, thumbnails, readmes) are never game
+  # content: Stellaris loads from subdirectories only. A leading `/` anchors the pattern to
+  # the root; a bare `*` would match at any depth.
+  "/*",
   # Dot-files and dot-directories are a mod author's repository and editor state
   # (.gitattributes, .gitignore, .idea/**, .vscode/**), never game content.
   ".*",

@@ -85,7 +85,7 @@ merge  = "unknown"
 # merge = "merge_by_key_additive_body" ; additive_children = ["events"]
 
 [benign]      # never worth reporting
-paths = ["thumbnail.png", "descriptor.mod", "readme*", ".git/**", "*.md", ".*", "**/.*/**"]
+paths = ["thumbnail.png", "descriptor.mod", "readme*", ".git/**", "*.md", "/*", ".*", "**/.*/**"]
 
 [asset_archives]   # containers declared to hold no script
 paths = ["dlc/*/*.zip"]
@@ -123,7 +123,7 @@ the verdict for fourteen directories.
 | `vanilla_in_filename_axis` | `[load_order]` | D | bool · `unknown` | Whether vanilla's differently-named files take part, or vanilla always ranks lowest |
 | `in_file_duplicate` | `[load_order]` | D | `first` · `last` · `unknown` | Same key twice in one file |
 | `later_wins` | `[load_order]` | D | bool | Direction of the `rank` component |
-| `paths` | `[benign]` | A | glob list | Files never worth reporting. They are counted and inventoried but never join the overlay, so they cannot be a same-path finding. A pattern without `/` matches the file name at any depth. Dot-files and dot-directories (`.*`, `**/.*/**`) are listed because a mod author's repository and editor state (`.gitattributes`, `.idea/**`) is not game content |
+| `paths` | `[benign]` | A | glob list | Files never worth reporting. They are counted and inventoried but never join the overlay, so they cannot be a same-path finding. A pattern without `/` matches the file name at any depth, and a leading `/` anchors a pattern to the source root. Files directly at a source root (`/*`: `bigpicture.jpg`, thumbnails, readmes) are benign for the same reason: Stellaris loads game content only from subdirectories, so a root file is inventoried and counted but never overlaid. Dot-files and dot-directories (`.*`, `**/.*/**`) are listed because a mod author's repository and editor state (`.gitattributes`, `.idea/**`) is not game content |
 | `paths` | `[asset_archives]` | — | glob list | Archives the profile declares hold no script, so an oversize one does not make the scan incomplete. Honoured for the vanilla source only; a mod's oversize file of the same shape stays `Unparsed(Oversize)`. The archive is still reported as not read (`scan.asset_archive_unread`), never silently dropped (§ `05`, § `06`) |
 | `verified` | `[[dir]]` | — | `"<VERIFY id or probe id> @ <game version>"` | The entry's values were observed in that build. Absent = `SemanticCertainty::Assumed` for findings in that directory; rejected on a `merge = "unknown"` entry. Earned per entry, never defaulted |
 | `*_confidence` | `[[dir]]` / `[load_order]` | — | `corroborated` · `single_source` | Prior-art strength, for the reader; never read by the resolver |

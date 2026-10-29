@@ -98,6 +98,27 @@ fn benign_files_are_not_conflicts_but_are_counted() {
 }
 
 #[test]
+fn root_level_files_in_two_mods_are_not_conflicts() {
+    let w = World::new();
+    for id in ["111", "222"] {
+        w.mod_with(id, &format!("Mod {id}"), &[("bigpicture.jpg", id)]);
+    }
+    let out = scan(&w.request()).expect("scans");
+    assert!(out.findings.is_empty(), "{:#?}", out.findings);
+}
+
+#[test]
+fn same_path_under_a_subdirectory_in_two_mods_still_conflicts() {
+    let w = World::new();
+    for id in ["111", "222"] {
+        w.mod_with(id, &format!("Mod {id}"), &[("common/defines/x.txt", id)]);
+    }
+    let out = scan(&w.request()).expect("scans");
+    let subjects: Vec<&str> = out.findings.iter().map(|f| &*f.subject_text).collect();
+    assert_eq!(subjects, ["common/defines/x.txt"], "{subjects:?}");
+}
+
+#[test]
 fn a_cancelled_scan_is_an_error_not_a_partial_result() {
     let w = three();
     let req = w.request();
