@@ -70,6 +70,8 @@ pub struct LocateReport {
     pub diagnostics: Vec<DiagnosticRow>,
     /// Discovery may have missed mods.
     pub incomplete: bool,
+    /// The installed game version, when readable.
+    pub game_version: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -114,6 +116,7 @@ struct LocateView {
     mods: Vec<ModView>,
     diagnostics: Vec<DiagView>,
     incomplete: bool,
+    game_version: Option<String>,
 }
 
 fn view(r: &LocateReport, x: &Redactor<'_>) -> LocateView {
@@ -163,6 +166,7 @@ fn view(r: &LocateReport, x: &Redactor<'_>) -> LocateView {
             })
             .collect(),
         incomplete: r.incomplete,
+        game_version: o(&r.game_version),
     }
 }
 
@@ -171,6 +175,8 @@ fn table(v: &LocateView) -> String {
     let none = |o: &Option<String>| o.as_deref().map_or("(not found)".to_owned(), e);
     let mut out = format!("store: {}\n", e(&v.store));
     out += &format!("game_dir: {}\nuser_dir: {}\n", none(&v.game_dir), none(&v.user_dir));
+    out +=
+        &format!("game_version: {}\n", v.game_version.as_deref().map_or("(unknown)".to_owned(), e));
     out += &format!("workshop_dirs ({}):\n", v.workshop_dirs.len());
     out += &v.workshop_dirs.iter().map(|p| format!("  {}\n", e(p))).collect::<String>();
     out += &format!("steam_libraries ({}):\n", v.steam_libraries.len());
@@ -209,6 +215,10 @@ fn markdown(v: &LocateView) -> String {
         "- game directory: {}\n- user directory: {}\n",
         none(&v.game_dir),
         none(&v.user_dir)
+    );
+    out += &format!(
+        "- game version: {}\n",
+        v.game_version.as_deref().map_or("(unknown)".to_owned(), c)
     );
     out += &format!("\n## Workshop directories ({})\n\n", v.workshop_dirs.len());
     out += &v.workshop_dirs.iter().map(|p| format!("- {}\n", c(p))).collect::<String>();
@@ -316,6 +326,7 @@ mod tests {
         assert_eq!(j["diagnostics"][0]["level"], "warn");
         assert_eq!(j["diagnostics"][0]["subject"], "user_dir");
         assert_eq!(j["incomplete"], false);
+        assert!(j["game_version"].is_null());
         let raw: serde_json::Value =
             serde_json::from_str(&render_locate(DiagnosticsFormat::Json, &sample(), &opts(false)))
                 .unwrap();

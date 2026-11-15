@@ -7,7 +7,7 @@ use smd_core::{ResolvedLocations, SourceRole, VersionComponent, VersionPattern};
 use smd_fs::{HostEnv, SystemEnv};
 use smd_ingest::{
     ContentState, DiscoveredMod, DiscoveryOptions, IngestDiagnostic, KEY_INSTALL, KEY_USER_DIR,
-    Located, Overrides, Store, codes, discover, workshop_key,
+    Located, Overrides, Store, check_game_version, codes, discover, workshop_key,
 };
 use smd_profiles::Profile;
 
@@ -63,6 +63,8 @@ pub struct LocateOutput {
     /// unresolved, or a Steam / unattributed install has no workshop directory. A scan
     /// over these directories should carry this into its own completeness.
     pub incomplete: bool,
+    /// The installed game version as `launcher-settings.json` spells it, when readable.
+    pub game_version: Option<String>,
 }
 
 fn role(r: SourceRole) -> &'static str {
@@ -132,6 +134,8 @@ pub fn locate_with(req: &LocateRequest, env: &dyn HostEnv) -> Result<LocateOutpu
     let mut diagnostics: Vec<ScanDiagnostic> =
         located.diagnostics.iter().map(rows::from_ingest).collect();
     diagnostics.extend(disc.diagnostics.iter().map(rows::from_ingest));
+    let gv = check_game_version(&loc, &profile);
+    diagnostics.extend(gv.diagnostics.iter().map(rows::from_ingest));
     let gap = location_gap(&located);
     if let Some(why) = gap {
         let d = IngestDiagnostic::warn(codes::LOCATE_INCOMPLETE, "", why);
@@ -140,6 +144,7 @@ pub fn locate_with(req: &LocateRequest, env: &dyn HostEnv) -> Result<LocateOutpu
     Ok(LocateOutput {
         mods: disc.mods.iter().map(located_mod).collect(),
         incomplete: disc.incomplete || gap.is_some(),
+        game_version: gv.raw,
         located,
         diagnostics,
     })

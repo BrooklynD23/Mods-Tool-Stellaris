@@ -8,8 +8,8 @@ use std::collections::BTreeSet;
 use smd_core::{DiagSeverity, ModKey, ResolvedFinding, ResolvedLocations};
 use smd_index::{IndexBuilder, OverlayRules, ReplacePathScope, ScanIndex};
 use smd_ingest::{
-    DiscoveryOptions, Inventory, KEY_INSTALL, KEY_USER_DIR, OrderChain, SourceOptions, inventory,
-    workshop_key,
+    DiscoveryOptions, Inventory, KEY_INSTALL, KEY_USER_DIR, OrderChain, SourceOptions,
+    check_game_version, inventory, workshop_key,
 };
 use smd_profiles::Profile;
 use smd_rules::{Rule, RuleCtx, run_all};
@@ -34,6 +34,7 @@ pub fn scan(req: &ScanRequest) -> Result<ScanOutput, ScanError> {
     let (chain, mut diags) = from_profile(&profile, &opts);
     let inv = inventory(&loc, &chain, &disc);
     diags.extend(inv.diagnostics.iter().map(rows::from_ingest));
+    diags.extend(check_game_version(&loc, &profile).diagnostics.iter().map(rows::from_ingest));
     cancelled(req)?;
     let walked = walk_sources(&inv, &profile, req)?;
     diags.extend(walked.diagnostics);

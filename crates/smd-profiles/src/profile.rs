@@ -5,6 +5,7 @@ use smd_core::{SamePath, SourceSpec};
 
 use crate::glob;
 use crate::locations::{Locations, Stores};
+use crate::version::{RawVersion, VersionSpec};
 
 /// What a `replace_path` drops, as the profile states it. Mirrors the resolver's own enum
 /// by name; `smd-engine` maps between them, because this crate sits below the index.
@@ -62,6 +63,8 @@ struct Raw {
     benign: RawBenign,
     #[serde(default)]
     asset_archives: RawAssetArchives,
+    #[serde(default)]
+    version: RawVersion,
 }
 
 #[derive(Deserialize, Default)]
@@ -109,7 +112,7 @@ struct Dir {
 
 /// The parts of a game profile that Stage A reads.
 ///
-/// `[game]`, `[locations]` and `[stores]` reject unknown keys. Every other key is ignored
+/// `[game]`, `[locations]`, `[stores]` and `[version]` reject unknown keys. Every other key is ignored
 /// for now: strict rejection everywhere (REVIEW-2026-10 H6) belongs to the stage-keyed
 /// loader that replaces this reader.
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -124,6 +127,7 @@ pub struct Profile {
     dirs: Vec<Dir>,
     benign: Vec<Box<str>>,
     asset_archives: Vec<Box<str>>,
+    version: VersionSpec,
 }
 
 fn same_path(key: &'static str, v: &str) -> Result<SamePath, ProfileError> {
@@ -171,6 +175,7 @@ impl Profile {
             scope: scope(raw.load_order.replace_path_scope.as_deref())?,
             dirs,
             benign: raw.benign.paths.into_iter().map(|p| p.to_lowercase().into()).collect(),
+            version: VersionSpec::from_raw(raw.version)?,
             asset_archives: raw
                 .asset_archives
                 .paths
@@ -178,6 +183,12 @@ impl Profile {
                 .map(|p| p.to_lowercase().into())
                 .collect(),
         })
+    }
+
+    /// `[version]`: where the game version is read from and the range checked.
+    #[must_use]
+    pub fn version(&self) -> &VersionSpec {
+        &self.version
     }
 
     /// The profile's id, e.g. the `[game] id` value; empty when it declares none.
