@@ -116,9 +116,11 @@ function Format-DirArg([string]$Path) {
 
 function Set-Utf8Console {
     # smd writes UTF-8; without this, 5.1 decodes it with the OEM code page and mangles mod names.
-    $utf8 = New-Object Text.UTF8Encoding($false)
-    [Console]::OutputEncoding = $utf8
-    $script:OutputEncoding = $utf8
+    try {
+        $utf8 = New-Object Text.UTF8Encoding($false)
+        [Console]::OutputEncoding = $utf8
+        $script:OutputEncoding = $utf8
+    } catch { }   # no console (ISE, scheduled task): keep the default encoding
 }
 
 # `smd locate --format json` (schema 1) knows every Steam library and every workshop mod.

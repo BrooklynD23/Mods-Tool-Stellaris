@@ -116,6 +116,7 @@ type Roots = (PathBuf, PathBuf, Vec<PathBuf>);
 /// `--user-dir`, nothing is searched for; otherwise whatever is missing is located, and a
 /// location that cannot be found is exit 2 with every place tried.
 fn resolve(c: &Common, env: &Env, err: &mut dyn Write) -> Result<Roots, i32> {
+    check_given_dirs(c, env, err)?;
     if let (Some(g), Some(u)) = (&c.game_dir, &c.user_dir) {
         return Ok((g.clone(), u.clone(), c.workshop_dirs.clone()));
     }
@@ -127,7 +128,11 @@ fn resolve(c: &Common, env: &Env, err: &mut dyn Write) -> Result<Roots, i32> {
         c.workshop_dirs.clone()
     };
     match (game, user) {
-        (Some(g), Some(u)) => Ok((g, u, workshops)),
+        (Some(g), Some(u)) => {
+            // A mistyped override falls through to a search; say so instead of staying quiet.
+            warn_rows(c, env, err, &diagnostic_rows(&found));
+            Ok((g, u, workshops))
+        }
         _ => {
             let rows = unresolved_rows(&found);
             let opts = options(c, env, Caps::default());
@@ -159,13 +164,48 @@ fn unresolved_rows(found: &LocateOutput) -> Vec<DiagnosticRow> {
             rows.push(row("smd.location_tried", DiagSeverity::Warn, detail));
         }
     }
-    rows.extend(found.diagnostics.iter().map(|d| DiagnosticRow {
+    rows.extend(diagnostic_rows(found));
+    rows
+}
+
+/// The locate diagnostics as printable rows.
+fn diagnostic_rows(found: &LocateOutput) -> Vec<DiagnosticRow> {
+    let row = |d: &smd_api::ScanDiagnostic| DiagnosticRow {
         code: d.code.clone(),
         level: d.level,
         location: d.location.clone(),
         detail: d.detail.clone(),
-    }));
-    rows
+    };
+    found.diagnostics.iter().map(row).collect()
+}
+
+/// Print `rows` to `err` as a table; nothing when there are none.
+fn warn_rows(c: &Common, env: &Env, err: &mut dyn Write, rows: &[DiagnosticRow]) {
+    if !rows.is_empty() {
+        let opts = options(c, env, Caps::default());
+        let _ = write!(err, "{}", render_diagnostics(DiagnosticsFormat::Table, rows, &opts));
+    }
+}
+
+/// A `--game-dir` / `--user-dir` that is not a directory is a command that could not run
+/// (exit 1), not a location that was merely not found.
+fn check_given_dirs(c: &Common, env: &Env, err: &mut dyn Write) -> Result<(), i32> {
+    let given = [("--game-dir", "game", &c.game_dir), ("--user-dir", "user", &c.user_dir)];
+    for (flag, what, dir) in given {
+        let Some(p) = dir.as_ref().filter(|p| !p.is_dir()) else { continue };
+        let row = DiagnosticRow {
+            code: "smd.dir_missing".to_owned(),
+            level: DiagSeverity::Error,
+            location: flag.to_owned(),
+            detail: format!(
+                "cannot read the {what} directory: given directory does not exist: {}",
+                p.display()
+            ),
+        };
+        warn_rows(c, env, err, &[row]);
+        return Err(FAILED);
+    }
+    Ok(())
 }
 
 fn scan(a: &ScanArgs, env: &Env, out: &mut dyn Write, err: &mut dyn Write) -> i32 {

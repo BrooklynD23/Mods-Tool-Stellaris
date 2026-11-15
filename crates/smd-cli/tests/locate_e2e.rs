@@ -236,3 +236,41 @@ fn locate_with_every_path_given_reports_flags_and_lists_the_mods() {
         assert!(String::from_utf8_lossy(&o.stdout).contains("One"));
     }
 }
+
+#[test]
+#[cfg(unix)]
+fn a_steam_install_with_no_workshop_directory_is_incomplete_not_empty() {
+    let m = machine();
+    let (_, _, workshop) = install(&m);
+    fs::remove_dir_all(&workshop).unwrap();
+    let j = json_of(&m.run(&["locate", "--format", "json", "--no-redact"]));
+    assert_eq!(j["incomplete"], true, "{j:#}");
+    let codes: Vec<&str> =
+        j["diagnostics"].as_array().unwrap().iter().filter_map(|d| d["code"].as_str()).collect();
+    assert!(codes.contains(&"locate.incomplete"), "{codes:?}");
+}
+
+#[test]
+#[cfg(unix)]
+fn a_mistyped_env_override_is_reported_on_stderr_and_the_scan_goes_on() {
+    let m = machine();
+    install(&m);
+    let mut env = m.env();
+    env.push(("SMD_USER_DIR", m.path("no/such/dir")));
+    let pairs: Vec<(&str, &Path)> = env.iter().map(|(k, v)| (*k, v.as_path())).collect();
+    let out = smd_in(&pairs, &["scan", "--format", "json"]);
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("locate.override_missing"), "{err}");
+}
+
+#[test]
+#[cfg(unix)]
+fn a_missing_game_dir_flag_exits_1_not_2() {
+    let m = machine();
+    let gone = m.path("gone");
+    let out = m.run(&["scan", "--game-dir", gone.to_str().unwrap()]);
+    assert_eq!(out.status.code(), Some(1));
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(err.contains("given directory does not exist"), "{err}");
+}

@@ -13,6 +13,9 @@ smd-core = { workspace = true }
 blake3 = { workspace = true }
 unicode-normalization = { workspace = true }
 
+[target.'cfg(windows)'.dependencies]
+windows-registry = { workspace = true }
+
 [target.'cfg(unix)'.dependencies]
 rustix = { workspace = true }
 

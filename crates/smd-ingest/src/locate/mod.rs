@@ -137,9 +137,18 @@ impl Run<'_> {
     }
 }
 
-/// Add `p` unless a path naming the same host directory is already there.
+/// Whether `list` already holds the directory `p`: spelled the same, or the same after
+/// links are resolved (`~/.steam/steam` is a link to the real Steam root). Only the
+/// comparison uses the resolved form; callers keep the path as given.
+pub(crate) fn contains_dir(list: &[PathBuf], p: &Path) -> bool {
+    let canon = |x: &Path| std::fs::canonicalize(x).unwrap_or_else(|_| x.to_path_buf());
+    let real = canon(p);
+    list.iter().any(|q| smd_fs::same_host_dir(q, p) || smd_fs::same_host_dir(&canon(q), &real))
+}
+
+/// Add `p` unless [`contains_dir`] already has it.
 pub(crate) fn push_unique(list: &mut Vec<PathBuf>, p: PathBuf) {
-    if !list.iter().any(|q| smd_fs::same_host_dir(q, &p)) {
+    if !contains_dir(list, &p) {
         list.push(p);
     }
 }

@@ -6,8 +6,8 @@ use std::path::PathBuf;
 use smd_core::{ResolvedLocations, SourceRole, VersionComponent, VersionPattern};
 use smd_fs::{HostEnv, SystemEnv};
 use smd_ingest::{
-    ContentState, DiscoveredMod, DiscoveryOptions, KEY_INSTALL, KEY_USER_DIR, Located, Overrides,
-    discover, workshop_key,
+    ContentState, DiscoveredMod, DiscoveryOptions, IngestDiagnostic, KEY_INSTALL, KEY_USER_DIR,
+    Located, Overrides, Store, codes, discover, workshop_key,
 };
 use smd_profiles::Profile;
 
@@ -59,7 +59,9 @@ pub struct LocateOutput {
     pub mods: Vec<LocatedMod>,
     /// Location and discovery diagnostics.
     pub diagnostics: Vec<ScanDiagnostic>,
-    /// Discovery may have missed mods.
+    /// Discovery may have missed mods: a walk bound tripped, the user directory is
+    /// unresolved, or a Steam / unattributed install has no workshop directory. A scan
+    /// over these directories should carry this into its own completeness.
     pub incomplete: bool,
 }
 
@@ -98,6 +100,17 @@ fn located_mod(m: &DiscoveredMod) -> LocatedMod {
     }
 }
 
+/// Why the mod list cannot be taken as complete, when a directory that holds mods is
+/// unresolved. A GOG or Xbox install has no workshop by design, so it is not flagged.
+fn location_gap(l: &Located) -> Option<&'static str> {
+    if l.user_dir.is_none() {
+        return Some("user directory not found: local mods were not looked for");
+    }
+    let steamish = matches!(l.store, Store::Steam | Store::Unknown);
+    (steamish && l.workshop_dirs.is_empty())
+        .then_some("no workshop directory found: workshop mods were not looked for")
+}
+
 /// [`locate`] on an injected machine.
 ///
 /// # Errors
@@ -119,11 +132,16 @@ pub fn locate_with(req: &LocateRequest, env: &dyn HostEnv) -> Result<LocateOutpu
     let mut diagnostics: Vec<ScanDiagnostic> =
         located.diagnostics.iter().map(rows::from_ingest).collect();
     diagnostics.extend(disc.diagnostics.iter().map(rows::from_ingest));
+    let gap = location_gap(&located);
+    if let Some(why) = gap {
+        let d = IngestDiagnostic::warn(codes::LOCATE_INCOMPLETE, "", why);
+        diagnostics.push(rows::from_ingest(&d));
+    }
     Ok(LocateOutput {
         mods: disc.mods.iter().map(located_mod).collect(),
+        incomplete: disc.incomplete || gap.is_some(),
         located,
         diagnostics,
-        incomplete: disc.incomplete,
     })
 }
 

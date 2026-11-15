@@ -2,7 +2,7 @@
 //!
 //! **Owns:** path normalisation, the read-only root handle, the link-refusing walk, `blake3`
 //! hashing, and the OS primitives location discovery needs: Steam KeyValues reading, registry
-//! reads through `reg.exe`, and the Documents / Steam-root lookups, all behind [`HostEnv`].
+//! reads, and the Documents / Steam-root lookups, all behind [`HostEnv`].
 //!
 //! **Must never:** Know what any particular game is.
 //!
@@ -26,13 +26,14 @@ mod walk;
 
 pub use hashing::hash_reader;
 pub use host::{
-    HostEnv, MapEnv, Origin, Os, SystemEnv, documents_dir, home_dir, steam_roots, xdg_data_home,
+    DriveRoots, HostEnv, MapEnv, Origin, Os, SystemEnv, documents_dirs, home_dir, steam_roots,
+    xdg_data_home,
 };
 pub use hostpath::{same_host_dir, same_host_dir_with};
 pub use limits::WalkLimits;
 pub use normpath::{NormError, NormPath, shipped_name};
 pub use record::{FsDiagnostic, Incomplete, WalkOutcome, WalkRecord, codes};
-pub use registry::{RegValue, expand_percent_vars, parse_reg_output};
+pub use registry::{RegValue, expand_percent_vars};
 pub use root::ReadOnlyRoot;
 pub use steam_vdf::{
     DEPTH_MAX as VDF_DEPTH_MAX, FILE_MAX as VDF_FILE_MAX, LIBRARIES_MAX as VDF_LIBRARIES_MAX,
