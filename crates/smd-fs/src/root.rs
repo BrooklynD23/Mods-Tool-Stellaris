@@ -5,8 +5,9 @@ use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
 use crate::limits::WalkLimits;
-use crate::record::WalkOutcome;
+use crate::record::{WalkOutcome, WalkRecord};
 use crate::sys::{Dir, OpenErr, restamp};
+use crate::walk::{hash_pending, open_under};
 
 /// A resolved, canonicalised mod or game root, open for reading.
 ///
@@ -36,10 +37,25 @@ impl ReadOnlyRoot {
         &self.path
     }
 
-    /// Enumerate and hash everything under the root. See [`WalkOutcome`].
+    /// Enumerate everything under the root from stat data alone: no file is opened, so no
+    /// record has a blob and none is `Unparsed(Oversize/Unreadable)` yet. See
+    /// [`WalkOutcome`] and [`ReadOnlyRoot::hash_records`].
     #[must_use]
     pub fn walk(&self, limits: &WalkLimits) -> WalkOutcome {
         crate::walk::walk(&self.dir, limits)
+    }
+
+    /// The second pass: read and hash the records of `out` for which `want` is true, and
+    /// only those. A file over the cap, unreadable or changing becomes `Unparsed` with its
+    /// diagnostic, exactly as an eager walk would have reported it. Returns how many
+    /// records it tried.
+    pub fn hash_records(
+        &self,
+        out: &mut WalkOutcome,
+        limits: &WalkLimits,
+        want: &dyn Fn(&WalkRecord) -> bool,
+    ) -> usize {
+        hash_pending(&self.dir, out, limits, want)
     }
 
     /// Read one file named by raw OS components (a [`WalkRecord`](crate::WalkRecord)'s
@@ -52,19 +68,7 @@ impl ReadOnlyRoot {
     /// longer matches the handle's pre-read stamp, is `InvalidData`.
     pub fn read_file(&self, os_path: &[OsString], cap: u64) -> io::Result<Vec<u8>> {
         let denied = |m: &'static str| io::Error::new(io::ErrorKind::PermissionDenied, m);
-        let Some((last, parents)) = os_path.split_last() else {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "empty path"));
-        };
-        let mut cur: Option<Dir> = None;
-        for comp in parents {
-            let parent = cur.as_ref().unwrap_or(&self.dir);
-            let opened = parent.open_dir(comp).map_err(into_io)?;
-            if opened.foreign {
-                return Err(denied("directory is on another filesystem"));
-            }
-            cur = Some(opened.dir);
-        }
-        let opened = cur.as_ref().unwrap_or(&self.dir).open_file(last).map_err(into_io)?;
+        let opened = open_under(&self.dir, os_path).map_err(into_io)?;
         if !opened.regular || opened.foreign {
             return Err(denied("not a regular file under the root"));
         }
@@ -87,6 +91,7 @@ impl ReadOnlyRoot {
 fn into_io(e: OpenErr) -> io::Error {
     match e {
         OpenErr::Link => io::Error::new(io::ErrorKind::PermissionDenied, "link refused"),
+        OpenErr::Offline => io::Error::new(io::ErrorKind::PermissionDenied, "offline placeholder"),
         OpenErr::Io(e) => e,
     }
 }

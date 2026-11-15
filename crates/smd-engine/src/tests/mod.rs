@@ -184,13 +184,25 @@ fn dot_files_in_two_mods_are_not_conflicts() {
 }
 
 #[test]
-fn an_oversize_vanilla_asset_archive_keeps_the_scan_complete_but_is_reported() {
+fn an_uncontended_oversize_file_is_never_read_and_costs_nothing() {
     let w = World::new();
     w.vanilla("dlc/dlc001_x/dlc001.zip", "0123456789");
+    w.vanilla("common/defines/00_big.txt", "01234567890123456789");
     let mut req = w.request();
     req.limits.file_cap = 4;
     let out = scan(&req).expect("scans");
     assert!(is_complete(&out.completeness), "{:?}", out.completeness);
+    assert!(!out.diagnostics.iter().any(|d| d.code.starts_with("fs.limit")), "no one compares it");
+}
+
+#[test]
+fn a_contended_oversize_vanilla_asset_archive_keeps_vanilla_complete_but_is_reported() {
+    let w = World::new();
+    w.vanilla("dlc/dlc001_x/dlc001.zip", "0123456789");
+    w.mod_with("111", "Mod 111", &[("dlc/dlc001_x/dlc001.zip", "x")]);
+    let mut req = w.request();
+    req.limits.file_cap = 4;
+    let out = scan(&req).expect("scans");
     let d = out
         .diagnostics
         .iter()
@@ -198,19 +210,20 @@ fn an_oversize_vanilla_asset_archive_keeps_the_scan_complete_but_is_reported() {
         .expect("the archive is reported as not read");
     assert!(d.location.contains("dlc001.zip"), "{d:?}");
     assert!(!out.diagnostics.iter().any(|d| d.code == "fs.limit_exceeded"));
+    assert!(is_complete(&out.completeness), "{:?}", out.completeness);
 }
 
 #[test]
-fn an_ordinary_oversize_file_still_makes_the_scan_incomplete() {
+fn a_contended_oversize_file_still_makes_the_scan_incomplete() {
     let w = World::new();
     w.vanilla("common/defines/00_big.txt", "01234567890123456789");
-    w.mod_with("111", "Mod 111", &[("dlc/dlc001_x/dlc001.zip", "01234567890123456789")]);
+    w.mod_with("111", "Mod 111", &[("common/defines/00_big.txt", "01234567890123456789")]);
     let mut req = w.request();
     req.limits.file_cap = 16;
     let out = scan(&req).expect("scans");
     assert!(!is_complete(&out.completeness));
     let n: u32 = out.completeness.unparsed.iter().map(|(_, n)| *n).sum();
-    assert_eq!(n, 2, "a vanilla script and a mod's archive-shaped file both count");
+    assert_eq!(n, 2, "both copies of the shared oversize script count");
 }
 
 #[test]
