@@ -20,7 +20,8 @@ const REQUIRED: &[(&str, &[&str])] = &[
 const TYPED: &[(&str, &str)] =
     &[("playsets", "isActive"), ("playsets_mods", "position"), ("playsets_mods", "enabled")];
 /// Columns that identify a mod; at least one must exist or no entry can be matched.
-const IDENTIFYING: &[&str] = &["steamId", "dirPath", "displayName", "name"];
+const IDENTIFYING: &[&str] =
+    &["steamId", "dirPath", "displayName", "name", "gameRegistryId", "pdxId", "archivePath"];
 
 /// Optional columns the probe found.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
@@ -30,6 +31,9 @@ pub(super) struct Schema {
     pub steam_id: bool,
     pub dir_path: bool,
     pub display_name: bool,
+    pub game_registry_id: bool,
+    pub pdx_id: bool,
+    pub archive_path: bool,
 }
 
 type Table = (String, Vec<(String, String)>);
@@ -86,7 +90,7 @@ fn problems(found: &[Table]) -> Vec<String> {
         }
     }
     if !IDENTIFYING.iter().any(|c| column(found, "mods", c).is_some()) {
-        out.push("mods has none of steamId, dirPath, displayName, name".to_owned());
+        out.push("mods has none of steamId, dirPath, displayName, name, gameRegistryId, pdxId, archivePath".to_owned());
     }
     out
 }
@@ -105,5 +109,8 @@ pub(super) fn probe(conn: &Connection) -> Result<Schema, Fail> {
         steam_id: has("steamId"),
         dir_path: has("dirPath"),
         display_name: has("displayName"),
+        game_registry_id: has("gameRegistryId"),
+        pdx_id: has("pdxId"),
+        archive_path: has("archivePath"),
     })
 }

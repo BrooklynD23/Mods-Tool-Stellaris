@@ -23,8 +23,15 @@ fn unmodelled(g: ResolutionGap) -> bool {
     )
 }
 
-fn completeness(index: &ScanIndex, f: &Finding, incomplete: &BTreeSet<ModKey>) -> Completeness {
-    let mut worst = Completeness::Complete;
+fn completeness(
+    index: &ScanIndex,
+    f: &Finding,
+    incomplete: &BTreeSet<ModKey>,
+    discovery_incomplete: bool,
+) -> Completeness {
+    // A mod discovery missed may overlap any finding, so none is complete.
+    let mut worst =
+        if discovery_incomplete { Completeness::Partial } else { Completeness::Complete };
     for p in &f.participants {
         let key = index.sources().get(p.site.source).map(|m| &m.key);
         if key.is_some_and(|k| incomplete.contains(k)) {
@@ -114,9 +121,10 @@ pub(crate) fn certainty_of(
     index: &ScanIndex,
     f: &Finding,
     incomplete: &BTreeSet<ModKey>,
+    discovery_incomplete: bool,
 ) -> Certainty {
     let supported = Certainty {
-        completeness: completeness(index, f, incomplete),
+        completeness: completeness(index, f, incomplete, discovery_incomplete),
         activation: activation(index, f),
         order: order(index, f),
         semantics: semantics(f),

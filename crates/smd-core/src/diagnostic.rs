@@ -83,6 +83,10 @@ pub struct ScanCompleteness {
     /// mod-root-relative path where reading stopped (the refused link, the bound that was
     /// hit), when there is one.
     pub content_incomplete: Vec<(ModKey, ContentIncompleteReason, Option<Box<str>>)>,
+    /// Mod discovery may have missed mods (a location was absent or unlistable, or a link,
+    /// special file or bound kept an entry out). Not a mod, so it is no `ModKey`'s entry:
+    /// every finding is `Partial` and no "not installed" claim may stand on this scan.
+    pub discovery_incomplete: bool,
 }
 
 /// Why a source's content is incomplete.
@@ -142,6 +146,7 @@ mod tests {
                 ContentIncompleteReason::LinkRefused,
                 Some("common/link".into()),
             )],
+            discovery_incomplete: false,
         };
         assert_eq!(c.unparsed[0].0, UnparsedReason::Refused);
         assert_eq!(c.content_incomplete[0].1, ContentIncompleteReason::LinkRefused);
@@ -160,6 +165,7 @@ mod tests {
                 ContentIncompleteReason::Truncated,
                 None,
             )],
+            discovery_incomplete: true,
         };
         let json = serde_json::to_string(&c).expect("serialises");
         assert_eq!(serde_json::from_str::<ScanCompleteness>(&json).expect("deserialises"), c);

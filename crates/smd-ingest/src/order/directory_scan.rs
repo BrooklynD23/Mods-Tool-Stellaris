@@ -57,6 +57,7 @@ impl ChainSource for DirectoryScan {
             order: Confidence::Fallback,
             activation: Confidence::Fallback,
             snapshot: SnapshotMethod::NotApplicable,
+            unmatched: 0,
         };
         // Discovery's own diagnostics are reported once, by the inventory.
         SourceAttempt { result: Ok(playset), diagnostics: Vec::new() }

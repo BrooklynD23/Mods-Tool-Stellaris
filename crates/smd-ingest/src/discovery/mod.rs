@@ -12,12 +12,16 @@ use crate::codes::{self, IngestDiagnostic};
 
 mod candidate;
 mod keys;
+mod launcher_db;
 mod listing;
+mod origin;
 mod refuse;
+mod unregistered;
 mod workshop;
 
 pub(crate) use candidate::UNASSIGNED;
 pub(crate) use keys::VANILLA_KEY;
+pub use origin::ModOrigin;
 
 /// The game install directory.
 pub const KEY_INSTALL: &str = "install";
@@ -106,6 +110,11 @@ pub struct DiscoveredMod {
     pub content_root: Option<PathBuf>,
     /// Whether the content may be walked.
     pub content: ContentState,
+    /// How it was found; says whether the game will load it.
+    pub origin: ModOrigin,
+    /// The resolved `path=`/`archive=` (or directory/file) the mod stands for, readable or
+    /// not. Other sources are compared against it to tell "already found".
+    pub source_path: Option<PathBuf>,
 }
 
 /// Everything discovery found, in `ModKey` byte order.
@@ -184,6 +193,21 @@ pub fn discover(loc: &ResolvedLocations, opts: &DiscoveryOptions) -> Discovery {
         }
         raws.extend(workshop::workshop_mods(ws, &claimed, &smd_fs::same_host_dir, &mut sink));
     }
+    match &user_dir {
+        Some(user) => {
+            let claimed: Vec<PathBuf> = raws
+                .iter()
+                .flat_map(|r| r.content_root.iter().chain(&r.source_path).cloned())
+                .collect();
+            raws.extend(unregistered::unregistered(user, &claimed, &mut sink));
+            raws.extend(launcher_db::db_only_mods(loc, user, &guard, &raws, &mut sink));
+        }
+        None => {
+            let why = "there is no user directory, so mods only the launcher registers were not looked for";
+            let d = IngestDiagnostic::warn(codes::LAUNCHER_DB_NOT_CONSULTED, "", why);
+            sink.diags.push(d);
+        }
+    }
     let candidate::Sink { mut diags, incomplete } = sink;
     let mods = finish(raws, &mut diags);
     Discovery { install, mods, diagnostics: diags, incomplete }
@@ -214,6 +238,8 @@ fn finish(raws: Vec<candidate::Raw>, diags: &mut Vec<IngestDiagnostic>) -> Vec<D
             role: r.role,
             content_root: r.content_root,
             content: r.content,
+            origin: r.origin,
+            source_path: r.source_path,
         });
     }
     out.sort_by(|a, b| a.key.cmp(&b.key));
@@ -222,3 +248,5 @@ fn finish(raws: Vec<candidate::Raw>, diags: &mut Vec<IngestDiagnostic>) -> Vec<D
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_sources;

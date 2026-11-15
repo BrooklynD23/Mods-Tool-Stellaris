@@ -48,6 +48,38 @@ one is still missing. The machine (OS, env vars, registry, drive roots) is injec
 - Registry reads run `reg.exe query` (no `unsafe`); non-ASCII values follow the console
   code page and may be garbled.
 
+### Mod sources and `origin`
+
+`discover()` finds mods in five ways; each `DiscoveredMod` carries a `ModOrigin`, printed by
+`smd locate` (table, markdown, and JSON `"origin"` on each mod):
+
+| `origin` | Found as | Content | Game loads it? |
+| --- | --- | --- | --- |
+| `mod_file` | `<user_dir>/mod/*.mod` | read via `path=` | yes if enabled |
+| `workshop_dir` | workshop dir no `.mod` claims | read | no launcher file |
+| `unregistered_dir` | `mod/<dir>/descriptor.mod`, no `.mod` points at it (warn `ingest.mod_unregistered`) | read | no: the launcher does not know it |
+| `loose_archive` | `mod/*.zip` no `archive=` names | unread (`Archive`) | no |
+| `launcher_db_only` | `launcher-v2.sqlite` `mods` row no other source claimed | read via `dirPath`, else unread | per the playset |
+
+"Claimed" is host path identity (`smd_fs::same_host_dir`, also tried with links resolved)
+against every mod's resolved `path=`/`archive=`. A launcher row's `dirPath`/`archivePath` is
+untrusted exactly like a descriptor's `path=` and goes through the same refuse guard
+(`ingest.root_refused`). Rows come from the launcher reader's verified read-only snapshot,
+never the live file. If the database is absent, unreadable or fails verification, discovery
+is **not** marked incomplete for that alone, but the report carries warn
+`ingest.launcher_db_not_consulted` with the reason: mods only the launcher registers were
+not looked for.
+
+Playset entries join to mods by, in order: `gameRegistryId` (its file name is the `*.mod`
+file), `steamId`, `pdxId` (both against `remote_file_id`; `pdxId` is an assumption), then
+`dirPath`/`archivePath` by path identity. An entry matching nothing is counted in
+`Playset::unmatched`; while it is non-zero a discovered mod missing from the playset is
+`Unknown`, not `Inactive`. Real launcher column contents are unverified (VERIFY V03).
+
+Discovery incompleteness is `ScanCompleteness::discovery_incomplete`, a flag (not a mod):
+it makes every finding's completeness `Partial`, the report's `scan_complete` false, and
+header line `discovery_incomplete`.
+
 ### Where things live
 
 <!-- macOS column: deferred (owner decision 2026-10-29), kept as reference. -->

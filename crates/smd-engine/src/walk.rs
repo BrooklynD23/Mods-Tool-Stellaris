@@ -34,6 +34,7 @@ pub(crate) fn absorb(total: &mut ScanCompleteness, part: ScanCompleteness) {
     total.unparsed.sort();
     total.domains.extend(part.domains);
     total.content_incomplete.extend(part.content_incomplete);
+    total.discovery_incomplete |= part.discovery_incomplete;
 }
 
 /// Walk each source that is not `Inactive` and has a readable content root, in `SourceId`

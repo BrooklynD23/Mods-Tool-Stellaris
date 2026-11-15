@@ -53,6 +53,16 @@ fn a_complete_zero_finding_scan_says_so_with_the_header() {
 }
 
 #[test]
+fn incomplete_discovery_alone_is_never_called_clean() {
+    let c = smd_core::ScanCompleteness { discovery_incomplete: true, ..complete() };
+    let m = model(c, vec![row("k", "Alpha", "p")], vec![]);
+    for (name, out) in render_all(&m, &RenderOptions::default()) {
+        assert!(!out.to_lowercase().contains("no same-path conflicts"), "{name}:\n{out}");
+        assert!(out.contains("discovery_incomplete"), "{name}:\n{out}");
+    }
+}
+
+#[test]
 fn participant_cap_marker() {
     let many = finding(
         "a.txt",

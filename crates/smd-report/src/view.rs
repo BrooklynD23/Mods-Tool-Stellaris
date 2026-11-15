@@ -42,6 +42,7 @@ pub(crate) struct HeaderView {
     pub unparsed_total: u32,
     pub unparsed: Vec<UnparsedView>,
     pub domains: Vec<String>,
+    pub discovery_incomplete: bool,
     pub content_incomplete: Vec<ContentIncompleteView>,
     pub inventory: Vec<InventoryView>,
 }

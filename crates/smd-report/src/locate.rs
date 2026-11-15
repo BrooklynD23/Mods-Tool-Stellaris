@@ -45,6 +45,8 @@ pub struct LocateMod {
     pub readable: bool,
     /// The workshop id.
     pub remote_file_id: Option<String>,
+    /// How it was found (`mod_file`, `unregistered_dir`, ...).
+    pub origin: String,
 }
 
 /// The renderer input of `smd locate`, as text.
@@ -89,6 +91,7 @@ struct ModView {
     content_root: Option<String>,
     readable: bool,
     remote_file_id: Option<String>,
+    origin: String,
 }
 
 #[derive(Serialize)]
@@ -146,6 +149,7 @@ fn view(r: &LocateReport, x: &Redactor<'_>) -> LocateView {
                 content_root: o(&m.content_root),
                 readable: m.readable,
                 remote_file_id: o(&m.remote_file_id),
+                origin: t(&m.origin),
             })
             .collect(),
         diagnostics: r
@@ -180,7 +184,13 @@ fn table(v: &LocateView) -> String {
     for m in &v.mods {
         let ver = m.version.as_deref().map_or(String::new(), |s| format!(" v{}", e(s)));
         let note = if m.readable { "" } else { "  [content not readable]" };
-        out += &format!("  {} [{}] {}{ver}{note}\n", e(&m.key), e(&m.role), e(&m.name));
+        out += &format!(
+            "  {} [{}, {}] {}{ver}{note}\n",
+            e(&m.key),
+            e(&m.role),
+            e(&m.origin),
+            e(&m.name)
+        );
     }
     for d in &v.diagnostics {
         out += &format!("{} {}: {} {}\n", e(&d.level), e(&d.code), e(&d.subject), e(&d.detail));
@@ -211,8 +221,8 @@ fn markdown(v: &LocateView) -> String {
     for m in &v.mods {
         let ver = m.version.as_deref().map_or(String::new(), |s| format!(" v{}", md::text(s)));
         let note = if m.readable { "" } else { " (content not readable)" };
-        out +=
-            &format!("- {} ({}) {}{ver}{note}\n", c(&m.key), md::tag(&m.role), md::name(&m.name));
+        let (role, origin) = (md::tag(&m.role), md::tag(&m.origin));
+        out += &format!("- {} ({role}, {origin}) {}{ver}{note}\n", c(&m.key), md::name(&m.name));
     }
     if !v.diagnostics.is_empty() {
         out += "\n## Diagnostics\n\n";
@@ -276,6 +286,7 @@ mod tests {
                 content_root: Some("/home/al/w/1".into()),
                 readable: true,
                 remote_file_id: Some("1".into()),
+                origin: "workshop_dir".into(),
             }],
             diagnostics: vec![DiagnosticRow {
                 code: "locate.unresolved".into(),
