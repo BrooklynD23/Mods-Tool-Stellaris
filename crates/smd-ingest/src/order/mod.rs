@@ -42,6 +42,12 @@ pub trait ChainSource: LoadOrderSource {
     /// As [`load`](ChainSource::load), over a discovery the caller already ran, so one
     /// inventory sees one discovery however many sources consult it.
     fn load_with(&self, loc: &ResolvedLocations, found: &Discovery) -> SourceAttempt;
+
+    /// The launcher-database reader, when this is one: discovery reads the database
+    /// through it, so its options (and test hooks) reach the scan's single read.
+    fn launcher(&self) -> Option<&LauncherV2Sqlite> {
+        None
+    }
 }
 
 /// What the chain concluded.
@@ -115,6 +121,12 @@ impl OrderChain {
             }
         }
         (OrderChain { sources }, diags)
+    }
+
+    /// The chain's launcher-database reader, if it has one.
+    #[must_use]
+    pub fn launcher(&self) -> Option<&LauncherV2Sqlite> {
+        self.sources.iter().find_map(|s| s.launcher())
     }
 
     /// Try each source in order; the first to answer wins. Each source discovers for

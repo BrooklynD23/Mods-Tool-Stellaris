@@ -2,18 +2,29 @@
 
 use std::path::Path;
 
-use smd_core::{Confidence, Playset, PlaysetEntry, SnapshotMethod};
+use smd_core::{Confidence, Playset, PlaysetEntry, SnapshotMethod, SourceRole};
 
 use super::join::{self, Ident};
 use super::rows::Rows;
 use crate::DiscoveredMod;
 use crate::codes::{self, IngestDiagnostic};
 
+/// The platform-qualified id of a discovered mod: its key when that is one, else the
+/// descriptor's id under the mod's role.
+fn remote_ref(m: &DiscoveredMod) -> Option<String> {
+    let key = m.key.as_str();
+    if key.starts_with("steam:") || key.starts_with("pdx:") {
+        return Some(key.to_owned());
+    }
+    let id = m.descriptor.remote_file_id.as_deref()?;
+    Some(join::remote(m.role == SourceRole::ParadoxMods, id))
+}
+
 /// How a discovered mod is recognised by the join.
 pub(crate) fn ident(m: &DiscoveredMod) -> Ident {
     Ident {
         mod_file: m.mod_file.as_deref().map(str::to_owned),
-        remote_id: m.descriptor.remote_file_id.as_deref().map(str::to_owned),
+        remote_id: remote_ref(m),
         paths: m.content_root.iter().chain(&m.source_path).cloned().collect(),
     }
 }

@@ -122,6 +122,10 @@ Windows-first. Each item names its gate.
    - discovery lists directories with `std::fs::read_dir` rather than through `smd-fs`;
    - ~~discovery-incomplete is recorded under a fake `"(discovery)"` `ModKey`~~ DONE on
      `feat/discovery-sources`: `ScanCompleteness::discovery_incomplete`, lowers certainty;
+   - ~~`ModKey` was the raw `remote_file_id` (Steam/Paradox collision), hashed `version`, and
+     the launcher DB was read twice~~ DONE on `fix/mod-identity`: keys are `steam:`/`pdx:`/
+     `h-`, `SourceRole::ParadoxMods`, one read per scan (doc 05, "Mod sources and origin").
+     Unverified: real launcher `pdxId`/`source` contents (VERIFY V03);
    - per-rule certainty ceilings live in an engine table (`smd-engine/src/certainty.rs`);
    - CLI exit code 3 is not documented in doc 04;
    - the Markdown code-span and account-redaction rules aren't written in doc 11.

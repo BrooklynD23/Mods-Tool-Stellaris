@@ -2,12 +2,15 @@
 //!
 //! One rule, used both to decide a row is already found (discovery) and to place a playset
 //! entry on a mod (playset). Keys are tried in this order, the first to hit wins:
-//! `gameRegistryId` (its file name is the mod's `*.mod` file), `steamId`, `pdxId` (both
-//! against the descriptor's `remote_file_id`), then `dirPath` / `archivePath` by host path
-//! identity. Every column is optional; an absent or empty one is not tried.
+//! `gameRegistryId` (its file name is the mod's `*.mod` file), `steamId` (against `steam:`
+//! ids), `pdxId` (against `pdx:` ids), then `dirPath` / `archivePath` by host path
+//! identity. Every column is optional; an absent or empty one is not tried. Ids are
+//! compared with their platform: a `pdxId` never matches a Steam id of the same digits.
 //!
-//! **Unverified against a real launcher:** that `pdxId` is the descriptor's
-//! `remote_file_id` for Paradox Mods downloads is an assumption (VERIFY V03).
+//! **Unverified against a real launcher:** that `pdxId` names Paradox Mods downloads, and
+//! that their descriptors carry that id as `remote_file_id`, are assumptions (VERIFY V03).
+//! A Paradox mod whose file name and row give no such evidence is `steam:`-keyed and found
+//! by `dirPath` instead.
 
 use std::path::{Path, PathBuf};
 
@@ -17,10 +20,16 @@ use super::rows::ModRow;
 #[derive(Clone, Default, Debug)]
 pub(crate) struct Ident {
     pub mod_file: Option<String>,
+    /// The platform-qualified id: `steam:<id>` or `pdx:<id>` (see [`remote`]).
     pub remote_id: Option<String>,
     /// Every path the mod stands for: its content directory, its resolved `path=`/
     /// `archive=`.
     pub paths: Vec<PathBuf>,
+}
+
+/// A platform-qualified id, the form [`Ident::remote_id`] holds.
+pub(crate) fn remote(paradox: bool, id: &str) -> String {
+    format!("{}:{id}", if paradox { "pdx" } else { "steam" })
 }
 
 /// `mod/ugc_1.mod` and `mod\ugc_1.mod` both name `ugc_1.mod`.
@@ -56,7 +65,7 @@ pub(crate) fn find(row: &ModRow, idents: &[Ident], base: &Path) -> Option<usize>
             .find_map(|d| pos(&|i: &Ident| i.paths.iter().any(|p| same_path(d, base, p))))
     };
     by_file()
-        .or_else(|| by_id(row.steam_id.as_deref()))
-        .or_else(|| by_id(row.pdx_id.as_deref()))
+        .or_else(|| by_id(row.steam_id.as_deref().map(|i| remote(false, i)).as_deref()))
+        .or_else(|| by_id(row.pdx_id.as_deref().map(|i| remote(true, i)).as_deref()))
         .or_else(by_path)
 }

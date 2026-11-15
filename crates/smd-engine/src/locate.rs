@@ -70,6 +70,7 @@ fn role(r: SourceRole) -> &'static str {
         SourceRole::Vanilla => "vanilla",
         SourceRole::Dlc => "dlc",
         SourceRole::Workshop => "workshop",
+        SourceRole::ParadoxMods => "paradox_mods",
         SourceRole::Local => "local",
         SourceRole::Archive => "archive",
         _ => "other",

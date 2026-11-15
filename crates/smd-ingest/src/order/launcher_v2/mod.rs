@@ -19,7 +19,7 @@ use smd_core::{
 
 use super::{ChainSource, SourceAttempt, SourceOptions};
 use crate::codes::{self, IngestDiagnostic};
-use crate::{Discovery, KEY_USER_DIR, discover};
+use crate::{Discovery, KEY_USER_DIR, discover_with_launcher};
 
 pub(crate) mod db_mods;
 mod header;
@@ -104,12 +104,25 @@ pub struct LauncherRun {
     pub temp_dir: Option<PathBuf>,
 }
 
+#[derive(Debug, PartialEq, Eq)]
 struct Loaded {
     verified: Verified,
     method: SnapshotMethod,
 }
 
+/// One read of the launcher database: a verified snapshot or the reason there is none,
+/// plus the private directory and diagnostics the read produced. A scan makes exactly one;
+/// discovery (mods only the launcher knows) and the order chain (the playset) share it.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct LauncherRead {
+    result: Result<Loaded, Option<Failed>>,
+    temp_dir: Option<PathBuf>,
+    build: String,
+    diagnostics: Vec<IngestDiagnostic>,
+}
+
 /// A failure and the path it happened on.
+#[derive(Debug, PartialEq, Eq)]
 struct Failed {
     fail: Fail,
     path: &'static str,
@@ -125,26 +138,45 @@ impl LauncherV2Sqlite {
     /// Read the active playset, reporting the private directory too.
     #[must_use]
     pub fn run(&self, loc: &ResolvedLocations) -> LauncherRun {
-        self.run_with(loc, &discover(loc, &self.opts.discovery))
+        self.run_with(loc, &discover_with_launcher(loc, &self.opts.discovery, self))
     }
 
     /// As [`run`](LauncherV2Sqlite::run), over a discovery already made.
     #[must_use]
+    ///
+    /// The database is read once per scan: when `found` carries the read discovery made,
+    /// that read is used; only a hand-built discovery reads again.
     pub fn run_with(&self, loc: &ResolvedLocations, found: &Discovery) -> LauncherRun {
-        let mut temp_dir = None;
-        let mut diagnostics = Vec::new();
-        let mut build = String::new();
-        let result = self.read(loc, &mut temp_dir, &mut build, &mut diagnostics);
-        let result = match result {
+        let owned;
+        let read = match &found.launcher {
+            Some(r) => r.as_ref(),
+            None => {
+                owned = self.read_once(loc);
+                &owned
+            }
+        };
+        let mut diagnostics = read.diagnostics.clone();
+        let result = match &read.result {
             Ok(loaded) => {
                 let rows = &loaded.verified.rows;
                 let base = loc.get(KEY_USER_DIR).unwrap_or(Path::new(""));
                 Ok(playset::build(rows, &found.mods, base, loaded.method, &mut diagnostics))
             }
-            Err(Some(failed)) => Err(refuse(failed, &build, &mut diagnostics)),
+            Err(Some(failed)) => Err(refuse(failed, &read.build, &mut diagnostics)),
             Err(None) => Err(OrderError::NotPresent),
         };
-        LauncherRun { attempt: SourceAttempt { result, diagnostics }, temp_dir }
+        LauncherRun {
+            attempt: SourceAttempt { result, diagnostics },
+            temp_dir: read.temp_dir.clone(),
+        }
+    }
+
+    /// Read the launcher database through the verified snapshot, once, keeping everything
+    /// the read raised.
+    pub(crate) fn read_once(&self, loc: &ResolvedLocations) -> LauncherRead {
+        let (mut temp_dir, mut build, mut diagnostics) = (None, String::new(), Vec::new());
+        let result = self.read(loc, &mut temp_dir, &mut build, &mut diagnostics);
+        LauncherRead { result, temp_dir, build, diagnostics }
     }
 
     /// `Err(None)` means the file is not there: the ordinary case.
@@ -254,8 +286,9 @@ fn live_digest(file: &Path, v: &Verified) -> Result<[u8; 32], Fail> {
 }
 
 /// Turn a failure into the diagnostics and the `OrderError` the chain falls through on.
-fn refuse(failed: Failed, build: &str, diags: &mut Vec<IngestDiagnostic>) -> OrderError {
+fn refuse(failed: &Failed, build: &str, diags: &mut Vec<IngestDiagnostic>) -> OrderError {
     let Failed { fail, path } = failed;
+    let fail = fail.clone();
     let ident =
         if build.is_empty() { String::new() } else { format!(" (launcher database: {build})") };
     let why = format!("step {} failed on path {path}: {}{ident}", fail.step, fail.detail);
@@ -299,6 +332,10 @@ impl ChainSource for LauncherV2Sqlite {
 
     fn load_with(&self, loc: &ResolvedLocations, found: &Discovery) -> SourceAttempt {
         self.run_with(loc, found).attempt
+    }
+
+    fn launcher(&self) -> Option<&LauncherV2Sqlite> {
+        Some(self)
     }
 }
 
