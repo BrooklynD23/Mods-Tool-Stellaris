@@ -59,7 +59,9 @@ descriptor   = "clausewitz_kv"
 
 [version]
 source  = "launcher-settings.json"
+fields = ["rawVersion", "version"]   # tried in order
 pattern = "wildcard_dotted"    # 3.13.*
+verified_range = ["4.*"]       # versions the profile was checked against; empty = no claim
 
 [[dir]]
 glob = "common/traits/**/*.txt"   ; domain = "trait"    ; merge = "merge_by_key" ; order = "fios"

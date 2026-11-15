@@ -85,6 +85,10 @@ impl IngestDiagnostic {
     }
 }
 
+/// The installed game version is outside the profile's verified range, or could not be
+/// read.
+pub const GAME_VERSION_UNVERIFIED: &str = "ingest.game_version_unverified";
+
 /// A profile named a load-order source this build does not have.
 pub const UNKNOWN_ORDER_SOURCE: &str = "ingest.unknown_order_source";
 

@@ -354,8 +354,6 @@ dependencies = [
  "smd-fs",
  "smd-index",
  "smd-ingest",
- "smd-parse",
- "smd-policy",
  "smd-profiles",
  "smd-rules",
  "tempfile",
@@ -371,15 +369,6 @@ dependencies = [
  "tempfile",
  "unicode-normalization",
  "windows-registry",
-]
-
-[[package]]
-name = "smd-gui"
-version = "0.0.0"
-dependencies = [
- "smd-api",
- "smd-core",
- "smd-report",
 ]
 
 [[package]]
@@ -407,39 +396,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "smd-parse"
-version = "0.0.0"
-dependencies = [
- "smd-core",
- "smd-fs",
- "smd-profiles",
-]
-
-[[package]]
-name = "smd-policy"
-version = "0.0.0"
-dependencies = [
- "smd-core",
- "smd-index",
- "smd-profiles",
-]
-
-[[package]]
 name = "smd-profiles"
 version = "0.0.0"
 dependencies = [
  "serde",
+ "smallvec",
  "smd-core",
  "smd-fs",
  "toml",
-]
-
-[[package]]
-name = "smd-py"
-version = "0.0.0"
-dependencies = [
- "smd-api",
- "smd-core",
 ]
 
 [[package]]
@@ -459,13 +423,6 @@ dependencies = [
  "smd-core",
  "smd-index",
  "smd-profiles",
-]
-
-[[package]]
-name = "smd-testkit"
-version = "0.0.0"
-dependencies = [
- "smd-core",
 ]
 
 [[package]]

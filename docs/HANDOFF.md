@@ -68,6 +68,18 @@ It completed. The script was saved outside the repo at
 `~/.claude/projects/-mnt-e-Programming-Github-Repo-Mods-Tool-Stellaris/1c7aa16b-b682-40d8-b8f8-b5ad4f4a9572/workflows/scripts/smd-implement-m1-wf_3ff10c10-e2c.js`.
 Reuse its shape for the next wave, with the corrected model routing.
 
+## Cleanup and game-version drift (chore/cleanup-version)
+
+- Deleted the five 12-line stub crates (`smd-gui`, `smd-py`, `smd-policy`, `smd-parse`,
+  `smd-testkit`). Nothing used them; docs mark them planned (M2/M5/M7). Re-add each with
+  its `xtask/layers.toml` entry when its milestone starts.
+- `[version]` is now typed (`Profile::version()`, unknown keys rejected) with a new
+  `verified_range` key. `smd-ingest` reads `launcher-settings.json` (`rawVersion`, then
+  `version`; user dir, then install dir) and warns `ingest.game_version_unverified` when
+  out of range or unreadable. It shows in `smd scan` diagnostics and `smd locate`
+  (`game_version` JSON field, schema 1 additive). `verified_range = ["4.*"]` is a guess,
+  not an observation.
+
 ## Next steps, in order
 
 Windows-first. Each item names its gate.

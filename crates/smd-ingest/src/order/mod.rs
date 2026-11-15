@@ -16,7 +16,7 @@ use crate::{Discovery, DiscoveryOptions};
 
 mod directory_scan;
 mod dlc_load;
-mod json_caps;
+pub(crate) mod json_caps;
 pub mod launcher_v2;
 
 pub use directory_scan::DirectoryScan;

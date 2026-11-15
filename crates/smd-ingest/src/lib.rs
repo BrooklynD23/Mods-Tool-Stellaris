@@ -14,6 +14,7 @@
 pub mod codes;
 mod descriptor;
 mod discovery;
+mod game_version;
 mod inventory;
 mod locate;
 pub mod order;
@@ -26,6 +27,7 @@ pub use discovery::{
     ContentState, DiscoveredMod, Discovery, DiscoveryOptions, KEY_INSTALL, KEY_USER_DIR,
     KEY_WORKSHOP, MODS_SUBDIR, ModOrigin, UnreadReason, discover, workshop_key,
 };
+pub use game_version::{GameVersionCheck, check_game_version};
 pub use inventory::{Inventory, ModRecord, inventory};
 pub use locate::{Candidate, Located, Overrides, Store, locate};
 pub use order::{

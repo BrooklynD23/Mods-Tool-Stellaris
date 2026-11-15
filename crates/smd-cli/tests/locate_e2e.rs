@@ -148,10 +148,15 @@ fn locate_json_finds_game_workshop_user_and_every_mod() {
         (alpha["origin"].as_str(), beta["origin"].as_str()),
         (Some("mod_file"), Some("workshop_dir"))
     );
-    // No launcher database here: the one diagnostic says it was not consulted.
+    // No launcher database or launcher-settings.json here: both gaps are named.
+    assert!(j["game_version"].is_null());
     let codes: Vec<&str> =
         j["diagnostics"].as_array().unwrap().iter().filter_map(|d| d["code"].as_str()).collect();
-    assert_eq!(codes, ["ingest.launcher_db_not_consulted"], "{j:#}");
+    assert_eq!(
+        codes,
+        ["ingest.launcher_db_not_consulted", "ingest.game_version_unverified"],
+        "{j:#}"
+    );
 }
 
 #[test]

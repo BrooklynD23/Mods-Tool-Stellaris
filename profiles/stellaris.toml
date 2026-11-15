@@ -154,6 +154,10 @@ source  = "launcher-settings.json"
 source_dir = "install"
 fields  = ["rawVersion", "version"]
 pattern = "wildcard_dotted"    # 3.13.*
+# Game versions this profile's data was checked against (wildcard patterns). A scan warns
+# (`ingest.game_version_unverified`) when the installed version falls outside, or cannot
+# be read. NOT empirically verified (docs/VERIFY.md); widen only after a probe pass.
+verified_range = ["4.*"]
 # The set of supported_version wildcard shapes occurring in the wild is unresolved
 # (docs/VERIFY.md § Version). Best resolved by scraping workshop descriptors, not by a
 # probe mod. Until then the parser should accept unknown shapes rather than reject them.

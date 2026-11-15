@@ -18,24 +18,30 @@ stellaris-mod-doctor/
 │   ├── smd-fs/                 # paths, Steam discovery, VFS, hashing
 │   ├── smd-profiles/           # GameProfile trait + TOML loader + shipped profiles
 │   ├── smd-ingest/             # mod discovery, descriptors, load-order sources
-│   ├── smd-parse/              # lexers, parser registry, fact emission
+│   ├── (smd-parse/)            # planned (M2): lexers, parser registry, fact emission
 │   ├── smd-index/              # overlay, symbol table, resolver, cache
 │   ├── smd-rules/              # rule engine + one file per rule
-│   ├── smd-policy/             # scoring, severity bands, explanation catalogue
+│   ├── (smd-policy/)           # planned (M5): scoring, severity bands, explanation catalogue
 │   ├── smd-report/             # renderers: json, markdown, html, table
 │   ├── smd-engine/             # orchestration: the pipeline + job supervisor
 │   ├── smd-api/                # stable command/query surface + TS type export
-│   ├── smd-testkit/            # fixture builders, synthetic corpus generator
+│   ├── (smd-testkit/)          # planned: fixture builders, synthetic corpus generator
 │   ├── smd-cli/                # [bin] thin adapter
-│   ├── smd-gui/                # [bin] Tauri shell, thin adapter
-│   └── smd-py/                 # optional PyO3 binding (feature-gated, not in default)
+│   ├── (smd-gui/)              # planned (M7): [bin] Tauri shell, thin adapter
+│   └── (smd-py/)               # planned: optional PyO3 binding (feature-gated, not in default)
 ├── ui/                         # Svelte front-end, built into smd-gui
 ├── profiles/                   # shipped game profile data (TOML)
 ├── policy/                     # shipped scoring + explanation data (TOML)
 └── docs/
 ```
 
-Fifteen crates; fourteen in a default build, since `smd-py` is feature-gated out.
+Parenthesised crates are **planned, not yet crates**: the five 12-line stubs
+(`smd-parse`, `smd-policy`, `smd-testkit`, `smd-gui`, `smd-py`) were deleted because
+nothing depended on them and they only guarded layer positions that `layers.toml`
+records on arrival. Ten crates exist today (plus `xtask`). The design below is the
+target: each planned crate is re-added, with its `layers.toml` entry, at the milestone
+named in `15-roadmap.md`. Fifteen crates at full build-out; fourteen in a default build,
+since `smd-py` is feature-gated out.
 
 The count is deliberate in both directions, because "modular" and "many crates" are not
 the same property and the brief asked for the first. The requirement is about files and
@@ -58,14 +64,14 @@ separation, at the boundary that costs nothing.
 | `smd-fs` | OS path resolution, `libraryfolders.vdf`, path normalisation, `blake3` hashing | Know what Stellaris is |
 | `smd-profiles` | `GameProfile` trait, TOML schema, `stellaris.toml`, `SourceSpec` names + config, per-profile `FeatureTag` declarations | Contain analysis logic; name or construct a load-order *implementation* |
 | `smd-ingest` | `.mod`/`descriptor.mod` parsing, workshop scan, the name→impl registry of `LoadOrderSource`s | Parse mod *content* |
-| `smd-parse` | Lexers for PDX script and localisation, `FileParser` registry, dispatch by `FileKind`, fact emission | Know about traits, civics, or any game concept; store anything |
+| `smd-parse` *(planned, M2)* | Lexers for PDX script and localisation, `FileParser` registry, dispatch by `FileKind`, fact emission | Know about traits, civics, or any game concept; store anything |
 | `smd-index` | Overlay table, symbol table, reverse indices, resolver, interners, on-disk cache | Interpret meaning or assign risk |
 | `smd-rules` | `Rule` trait, engine, one rule per file, per-rule `evidence()` and `cases()` | Format output, hardcode a score, or name a game |
-| `smd-policy` | Id resolution into `ResolvedFinding`, weights, bands, explanation strings, suppressions | Detect anything |
+| `smd-policy` *(planned, M5)* | Id resolution into `ResolvedFinding`, weights, bands, explanation strings, suppressions | Detect anything |
 | `smd-report` | `Renderer` trait + impls over `ResolvedFinding` | Compute findings; depend on anything but `smd-core` |
 | `smd-engine` | Stage wiring, the thread pool, channels, cancellation, progress, error collection | Contain domain rules |
 | `smd-api` | `Command`/`Query`/`Event` enums, serde + TS export | Be imported by anything below it |
-| `smd-testkit` | Fixture builders, synthetic corpus generator | Appear in a non-dev dependency of a shipping crate |
+| `smd-testkit` *(planned)* | Fixture builders, synthetic corpus generator | Appear in a non-dev dependency of a shipping crate |
 
 The two most important lines in that table: **`smd-rules` never assigns a number**, and
 **`smd-index` never assigns a meaning.** Detection, valuation, and presentation are three

@@ -81,5 +81,6 @@ pub fn locate_report(o: LocateOutput) -> LocateReport {
         mods: o.mods.into_iter().map(located_mod).collect(),
         diagnostics: o.diagnostics.into_iter().map(diagnostic).collect(),
         incomplete: o.incomplete,
+        game_version: o.game_version,
     }
 }

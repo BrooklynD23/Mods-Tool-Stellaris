@@ -21,9 +21,11 @@ mod locations;
 mod profile;
 #[cfg(test)]
 mod tests;
+mod version;
 
 pub use locations::{Locations, Stores, expand};
 pub use profile::{Profile, ProfileError, ReplacePathScope};
+pub use version::{VersionSpec, parse_game_version, parse_pattern};
 
 #[cfg(feature = "profile-stellaris")]
 const SHIPPED_DEFAULT: &str = include_str!("../../../profiles/stellaris.toml");

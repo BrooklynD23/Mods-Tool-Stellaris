@@ -19,12 +19,9 @@ smd-engine = { path = "crates/smd-engine" }
 smd-fs = { path = "crates/smd-fs" }
 smd-index = { path = "crates/smd-index" }
 smd-ingest = { path = "crates/smd-ingest" }
-smd-parse = { path = "crates/smd-parse" }
-smd-policy = { path = "crates/smd-policy" }
 smd-profiles = { path = "crates/smd-profiles" }
 smd-report = { path = "crates/smd-report" }
 smd-rules = { path = "crates/smd-rules" }
-smd-testkit = { path = "crates/smd-testkit" }
 
 bitflags = "2.13"
 blake3 = "1.8"
