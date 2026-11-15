@@ -38,7 +38,8 @@ pub struct ScanRequest {
     pub game_dir: PathBuf,
     /// The user directory: the launcher files, `dlc_load.json`, local mods.
     pub user_dir: PathBuf,
-    /// Workshop content roots. At most one is supported for now.
+    /// Workshop content roots, one per Steam library that has one. Repeats of the same
+    /// directory are read once.
     pub workshop_dirs: Vec<PathBuf>,
     /// Bounds on each source's walk.
     pub limits: WalkLimits,

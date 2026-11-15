@@ -8,8 +8,8 @@ use std::collections::BTreeSet;
 use smd_core::{DiagSeverity, ModKey, ResolvedFinding, ResolvedLocations};
 use smd_index::{IndexBuilder, OverlayRules, ReplacePathScope, ScanIndex};
 use smd_ingest::{
-    DiscoveryOptions, Inventory, KEY_INSTALL, KEY_USER_DIR, KEY_WORKSHOP, OrderChain,
-    SourceOptions, inventory,
+    DiscoveryOptions, Inventory, KEY_INSTALL, KEY_USER_DIR, OrderChain, SourceOptions, inventory,
+    workshop_key,
 };
 use smd_profiles::Profile;
 use smd_rules::{Rule, RuleCtx, run_all};
@@ -71,9 +71,6 @@ fn cancelled(req: &ScanRequest) -> Result<(), ScanError> {
 }
 
 fn locations(req: &ScanRequest) -> Result<ResolvedLocations, ScanError> {
-    if req.workshop_dirs.len() > 1 {
-        return Err(ScanError::Unsupported("more than one workshop directory"));
-    }
     let check = |role: &'static str, path: &std::path::Path| {
         smd_fs::ReadOnlyRoot::open(path).map(|_| ()).map_err(|e| ScanError::RootUnreadable {
             role,
@@ -86,9 +83,13 @@ fn locations(req: &ScanRequest) -> Result<ResolvedLocations, ScanError> {
     let mut loc = ResolvedLocations::new();
     loc.insert(KEY_INSTALL, req.game_dir.clone());
     loc.insert(KEY_USER_DIR, req.user_dir.clone());
+    let mut distinct: Vec<&std::path::PathBuf> = Vec::new();
     for ws in &req.workshop_dirs {
         check("workshop", ws)?;
-        loc.insert(KEY_WORKSHOP, ws.clone());
+        if !distinct.iter().any(|d| smd_fs::same_host_dir(d, ws)) {
+            distinct.push(ws);
+            loc.insert(&workshop_key(distinct.len() - 1), ws.clone());
+        }
     }
     Ok(loc)
 }

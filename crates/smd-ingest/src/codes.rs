@@ -81,3 +81,11 @@ impl IngestDiagnostic {
 
 /// A profile named a load-order source this build does not have.
 pub const UNKNOWN_ORDER_SOURCE: &str = "ingest.unknown_order_source";
+
+/// Location discovery found nothing for a location; the diagnostic's subject is its key
+/// (`game_dir`, `user_dir`, `workshop_dir`).
+pub const LOCATE_UNRESOLVED: &str = "locate.unresolved";
+/// A flag or environment variable names a directory that does not exist.
+pub const LOCATE_OVERRIDE_MISSING: &str = "locate.override_missing";
+/// `libraryfolders.vdf` or an `appmanifest` is over a cap, malformed, or unreadable.
+pub const LOCATE_VDF_INVALID: &str = "locate.vdf_invalid";

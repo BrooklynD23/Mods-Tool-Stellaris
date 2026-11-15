@@ -23,8 +23,19 @@ pub(crate) use keys::VANILLA_KEY;
 pub const KEY_INSTALL: &str = "install";
 /// The user data directory, holding `mod/`, `dlc_load.json` and `launcher-v2.sqlite`.
 pub const KEY_USER_DIR: &str = "user_dir";
-/// A workshop content directory (one subdirectory per subscribed mod).
+/// A workshop content directory (one subdirectory per subscribed mod). A second and later
+/// root is keyed [`workshop_key`]`(n)`, so one `ResolvedLocations` can carry any number.
 pub const KEY_WORKSHOP: &str = "workshop";
+
+/// The location key of the `n`th workshop root: `workshop`, `workshop.1`, `workshop.2`...
+#[must_use]
+pub fn workshop_key(n: usize) -> String {
+    if n == 0 { KEY_WORKSHOP.to_owned() } else { format!("{KEY_WORKSHOP}.{n}") }
+}
+
+fn is_workshop_key(key: &str) -> bool {
+    key == KEY_WORKSHOP || key.strip_prefix("workshop.").is_some_and(|n| n.parse::<usize>().is_ok())
+}
 /// The launcher-descriptor subdirectory of the user directory.
 pub const MODS_SUBDIR: &str = "mod";
 
@@ -145,7 +156,13 @@ pub fn discover(loc: &ResolvedLocations, opts: &DiscoveryOptions) -> Discovery {
     let mut sink = candidate::Sink::default();
     let install = existing(loc, KEY_INSTALL, &mut sink);
     let user_dir = existing(loc, KEY_USER_DIR, &mut sink);
-    let workshop = existing(loc, KEY_WORKSHOP, &mut sink);
+    let mut workshops: Vec<PathBuf> = Vec::new();
+    for (key, _) in loc.iter().filter(|(k, _)| is_workshop_key(k)) {
+        let found = existing(loc, key, &mut sink);
+        // The same directory given twice (two spellings, two flags) is read once.
+        let dup = |w: &PathBuf, f: &PathBuf| smd_fs::same_host_dir(w, f);
+        workshops.extend(found.filter(|f| !workshops.iter().any(|w| dup(w, f))));
+    }
     let mut protected: Vec<PathBuf> = opts.home_dir().into_iter().collect();
     protected.extend(loc.iter().map(|(_, p)| p.to_path_buf()));
     protected.extend(user_dir.iter().map(|u| u.join(MODS_SUBDIR)));
@@ -154,7 +171,7 @@ pub fn discover(loc: &ResolvedLocations, opts: &DiscoveryOptions) -> Discovery {
     if let Some(user) = &user_dir {
         raws = candidate::user_mods(&candidate::Ctx { guard: &guard, user_dir: user }, &mut sink);
     }
-    if let Some(ws) = &workshop {
+    for ws in &workshops {
         let ws_canon = std::fs::canonicalize(ws).unwrap_or_else(|_| ws.clone());
         // A launcher file that was rejected or refused still names a workshop directory
         // (or its `ugc_<id>` name does); that directory is the same mod, not another.

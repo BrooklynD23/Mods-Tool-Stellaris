@@ -130,8 +130,8 @@ function Get-LocateInfo {
     try {
         $ErrorActionPreference = 'Continue'   # native stderr must not become a terminating error on 5.1
         Set-Utf8Console
-        $lines = & $ExePath locate --format json 2>$null
-        if ($LASTEXITCODE -ne 0) { return $null }
+        $lines = & $ExePath locate --format json --no-redact 2>$null
+        if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 3) { return $null }   # 3 = finished with an Error diagnostic
         $j = ($lines -join "`n") | ConvertFrom-Json
         if (-not $j.PSObject.Properties['schema'] -or $j.schema -ne 1) { return $null }
         return $j
