@@ -25,7 +25,7 @@
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('Menu', 'Detect', 'Mods', 'Saves', 'Scan', 'Report', 'ErrorLog', 'Setup', 'Build')]
+    [ValidateSet('Menu', 'Detect', 'Paths', 'Mods', 'Saves', 'Scan', 'Report', 'ErrorLog', 'Setup', 'Build', 'Rebuild', 'Run', 'Test', 'Help')]
     [string]$Action = 'Menu',
     [string]$GameDir,
     [string]$UserDir,
@@ -229,7 +229,8 @@ function Find-UserDir {
 }
 
 function Get-GameVersion([string]$Game) {
-    if (-not $Game) { return $null }
+    # Test-Path first: Join-Path throws DriveNotFound for a typed path on a missing drive.
+    if (-not $Game -or -not (Test-Path -LiteralPath $Game)) { return $null }
     $settings = Join-Path $Game 'launcher-settings.json'
     if (-not (Test-Path $settings)) { return $null }
     try {
@@ -657,6 +658,75 @@ function Show-Menu {
     }
 }
 
+# ---------------------------------------------------------------- dev.bat actions
+# dev.bat passes its arguments straight through (the first one binds to -Action), so
+# every dev.bat command is an -Action here and cmd.exe never re-parses a path.
+
+function Show-DevHelp {
+    Write-Host 'usage: dev.bat [command] [options]'
+    Write-Host ''
+    Write-Host '  run       build, list every installed mod, save and open reports\latest.md (default)'
+    Write-Host '  menu      interactive menu'
+    Write-Host '  paths     show the detected game, user and workshop folders'
+    Write-Host '  mods      list every installed mod and where it came from'
+    Write-Host '  scan      scan and print the conflict table here'
+    Write-Host '  report    save a report (-Format md|json, -OutFile <path>)'
+    Write-Host '  saves     list save games'
+    Write-Host '  errorlog  show the game''s last error log'
+    Write-Host '  setup     check / install Rust and the VS C++ Build Tools'
+    Write-Host '  rebuild   force a release build of smd'
+    Write-Host '  test      developer gate: fmt, tests, clippy, xtask lint'
+    Write-Host ''
+    Write-Host 'options: -GameDir <p> -UserDir <p> -WorkshopDir <p> -Format table|json|md -OutFile <p> -NoRedact -Rebuild'
+    Write-Host 'example: dev.bat scan -NoRedact -GameDir "D:\Games\Stellaris"'
+}
+
+# Build, list mods, write reports\latest.<ext> in the repo and open it. Returns the exit code.
+function Invoke-DevRun {
+    Write-Title 'Step 1 of 3: build smd'
+    if (-not (Invoke-Build -Force:$Rebuild)) { return 1 }
+    $P = Resolve-Paths   # again: a fresh build lets `smd locate` do the detection
+    Write-Title 'Step 2 of 3: every installed mod'
+    Show-Mods $P
+    $fmt = if ($Format -eq 'json') { 'json' } else { 'md' }
+    if (-not $OutFile) {
+        $dir = Join-Path $RepoRoot 'reports'
+        if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir | Out-Null }
+        $script:OutFile = Join-Path $dir "latest.$fmt"
+    }
+    # A failed scan must never leave the previous report behind to be opened.
+    if (Test-Path $OutFile) { Remove-Item -LiteralPath $OutFile -Force }
+    Write-Title 'Step 3 of 3: conflict report'
+    $code = Invoke-Report $P $fmt
+    if (Test-Path $OutFile) { Start-Process notepad.exe -ArgumentList "`"$OutFile`"" }
+    else { Write-Bad "No report was written (exit code $code). The messages above say why." }
+    return $code
+}
+
+# fmt, test, clippy, xtask lint; stops at the first failure. Returns the exit code.
+function Invoke-DevTest {
+    Update-SessionPath
+    if (-not (Test-Cargo)) { Write-Bad 'cargo not found. Run "dev.bat setup" first.'; return 1 }
+    $steps = @(
+        @('fmt', '--all', '--check'),
+        @('test', '--workspace'),
+        @('clippy', '--workspace', '--all-targets', '--', '-D', 'warnings'),
+        @('xtask', 'lint')
+    )
+    Push-Location $RepoRoot
+    try {
+        foreach ($s in $steps) {
+            Write-Title ('cargo ' + ($s -join ' '))
+            & cargo @s | Out-Host   # keep test output off the return value
+            if ($LASTEXITCODE -ne 0) { Write-Bad "cargo $($s[0]) failed (exit $LASTEXITCODE)."; return $LASTEXITCODE }
+        }
+    } finally {
+        Pop-Location
+    }
+    Write-Ok 'Every gate passed.'
+    return 0
+}
+
 # ---------------------------------------------------------------- entry point
 
 Update-SessionPath
@@ -669,11 +739,16 @@ $paths = Resolve-Paths
 switch ($Action) {
     'Menu' { Show-Detection $paths; Show-Menu }
     'Detect' { Show-Detection $paths }
+    'Paths' { Show-Detection $paths }
     'Mods' { Show-Mods $paths }
     'Saves' { Show-Saves $paths }
     'ErrorLog' { Show-ErrorLog $paths }
     'Setup' { if (-not (Invoke-Setup)) { exit 1 } }
     'Build' { if (-not (Invoke-Build -Force)) { exit 1 } }
+    'Rebuild' { if (-not (Invoke-Build -Force)) { exit 1 } }
+    'Run' { exit (Invoke-DevRun) }
+    'Test' { exit (Invoke-DevTest) }
+    'Help' { Show-DevHelp }
     'Scan' { exit (Invoke-Scan $paths $Format) }
     'Report' { exit (Invoke-Report $paths $Format) }
 }
