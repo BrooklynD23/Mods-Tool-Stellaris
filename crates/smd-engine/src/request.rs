@@ -1,10 +1,35 @@
 //! What a scan is asked to do, and why it can refuse.
 
+use std::fmt;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use smd_fs::WalkLimits;
 use smd_profiles::ProfileError;
 use smd_rules::CancellationToken;
+
+/// One source about to be walked.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Progress {
+    /// 1-based position of this source among the sources that will be walked.
+    pub index: usize,
+    /// How many sources will be walked.
+    pub total: usize,
+    /// The source's key.
+    pub key: String,
+    /// The source's display name, when it has one.
+    pub name: String,
+}
+
+/// A progress callback, called once per source before it is walked.
+#[derive(Clone)]
+pub struct ProgressFn(pub Arc<dyn Fn(Progress) + Send + Sync>);
+
+impl fmt::Debug for ProgressFn {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("ProgressFn")
+    }
+}
 
 /// One scan: where the install, the user directory and the workshop are, and its bounds.
 #[derive(Clone, Debug)]
@@ -23,6 +48,8 @@ pub struct ScanRequest {
     /// The home directory discovery must never treat as a mod root. `None` reads
     /// `HOME` / `USERPROFILE`.
     pub home: Option<PathBuf>,
+    /// Called once per walked source, in walk order. Never affects the output.
+    pub progress: Option<ProgressFn>,
 }
 
 impl ScanRequest {
@@ -37,6 +64,7 @@ impl ScanRequest {
             limits: WalkLimits::default(),
             cancel: CancellationToken::new(),
             home: None,
+            progress: None,
         }
     }
 }

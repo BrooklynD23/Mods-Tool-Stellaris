@@ -188,3 +188,24 @@ fn an_ordinary_oversize_file_still_makes_the_scan_incomplete() {
     let n: u32 = out.completeness.unparsed.iter().map(|(_, n)| *n).sum();
     assert_eq!(n, 2, "a vanilla script and a mod's archive-shaped file both count");
 }
+
+#[test]
+fn progress_fires_once_per_walked_source_in_order() {
+    use std::sync::{Arc, Mutex};
+    let w = World::new();
+    w.vanilla("common/defines/00_a.txt", "a = 1");
+    w.mod_with("111", "Mod 111", &[("common/x.txt", "x = 1")]);
+    w.mod_with("222", "Mod 222", &[("common/y.txt", "y = 1")]);
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let sink = Arc::clone(&seen);
+    let mut req = w.request();
+    req.progress = Some(crate::ProgressFn(Arc::new(move |p| sink.lock().unwrap().push(p))));
+    let with = scan(&req).expect("scans");
+    let seen = seen.lock().unwrap();
+    assert!(seen.len() >= 3, "{seen:?}");
+    for (i, p) in seen.iter().enumerate() {
+        assert_eq!((p.index, p.total), (i + 1, seen.len()), "{seen:?}");
+    }
+    req.progress = None;
+    assert_eq!(with.diagnostics, scan(&req).expect("scans").diagnostics);
+}

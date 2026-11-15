@@ -20,7 +20,8 @@ use smd_core::{PlaysetProvenance, ResolvedFinding, ScanCompleteness};
 use smd_engine::ScanOutput;
 
 pub use smd_engine::{
-    CancellationToken, ModRow, ScanDiagnostic, ScanError, ScanRequest, WalkLimits,
+    CancellationToken, ModRow, Progress, ProgressFn, ScanDiagnostic, ScanError, ScanRequest,
+    WalkLimits,
 };
 
 /// Something the engine can be asked to do.

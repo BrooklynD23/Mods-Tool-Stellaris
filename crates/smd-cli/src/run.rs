@@ -1,8 +1,9 @@
 //! Running a command line: parse, scan, render, exit code.
 
-use std::io::Write;
+use std::io::{IsTerminal, Write};
+use std::sync::Arc;
 
-use smd_api::{Command, Outcome, ScanRequest};
+use smd_api::{Command, Outcome, ProgressFn, ScanRequest};
 use smd_core::DiagSeverity;
 use smd_report::{
     Caps, DiagnosticRow, DiagnosticsFormat, Json, Markdown, RedactionContext, RenderOptions,
@@ -33,12 +34,16 @@ const USAGE_ERROR: i32 = 2;
 
 /// Run `smd` with `argv` (the arguments after the program name). Returns the exit code.
 pub fn run(argv: &[String], env: &Env, out: &mut dyn Write, err: &mut dyn Write) -> i32 {
-    match args::parse(argv) {
+    // `--progress` is handled here so the scan argument parser stays untouched.
+    let forced = argv.iter().any(|a| a == "--progress");
+    let argv: Vec<String> = argv.iter().filter(|a| *a != "--progress").cloned().collect();
+    let progress = forced || std::io::stderr().is_terminal();
+    match args::parse(&argv) {
         Ok(Parsed::Help) => {
             let _ = writeln!(out, "{USAGE}");
             OK
         }
-        Ok(Parsed::Scan(a)) => scan(&a, env, out, err),
+        Ok(Parsed::Scan(a)) => scan(&a, (env, progress), out, err),
         Err(msg) => {
             let _ = writeln!(err, "smd: {msg}\n\n{USAGE}");
             USAGE_ERROR
@@ -46,9 +51,21 @@ pub fn run(argv: &[String], env: &Env, out: &mut dyn Write, err: &mut dyn Write)
     }
 }
 
-fn scan(a: &ScanArgs, env: &Env, out: &mut dyn Write, err: &mut dyn Write) -> i32 {
+fn scan(
+    a: &ScanArgs,
+    (env, progress): (&Env, bool),
+    out: &mut dyn Write,
+    err: &mut dyn Write,
+) -> i32 {
     let mut req = ScanRequest::new(a.game_dir.clone(), a.user_dir.clone());
     req.workshop_dirs.clone_from(&a.workshop_dirs);
+    if progress {
+        // Straight to the process stderr: the callback must be `Send + Sync`, `err` is not.
+        req.progress = Some(ProgressFn(Arc::new(|p| {
+            let label = if p.name.is_empty() { &p.key } else { &p.name };
+            eprintln!("[{}/{}] {label}", p.index, p.total);
+        })));
+    }
     let outcome = match smd_api::execute(Command::Scan(req)) {
         Ok(Outcome::Scan(o)) => o,
         Err(e) => {
