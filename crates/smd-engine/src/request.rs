@@ -51,6 +51,10 @@ pub struct ScanRequest {
     pub home: Option<PathBuf>,
     /// Called once per walked source, in walk order. Never affects the output.
     pub progress: Option<ProgressFn>,
+    /// The caller located these roots and could not find all of them (for example no
+    /// workshop under a Steam install). Absence of a mod is then not "not installed", so
+    /// the scan is marked discovery-incomplete.
+    pub locations_incomplete: bool,
 }
 
 impl ScanRequest {
@@ -66,6 +70,7 @@ impl ScanRequest {
             cancel: CancellationToken::new(),
             home: None,
             progress: None,
+            locations_incomplete: false,
         }
     }
 }

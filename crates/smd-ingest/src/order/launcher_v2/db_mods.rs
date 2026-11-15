@@ -21,7 +21,7 @@ impl LauncherV2Sqlite {
         let (mut temp, mut build, mut diags) = (None, String::new(), Vec::new());
         match self.read(loc, &mut temp, &mut build, &mut diags) {
             Ok(loaded) => DbMods::Rows(loaded.verified.rows.mods),
-            Err(None) => DbMods::NotConsulted(format!("{} is not there", super::FILE)),
+            Err(None) => DbMods::NotConsulted("the file is not there".to_owned()),
             Err(Some(f)) => DbMods::NotConsulted(format!(
                 "step {} failed on path {}: {}",
                 f.fail.step, f.path, f.fail.detail

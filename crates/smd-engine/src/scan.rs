@@ -39,6 +39,7 @@ pub fn scan(req: &ScanRequest) -> Result<ScanOutput, ScanError> {
     diags.extend(walked.diagnostics);
     let mut completeness = inv.completeness.clone();
     absorb(&mut completeness, walked.completeness);
+    completeness.discovery_incomplete |= req.locations_incomplete;
     let index = build_index(&inv, &profile, walked.inputs);
     let incomplete: BTreeSet<ModKey> =
         completeness.content_incomplete.iter().map(|(k, _, _)| k.clone()).collect();

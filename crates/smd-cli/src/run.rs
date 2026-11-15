@@ -110,7 +110,8 @@ fn locate(c: &Common, env: &Env, out: &mut dyn Write, err: &mut dyn Write) -> i3
     emit(out, err, &text, had_error)
 }
 
-type Roots = (PathBuf, PathBuf, Vec<PathBuf>);
+/// Game dir, user dir, workshop dirs, and whether locating them left a gap.
+type Roots = (PathBuf, PathBuf, Vec<PathBuf>, bool);
 
 /// The game, user and workshop directories a scan reads. Given both `--game-dir` and
 /// `--user-dir`, nothing is searched for; otherwise whatever is missing is located, and a
@@ -118,7 +119,7 @@ type Roots = (PathBuf, PathBuf, Vec<PathBuf>);
 fn resolve(c: &Common, env: &Env, err: &mut dyn Write) -> Result<Roots, i32> {
     check_given_dirs(c, env, err)?;
     if let (Some(g), Some(u)) = (&c.game_dir, &c.user_dir) {
-        return Ok((g.clone(), u.clone(), c.workshop_dirs.clone()));
+        return Ok((g.clone(), u.clone(), c.workshop_dirs.clone(), false));
     }
     let found = locate_output(c).map_err(|e| fail(c, env, err, "smd.locate_failed", &e))?;
     let (game, user) = (found.located.game_dir.clone(), found.located.user_dir.clone());
@@ -131,7 +132,7 @@ fn resolve(c: &Common, env: &Env, err: &mut dyn Write) -> Result<Roots, i32> {
         (Some(g), Some(u)) => {
             // A mistyped override falls through to a search; say so instead of staying quiet.
             warn_rows(c, env, err, &diagnostic_rows(&found));
-            Ok((g, u, workshops))
+            Ok((g, u, workshops, found.incomplete))
         }
         _ => {
             let rows = unresolved_rows(&found);
@@ -209,12 +210,13 @@ fn check_given_dirs(c: &Common, env: &Env, err: &mut dyn Write) -> Result<(), i3
 }
 
 fn scan(a: &ScanArgs, env: &Env, out: &mut dyn Write, err: &mut dyn Write) -> i32 {
-    let (game, user, workshops) = match resolve(&a.common, env, err) {
+    let (game, user, workshops, gap) = match resolve(&a.common, env, err) {
         Ok(roots) => roots,
         Err(code) => return code,
     };
     let mut req = ScanRequest::new(game, user);
     req.workshop_dirs = workshops;
+    req.locations_incomplete = gap;
     if a.progress || std::io::stderr().is_terminal() {
         // Straight to the process stderr: the callback must be `Send + Sync`, `err` is not.
         req.progress = Some(ProgressFn(Arc::new(|p| {

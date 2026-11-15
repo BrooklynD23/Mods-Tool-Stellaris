@@ -251,3 +251,14 @@ fn incomplete_discovery_is_a_flag_not_a_mod_and_lowers_every_finding() {
     assert!(!out.inventory.iter().any(|m| m.mod_key.contains("discovery")));
     assert_eq!(out.findings[0].certainty.completeness, Completeness::Partial);
 }
+
+#[test]
+fn a_location_gap_from_the_caller_marks_discovery_incomplete() {
+    let w = three();
+    w.dlc_load(&["111", "222", "333"]);
+    let mut req = w.request();
+    req.locations_incomplete = true;
+    let out = scan(&req).expect("scans");
+    assert!(out.completeness.discovery_incomplete);
+    assert_eq!(out.findings[0].certainty.completeness, Completeness::Partial);
+}
