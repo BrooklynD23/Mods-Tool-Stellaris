@@ -12,7 +12,8 @@ pub(crate) const VANILLA_KEY: &str = "vanilla";
 /// A stable hash of the fields that identify a mod when it has no workshop id.
 ///
 /// Deliberately not the descriptor's `path=`, which is machine-specific for a mod that
-/// moved between drives: the key must survive a move.
+/// moved between drives: the key must survive a move. Nor its `version`: a version bump
+/// must not re-key the mod and orphan whatever was recorded against the old key.
 pub(super) fn hashed(desc: &Descriptor, dir_name: &str, tag: &str) -> ModKey {
     let mut h = blake3::Hasher::new();
     let mut field = |s: &str| {
@@ -22,17 +23,60 @@ pub(super) fn hashed(desc: &Descriptor, dir_name: &str, tag: &str) -> ModKey {
     field(tag);
     field(dir_name);
     field(&desc.name);
-    field(desc.version.as_deref().unwrap_or(""));
     let archive = desc.archive.as_deref().and_then(|a| a.file_name());
     field(&archive.map(|a| a.to_string_lossy().into_owned()).unwrap_or_default());
     let hex = h.finalize().to_hex();
     ModKey(format!("h-{}", &hex.as_str()[..32]).into())
 }
 
-/// The key a descriptor derives: its workshop id when it has one, else a hash.
-pub(super) fn derive(desc: &Descriptor, dir_name: &str, trusted: bool) -> ModKey {
-    match desc.remote_file_id.as_deref() {
-        Some(id) if trusted && !id.is_empty() => ModKey(id.into()),
+/// Which platform an id belongs to. Ids from different platforms may collide as numbers,
+/// so a key always carries its platform: `steam:<id>`, `pdx:<id>`, or `h-<hash>`.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub(super) enum Provider {
+    Steam,
+    Paradox,
+}
+
+impl Provider {
+    fn key(self, id: &str) -> ModKey {
+        let prefix = match self {
+            Provider::Steam => "steam",
+            Provider::Paradox => "pdx",
+        };
+        ModKey(format!("{prefix}:{id}").into())
+    }
+}
+
+/// Which platform a launcher `*.mod` file's descriptor id belongs to.
+///
+/// Rule (doc 05, "Mod sources and origin"), strongest evidence first: a launcher database
+/// row (`steamId` is Steam, else `pdxId` is Paradox; decided in `launcher_db`), the `pdx_`
+/// / `ugc_` mod-file name prefix, a workshop directory (Steam). With none of those the id
+/// is read as Steam-compatible, `steam:<id>`: never `pdx:` without evidence, so a Paradox
+/// id can neither be mistaken for a Steam one nor collide with it.
+pub(super) fn provider_of_file(file: &str) -> Provider {
+    if file.get(..4).is_some_and(|p| p.eq_ignore_ascii_case("pdx_")) {
+        Provider::Paradox
+    } else {
+        Provider::Steam
+    }
+}
+
+/// An id with the platform that issued it.
+pub(super) type PlatformId = (Provider, Box<str>);
+
+/// The key a candidate derives: its platform id when it has one (explicit evidence, else
+/// the descriptor's id read as Steam), else a hash.
+pub(super) fn derive(
+    ids: Option<&PlatformId>,
+    desc: &Descriptor,
+    dir_name: &str,
+    trusted: bool,
+) -> ModKey {
+    let from_desc = || desc.remote_file_id.as_deref().map(|id| (Provider::Steam, id));
+    let explicit = ids.map(|(p, id)| (*p, id.as_ref()));
+    match explicit.or_else(|| trusted.then(from_desc).flatten()) {
+        Some((p, id)) if !id.is_empty() => p.key(id),
         _ => hashed(desc, dir_name, if trusted { "d" } else { "unread" }),
     }
 }

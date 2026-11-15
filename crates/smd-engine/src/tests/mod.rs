@@ -54,10 +54,10 @@ fn h21_inactive_sources_are_not_participants() {
         .filter(|m| m.activation == Activation::Inactive)
         .map(|m| m.mod_key.as_str())
         .collect();
-    assert_eq!(inactive, ["222"]);
+    assert_eq!(inactive, ["steam:222"]);
     assert_eq!(out.findings.len(), 1);
     let keys: Vec<&str> = out.findings[0].participants.iter().map(|p| p.mod_key.as_str()).collect();
-    assert_eq!(keys, ["111", "333"]);
+    assert_eq!(keys, ["steam:111", "steam:333"]);
 }
 
 #[test]
@@ -67,7 +67,7 @@ fn h12_certainty_is_computed_from_provenance_and_gaps() {
     let out = scan(&w.request()).expect("scans");
     let f = &out.findings[0];
     let winner = f.participants.iter().find(|p| p.role == Role::Winner).expect("a stated winner");
-    assert_eq!(winner.mod_key.as_str(), "333", "the last in dlc_load.json wins the file");
+    assert_eq!(winner.mod_key.as_str(), "steam:333", "the last in dlc_load.json wins the file");
     assert_eq!(f.certainty.activation, ActivationCertainty::Inferred);
     assert_eq!(f.certainty.order, Confidence::Inferred);
     assert_eq!(f.certainty.completeness, Completeness::Complete);
@@ -155,8 +155,8 @@ fn several_workshop_roots_are_scanned_and_a_repeated_root_is_read_once() {
     let out = scan(&req).expect("scans");
     let mut keys: Vec<&str> = out.inventory.iter().map(|m| m.mod_key.as_str()).collect();
     keys.sort_unstable();
-    keys.retain(|k| k.len() == 3);
-    assert_eq!(keys, ["111", "222", "333", "444"]);
+    keys.retain(|k| k.starts_with("steam:"));
+    assert_eq!(keys, ["steam:111", "steam:222", "steam:333", "steam:444"]);
     assert_eq!(out.findings.len(), 1);
     assert_eq!(out.findings[0].participants.len(), 4);
 }

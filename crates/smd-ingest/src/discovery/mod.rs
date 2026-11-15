@@ -5,10 +5,13 @@
 //! location; OS-default and Steam-library discovery are the resolver's job.
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use smd_core::{Descriptor, Diagnostic, ModKey, ResolvedLocations, SourceRole};
 
 use crate::codes::{self, IngestDiagnostic};
+use crate::order::LauncherV2Sqlite;
+use crate::order::launcher_v2::LauncherRead;
 
 mod candidate;
 mod keys;
@@ -130,6 +133,8 @@ pub struct Discovery {
     /// link, special file or bound kept an entry out. Absence from `mods` is then not
     /// "not installed".
     pub incomplete: bool,
+    /// The scan's one read of the launcher database, shared with the order chain.
+    pub(crate) launcher: Option<Arc<LauncherRead>>,
 }
 
 fn existing(loc: &ResolvedLocations, key: &str, sink: &mut candidate::Sink) -> Option<PathBuf> {
@@ -149,7 +154,10 @@ fn existing(loc: &ResolvedLocations, key: &str, sink: &mut candidate::Sink) -> O
 /// by the id it names or by the `ugc_<id>.mod` convention.
 fn workshop_claims(raw: &candidate::Raw, ws: &Path) -> Vec<PathBuf> {
     let mut ids: Vec<String> = Vec::new();
-    ids.extend(raw.descriptor.remote_file_id.as_deref().map(str::to_owned));
+    // A Paradox Mods id is not a workshop directory name.
+    if raw.role != SourceRole::ParadoxMods {
+        ids.extend(raw.descriptor.remote_file_id.as_deref().map(str::to_owned));
+    }
     if let Some(id) = raw.dir_name.strip_prefix("ugc_") {
         ids.push(id.to_owned());
     }
@@ -162,6 +170,18 @@ fn workshop_claims(raw: &candidate::Raw, ws: &Path) -> Vec<PathBuf> {
 /// Discover every mod under the given locations.
 #[must_use]
 pub fn discover(loc: &ResolvedLocations, opts: &DiscoveryOptions) -> Discovery {
+    discover_with_launcher(loc, opts, &LauncherV2Sqlite::default())
+}
+
+/// As [`discover`], reading the launcher database through `launcher` (its options and test
+/// hooks). That one read is kept on the result and reused by the order chain.
+#[must_use]
+pub fn discover_with_launcher(
+    loc: &ResolvedLocations,
+    opts: &DiscoveryOptions,
+    launcher: &LauncherV2Sqlite,
+) -> Discovery {
+    let mut launcher_read = None;
     let mut sink = candidate::Sink::default();
     let install = existing(loc, KEY_INSTALL, &mut sink);
     let user_dir = existing(loc, KEY_USER_DIR, &mut sink);
@@ -200,7 +220,9 @@ pub fn discover(loc: &ResolvedLocations, opts: &DiscoveryOptions) -> Discovery {
                 .flat_map(|r| r.content_root.iter().chain(&r.source_path).cloned())
                 .collect();
             raws.extend(unregistered::unregistered(user, &claimed, &mut sink));
-            raws.extend(launcher_db::db_only_mods(loc, user, &guard, &raws, &mut sink));
+            let read = Arc::new(launcher.read_once(loc));
+            raws.extend(launcher_db::db_only_mods(&read, user, &guard, &raws, &mut sink));
+            launcher_read = Some(read);
         }
         None => {
             let why = "there is no user directory, so mods only the launcher registers were not looked for";
@@ -210,7 +232,7 @@ pub fn discover(loc: &ResolvedLocations, opts: &DiscoveryOptions) -> Discovery {
     }
     let candidate::Sink { mut diags, incomplete } = sink;
     let mods = finish(raws, &mut diags);
-    Discovery { install, mods, diagnostics: diags, incomplete }
+    Discovery { install, mods, diagnostics: diags, incomplete, launcher: launcher_read }
 }
 
 /// Key every candidate (in the fixed order they were found), then sort by key bytes.
@@ -220,7 +242,7 @@ fn finish(raws: Vec<candidate::Raw>, diags: &mut Vec<IngestDiagnostic>) -> Vec<D
     for r in raws {
         let trusted = r.content != ContentState::Unread(UnreadReason::DescriptorInvalid)
             && r.content != ContentState::Unread(UnreadReason::DescriptorUnreadable);
-        let derived = keys::derive(&r.descriptor, &r.dir_name, trusted);
+        let derived = keys::derive(r.ids.as_ref(), &r.descriptor, &r.dir_name, trusted);
         let (key, dup) = claims.claim(derived, &r.descriptor, &r.dir_name);
         diags.extend(dup);
         let name: Box<str> = if r.descriptor.name.is_empty() {
@@ -248,5 +270,7 @@ fn finish(raws: Vec<candidate::Raw>, diags: &mut Vec<IngestDiagnostic>) -> Vec<D
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_identity;
 #[cfg(test)]
 mod tests_sources;

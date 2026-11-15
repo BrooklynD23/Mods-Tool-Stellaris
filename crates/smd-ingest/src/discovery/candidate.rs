@@ -9,6 +9,7 @@ use smd_core::{
 };
 use smd_fs::ReadOnlyRoot;
 
+use super::keys;
 use super::listing::{self, Entry, Kind};
 use super::refuse::Guard;
 use super::{ContentState, ModOrigin, UnreadReason};
@@ -29,6 +30,9 @@ pub(super) struct Raw {
     /// The resolved `path=`/`archive=` (or directory/file) this mod stands for, readable
     /// or not. What other sources compare against to say "already found".
     pub source_path: Option<PathBuf>,
+    /// A platform id established by evidence stronger than the descriptor (a launcher row,
+    /// a `pdx_` file name). `None`: the descriptor's id, if any, is read as Steam.
+    pub ids: Option<keys::PlatformId>,
 }
 
 /// Where a descriptor is resolved from, and what it must not swallow.
@@ -89,6 +93,7 @@ pub(super) fn unread(dir_name: &str, mod_file: Option<&str>, why: UnreadReason) 
         content: ContentState::Unread(why),
         origin: ModOrigin::ModFile,
         source_path: None,
+        ids: None,
     }
 }
 
@@ -159,6 +164,9 @@ fn one_mod_file(
         SourceRole::Workshop => DescriptorSource::Workshop,
         _ => DescriptorSource::Local,
     };
+    let ids = (role == SourceRole::ParadoxMods)
+        .then(|| desc.remote_file_id.clone().map(|id| (keys::Provider::Paradox, id)))
+        .flatten();
     let descriptor = Descriptor { source, ..desc };
     Raw {
         descriptor,
@@ -170,6 +178,7 @@ fn one_mod_file(
         content,
         origin: ModOrigin::ModFile,
         source_path,
+        ids,
     }
 }
 
@@ -188,7 +197,11 @@ fn locate(ctx: &Ctx<'_>, desc: &Descriptor, subject: &str, sink: &mut Sink) -> R
     let role = if archive_only {
         SourceRole::Archive
     } else if desc.remote_file_id.is_some() {
-        SourceRole::Workshop
+        // The file name is the evidence (see `keys::provider_of_file`); none: Steam.
+        match keys::provider_of_file(subject) {
+            keys::Provider::Paradox => SourceRole::ParadoxMods,
+            keys::Provider::Steam => SourceRole::Workshop,
+        }
     } else {
         SourceRole::Local
     };

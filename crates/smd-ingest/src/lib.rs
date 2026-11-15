@@ -25,7 +25,8 @@ pub use codes::IngestDiagnostic;
 pub use descriptor::{DEPTH_MAX, FILE_MAX, KeyValuesReader, LIST_MAX, READER_ID, VALUE_MAX};
 pub use discovery::{
     ContentState, DiscoveredMod, Discovery, DiscoveryOptions, KEY_INSTALL, KEY_USER_DIR,
-    KEY_WORKSHOP, MODS_SUBDIR, ModOrigin, UnreadReason, discover, workshop_key,
+    KEY_WORKSHOP, MODS_SUBDIR, ModOrigin, UnreadReason, discover, discover_with_launcher,
+    workshop_key,
 };
 pub use game_version::{GameVersionCheck, check_game_version};
 pub use inventory::{Inventory, ModRecord, inventory};

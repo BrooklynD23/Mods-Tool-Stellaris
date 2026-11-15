@@ -70,6 +70,17 @@ impl World {
         dir
     }
 
+    /// A Paradox Mods-style mod: a `pdx_<id>.mod` launcher file with a `remote_file_id` and
+    /// a content dir under `mod/`.
+    pub(crate) fn paradox_mod(&self, id: &str, name: &str) -> PathBuf {
+        let dir = self.user.join("mod").join(format!("pdx_dir_{id}"));
+        fs::create_dir_all(&dir).expect("mkdir pdx");
+        let body =
+            format!("name=\"{name}\"\npath=\"{}\"\nremote_file_id=\"{id}\"\n", dir.display());
+        self.mod_file(&format!("pdx_{id}"), &body);
+        dir
+    }
+
     pub(crate) fn write_user(&self, file: &str, bytes: &[u8]) -> PathBuf {
         let p = self.user.join(file);
         fs::write(&p, bytes).expect("write user file");

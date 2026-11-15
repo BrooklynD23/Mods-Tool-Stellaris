@@ -32,7 +32,7 @@ pub(super) fn world_with(kind: PosKind, ids: &[&str]) -> (World, Launcher) {
 }
 
 pub(super) fn order(p: &Playset) -> Vec<&str> {
-    p.entries.iter().map(|e| e.key.as_str()).collect()
+    p.entries.iter().map(|e| e.key.as_str().trim_start_matches("steam:")).collect()
 }
 
 pub(super) fn codes_of(run: &LauncherRun) -> Vec<&'static str> {

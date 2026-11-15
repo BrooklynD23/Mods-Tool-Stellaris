@@ -65,14 +65,25 @@ one is still missing. The machine (OS, env vars, registry, drive roots) is injec
 against every mod's resolved `path=`/`archive=`. A launcher row's `dirPath`/`archivePath` is
 untrusted exactly like a descriptor's `path=` and goes through the same refuse guard
 (`ingest.root_refused`). Rows come from the launcher reader's verified read-only snapshot,
-never the live file. If the database is absent, unreadable or fails verification, discovery
+never the live file. The snapshot is read once per scan: discovery keeps it on `Discovery`
+and the order chain's launcher source reuses it (test hooks reach that one read). If the database is absent, unreadable or fails verification, discovery
 is **not** marked incomplete for that alone, but the report carries warn
 `ingest.launcher_db_not_consulted` with the reason: mods only the launcher registers were
 not looked for.
 
+**Platform of an id (`ModKey`, `SourceRole`).** A descriptor's `remote_file_id` is a Steam id
+or a Paradox Mods id; the key carries the platform (`steam:<id>`, `pdx:<id>`) so the two
+never collide. Decided from the strongest evidence available: (1) a launcher row: `steamId`
+is Steam, else `pdxId` is Paradox (`SourceRole::ParadoxMods`); (2) the `*.mod` file name:
+`pdx_<id>` is Paradox, `ugc_<id>` Steam; (3) a workshop directory is Steam. With none of
+these the id is read as Steam-compatible (`steam:<id>`, role `Workshop`): never `pdx:`
+without evidence. A mod with no id is keyed `h-<hash>` (name, directory name, archive file
+name; not `version`, not `path=`).
+
 Playset entries join to mods by, in order: `gameRegistryId` (its file name is the `*.mod`
-file), `steamId`, `pdxId` (both against `remote_file_id`; `pdxId` is an assumption), then
-`dirPath`/`archivePath` by path identity. An entry matching nothing is counted in
+file), `steamId` (against `steam:` ids), `pdxId` (against `pdx:` ids; `pdxId` is an
+assumption, so a Paradox mod with no `pdx_`/row evidence is `steam:`-keyed and found by
+`dirPath` instead), then `dirPath`/`archivePath` by path identity. An entry matching nothing is counted in
 `Playset::unmatched`; while it is non-zero a discovered mod missing from the playset is
 `Unknown`, not `Inactive`. Real launcher column contents are unverified (VERIFY V03).
 

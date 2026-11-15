@@ -32,8 +32,8 @@ fn some(s: &str) -> Option<String> {
 fn every_key_joins_alone() {
     let idents = [
         ident(Some("a.mod"), None, &[]),
-        ident(None, Some("200"), &[]),
-        ident(None, Some("300"), &[]),
+        ident(None, Some("steam:200"), &[]),
+        ident(None, Some("pdx:300"), &[]),
         ident(None, None, &["/m/dir"]),
         ident(None, None, &["/m/z.zip"]),
     ];
@@ -57,7 +57,7 @@ fn every_key_joins_alone() {
 fn precedence_is_registry_then_steam_then_pdx_then_path() {
     let idents = [
         ident(None, None, &["/m/dir"]),
-        ident(None, Some("7"), &[]),
+        ident(None, Some("steam:7"), &[]),
         ident(Some("a.mod"), None, &[]),
     ];
     let all = row(|r| {
@@ -86,12 +86,14 @@ fn a_launcher_path_matches_across_spelling_and_a_relative_one_against_the_user_d
     assert_eq!(join::find(&elsewhere, &idents, &w.user), None);
 }
 
-/// A world with a launcher file `alpha.mod` (dir under `mod/`), a workshop mod `2001`,
+/// A world with a launcher file `alpha.mod` (dir under `mod/`), a workshop mod `2001`, a
+/// Paradox Mods mod `3001`,
 /// and an archive mod `zipped.mod` -> `mod/zipped.zip`.
 fn world() -> (World, PathBuf, PathBuf, PathBuf) {
     let w = World::new();
     let alpha = w.local_mod("alpha", "Alpha");
     let ws = w.workshop_mod("2001", "Beta");
+    w.paradox_mod("3001", "Gamma");
     let zip = w.user.join("mod").join("zipped.zip");
     fs::write(&zip, b"PK").unwrap();
     w.mod_file("zipped", "name=\"Zipped\"\narchive=\"mod/zipped.zip\"\n");
@@ -109,7 +111,7 @@ fn a_playset_entry_is_placed_by_each_key_end_to_end() {
     let cols: [&[(&str, &str)]; 6] = [
         &[("gameRegistryId", "mod/alpha.mod")],
         &[("steamId", "2001")],
-        &[("pdxId", "2001")],
+        &[("pdxId", "3001")],
         &[("dirPath", &alpha)],
         &[("dirPath", &ws)],
         &[("archivePath", &zip)],

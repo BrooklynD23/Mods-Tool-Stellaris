@@ -11,7 +11,11 @@ fn activation_of(w: &World, key: &str) -> Activation {
     let chain =
         OrderChain::standard(&SourceOptions { discovery: w.options(), ..SourceOptions::default() });
     let inv = inventory(&w.locations(), &chain, &w.options());
-    let (_, meta) = inv.table.iter().find(|(_, m)| m.key.as_str() == key).expect("in the table");
+    let (_, meta) = inv
+        .table
+        .iter()
+        .find(|(_, m)| m.key.as_str().trim_start_matches("steam:") == key)
+        .expect("in the table");
     meta.activation
 }
 

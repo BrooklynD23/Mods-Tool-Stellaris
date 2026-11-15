@@ -106,11 +106,11 @@ pub fn stdout(o: &Output) -> String {
 pub fn seeded(w: &World) -> Vec<(String, &'static str)> {
     let ids = ["1001", "1002", "1003", "1004", "1005", "1006"];
     let seeds: [(&str, &[&str], &str); 5] = [
-        ("common/traits/c0.txt", &["1001", "1002"], "1002"),
-        ("common/traits/c1.txt", &["1002", "1003"], "1003"),
-        ("common/traits/c2.txt", &["1003", "1004"], "1004"),
-        ("common/traits/c3.txt", &["1004", "1005"], "1005"),
-        ("common/traits/c4.txt", &["1001", "1003", "1005"], "1005"),
+        ("common/traits/c0.txt", &["1001", "1002"], "steam:1002"),
+        ("common/traits/c1.txt", &["1002", "1003"], "steam:1003"),
+        ("common/traits/c2.txt", &["1003", "1004"], "steam:1004"),
+        ("common/traits/c3.txt", &["1004", "1005"], "steam:1005"),
+        ("common/traits/c4.txt", &["1001", "1003", "1005"], "steam:1005"),
     ];
     for id in ids {
         let mut files: Vec<(String, String)> = (0..5)

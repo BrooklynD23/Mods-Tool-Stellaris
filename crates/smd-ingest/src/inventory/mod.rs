@@ -15,7 +15,10 @@ use smd_core::{
 use crate::codes::IngestDiagnostic;
 use crate::discovery::{UNASSIGNED, VANILLA_KEY};
 use crate::order::OrderChain;
-use crate::{ContentState, DiscoveredMod, Discovery, DiscoveryOptions, UnreadReason, discover};
+use crate::{
+    ContentState, DiscoveredMod, Discovery, DiscoveryOptions, UnreadReason, discover,
+    discover_with_launcher,
+};
 
 /// What ingest knows about one source beyond its [`SourceMeta`].
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -157,7 +160,10 @@ pub fn inventory(
     chain: &OrderChain,
     opts: &DiscoveryOptions,
 ) -> Inventory {
-    let found = discover(loc, opts);
+    let found = match chain.launcher() {
+        Some(l) => discover_with_launcher(loc, opts, l),
+        None => discover(loc, opts),
+    };
     let outcome = chain.run_with(loc, &found);
     let (v_meta, v_record) = vanilla(found.install.as_ref());
     let mut metas = vec![v_meta];

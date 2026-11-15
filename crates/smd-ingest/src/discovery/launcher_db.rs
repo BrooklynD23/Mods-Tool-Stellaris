@@ -1,16 +1,17 @@
 //! Mods only the launcher database knows: `mods` rows no other source already found
 //! (Paradox Mods downloads, mods registered from arbitrary folders).
 //!
-//! The rows come through the launcher reader's verified read-only snapshot; the live file
-//! is never opened here. A row's path is untrusted exactly as a descriptor's `path=` is: it
+//! The rows come from the scan's one launcher read (a verified read-only snapshot); the
+//! live file is never opened here. A row's path is untrusted exactly as a descriptor's `path=` is: it
 //! goes through the same refuse [`Guard`].
 
 use std::path::Path;
 
-use smd_core::{DescriptorSource, ResolvedLocations, SourceRole};
+use smd_core::{DescriptorSource, SourceRole};
 use smd_fs::ReadOnlyRoot;
 
 use super::candidate::{Raw, Sink, unread};
+use super::keys::Provider;
 use super::refuse::Guard;
 use super::workshop::dir_mod;
 use super::{ContentState, ModOrigin, UnreadReason};
@@ -18,18 +19,18 @@ use crate::codes::{self, IngestDiagnostic};
 use crate::order::launcher_v2::db_mods::DbMods;
 use crate::order::launcher_v2::join::{self, Ident};
 use crate::order::launcher_v2::rows::ModRow;
-use crate::order::launcher_v2::{FILE, LauncherV2Sqlite};
+use crate::order::launcher_v2::{FILE, LauncherRead};
 
 /// Every launcher row not already found, as a candidate. `found` is what the other sources
 /// found. Without a readable database the scan goes on, and says it did not look.
 pub(super) fn db_only_mods(
-    loc: &ResolvedLocations,
+    read: &LauncherRead,
     user_dir: &Path,
     guard: &Guard,
     found: &[Raw],
     sink: &mut Sink,
 ) -> Vec<Raw> {
-    let rows = match LauncherV2Sqlite::default().db_mods(loc) {
+    let rows = match read.db_mods() {
         DbMods::Rows(rows) => rows,
         DbMods::NotConsulted(why) => {
             let why = format!("{why}; mods only the launcher registers were not looked for");
@@ -39,7 +40,7 @@ pub(super) fn db_only_mods(
     };
     let mut idents: Vec<Ident> = found.iter().map(ident).collect();
     let mut out: Vec<Raw> = Vec::new();
-    for row in &rows {
+    for row in rows {
         if join::find(row, &idents, user_dir).is_some() {
             continue;
         }
@@ -50,10 +51,19 @@ pub(super) fn db_only_mods(
     out
 }
 
+/// The namespaced id a candidate stands for, as the join compares it.
+fn remote_ref(r: &Raw) -> Option<String> {
+    let (provider, id) = match &r.ids {
+        Some((p, id)) => (*p, id.as_ref()),
+        None => (Provider::Steam, r.descriptor.remote_file_id.as_deref()?),
+    };
+    Some(join::remote(provider == Provider::Paradox, id))
+}
+
 fn ident(r: &Raw) -> Ident {
     Ident {
         mod_file: r.mod_file.as_deref().map(str::to_owned),
-        remote_id: r.descriptor.remote_file_id.as_deref().map(str::to_owned),
+        remote_id: remote_ref(r),
         paths: r.content_root.iter().chain(&r.source_path).cloned().collect(),
     }
 }
@@ -76,9 +86,18 @@ fn one_row(row: &ModRow, user_dir: &Path, guard: &Guard, sink: &mut Sink) -> Opt
         }
     };
     raw.origin = ModOrigin::LauncherDbOnly;
+    // Evidence for the platform, strongest first (see `keys::provider_of_file`): the row's
+    // `steamId`, then its `pdxId`, then the descriptor's id read as Steam.
+    raw.ids = match (&row.steam_id, &row.pdx_id) {
+        (Some(id), _) => Some((Provider::Steam, id.as_str().into())),
+        (None, Some(id)) => Some((Provider::Paradox, id.as_str().into())),
+        (None, None) => None,
+    };
     raw.role = if archive_only {
         SourceRole::Archive
-    } else if row.steam_id.is_some() || raw.descriptor.remote_file_id.is_some() {
+    } else if matches!(raw.ids, Some((Provider::Paradox, _))) {
+        SourceRole::ParadoxMods
+    } else if raw.ids.is_some() || raw.descriptor.remote_file_id.is_some() {
         SourceRole::Workshop
     } else {
         SourceRole::Local
