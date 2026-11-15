@@ -293,3 +293,14 @@ fn workshop_flags_replace_the_search_and_are_deduplicated() {
     assert_eq!(got.workshop_dirs, [w]);
     assert!(got.diagnostics.iter().any(|d| d.code == codes::LOCATE_OVERRIDE_MISSING));
 }
+
+#[test]
+#[cfg(unix)]
+fn a_linked_directory_is_listed_once() {
+    let fx = Fx::new();
+    let real = fx.dir("real");
+    std::os::unix::fs::symlink(&real, fx.root.join("link")).unwrap();
+    let mut libs = vec![fx.root.join("link")];
+    push_unique(&mut libs, real);
+    assert_eq!(libs, [fx.root.join("link")]);
+}

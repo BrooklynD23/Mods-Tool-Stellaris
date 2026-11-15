@@ -51,7 +51,7 @@ impl Run<'_> {
     /// The OS template, then the profile's extra candidates. `{DOCUMENTS}` is `Registry`
     /// when the registry named it, else `Default`.
     fn user_dir_templates(&mut self) -> Option<PathBuf> {
-        let docs = smd_fs::documents_dir(self.env);
+        let docs = smd_fs::documents_dirs(self.env);
         let mut templates: Vec<String> = self
             .profile
             .locations()
@@ -62,14 +62,22 @@ impl Run<'_> {
             .collect();
         templates.extend(self.profile.stores().extra_user_dirs.clone());
         for t in templates {
-            let origin = match (&docs, t.contains("{DOCUMENTS}")) {
-                (Some((_, o)), true) => *o,
-                _ => Origin::Default,
+            // A template that names Documents is tried once per Documents candidate
+            // (registry first, then the profile folder); any other is tried once.
+            let bases: Vec<Option<(PathBuf, Origin)>> = if t.contains("{DOCUMENTS}") {
+                docs.iter().cloned().map(Some).collect()
+            } else {
+                vec![None]
             };
-            let path = self.expand_path(&t, docs.as_ref().map(|(p, _)| p.as_path()), None);
-            if let Some(p) = path {
-                if self.try_dir("user_dir", p.clone(), origin) {
-                    return Some(p);
+            for base in bases {
+                let (dir, origin) = match &base {
+                    Some((p, o)) => (Some(p.as_path()), *o),
+                    None => (None, Origin::Default),
+                };
+                if let Some(p) = self.expand_path(&t, dir, None) {
+                    if self.try_dir("user_dir", p.clone(), origin) {
+                        return Some(p);
+                    }
                 }
             }
         }

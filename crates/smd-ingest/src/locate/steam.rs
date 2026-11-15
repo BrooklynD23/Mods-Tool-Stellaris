@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use smd_fs::{Origin, VDF_FILE_MAX, parse_library_folders};
 
-use super::{Run, push_unique};
+use super::{Run, contains_dir, push_unique};
 use crate::codes::{self, IngestDiagnostic};
 
 /// Read a text file of at most [`VDF_FILE_MAX`] bytes (one more is read so that an
@@ -28,7 +28,7 @@ impl Run<'_> {
         let mut libs: Vec<PathBuf> = Vec::new();
         for (root, origin) in smd_fs::steam_roots(self.env) {
             let exists = self.try_dir("steam_root", root.clone(), origin);
-            if !exists || libs.iter().any(|l| smd_fs::same_host_dir(l, &root)) {
+            if !exists || contains_dir(&libs, &root) {
                 continue;
             }
             push_unique(&mut libs, root.clone());

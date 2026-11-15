@@ -85,6 +85,12 @@ pub const UNKNOWN_ORDER_SOURCE: &str = "ingest.unknown_order_source";
 /// Location discovery found nothing for a location; the diagnostic's subject is its key
 /// (`game_dir`, `user_dir`, `workshop_dir`).
 pub const LOCATE_UNRESOLVED: &str = "locate.unresolved";
+/// Discovery ran without a user directory, or (for a Steam or unattributed install)
+/// without any workshop directory, so "no mods" cannot be stated as fact.
+pub const LOCATE_INCOMPLETE: &str = "locate.incomplete";
+/// A drive letter did not answer within the probe timeout (an offline mapped drive) and
+/// was skipped, so an install on it could have been missed.
+pub const LOCATE_DRIVE_SLOW: &str = "locate.drive_slow";
 /// A flag or environment variable names a directory that does not exist.
 pub const LOCATE_OVERRIDE_MISSING: &str = "locate.override_missing";
 /// `libraryfolders.vdf` or an `appmanifest` is over a cap, malformed, or unreadable.

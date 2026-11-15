@@ -131,7 +131,14 @@ impl Run<'_> {
 
     fn xbox_game(&mut self) -> Option<PathBuf> {
         let rel = self.profile.stores().xbox_install.clone()?;
-        for drive in self.env.drive_roots() {
+        // Reached only when no Steam or installer entry matched, so the probe is a last resort.
+        let drives = self.env.drive_roots();
+        for slow in &drives.slow {
+            let why = format!("{} did not answer in time and was skipped", slow.display());
+            let subject = slow.display().to_string();
+            self.diags.push(IngestDiagnostic::warn(codes::LOCATE_DRIVE_SLOW, &subject, why));
+        }
+        for drive in drives.roots {
             let path = drive.join(&rel);
             let ok = self.has_game(&path);
             self.record("game_dir", path.clone(), Origin::Default, ok);

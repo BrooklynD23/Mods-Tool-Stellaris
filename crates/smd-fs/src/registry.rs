@@ -1,45 +1,16 @@
-//! Windows registry reads without `unsafe`: run `reg.exe query` and parse its text.
-//!
-//! The parser is pure and tested on every platform. [`query`] spawns the process on
-//! Windows and answers nothing elsewhere. Read-only: `query` is the only verb used.
+//! Windows registry reads without `unsafe`, through Microsoft's `windows-registry` crate
+//! (no subprocess, so no OEM-codepage decoding, PATH lookup or hang). [`query`] answers
+//! nothing off Windows. Read-only.
 
-/// One value as `reg.exe query` prints it.
+/// One registry value.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct RegValue {
     /// The key it lives under, e.g. `HKEY_CURRENT_USER\Software\Valve\Steam`.
     pub key: String,
     /// The value name.
     pub name: String,
-    /// The data, unexpanded (`REG_EXPAND_SZ` keeps its `%VARS%`).
+    /// The data; `REG_EXPAND_SZ` is already expanded.
     pub data: String,
-}
-
-/// Parse `reg.exe query` output into its values.
-///
-/// A line that starts in column 0 with `HK` opens a key; an indented
-/// `<name>    REG_<type>    <data>` line is a value of the open key. Anything else
-/// (blank lines, `End of search`, errors) is skipped.
-#[must_use]
-pub fn parse_reg_output(output: &str) -> Vec<RegValue> {
-    let mut key = String::new();
-    let mut out = Vec::new();
-    for line in output.lines().map(|l| l.trim_end_matches('\r')) {
-        if line.starts_with("HK") {
-            key = line.trim().to_owned();
-            continue;
-        }
-        let Some(at) = line.find("    REG_").filter(|&at| at > 0 && line.starts_with(' ')) else {
-            continue;
-        };
-        let rest = &line[at + 4..];
-        let (_ty, data) = rest.split_once(char::is_whitespace).unwrap_or((rest, ""));
-        out.push(RegValue {
-            key: key.clone(),
-            name: line[..at].trim().to_owned(),
-            data: data.trim().to_owned(),
-        });
-    }
-    out
 }
 
 /// Expand `%NAME%` references with `var`. An unknown name is left as written.
@@ -71,25 +42,61 @@ pub fn expand_percent_vars(s: &str, var: &dyn Fn(&str) -> Option<String>) -> Str
     out
 }
 
-/// `reg.exe query <key> [/v <value>] [/s]`; empty off Windows or when the call fails.
+/// The values under `key` (`HKCU\\...` / `HKLM\\...`), optionally just `value`, optionally
+/// the whole subtree; empty off Windows or when nothing reads. Never writes.
 #[cfg(windows)]
 #[must_use]
 pub fn query(key: &str, value: Option<&str>, recursive: bool) -> Vec<RegValue> {
-    let mut cmd = std::process::Command::new("reg.exe");
-    cmd.arg("query").arg(key);
-    if let Some(v) = value {
-        cmd.arg("/v").arg(v);
+    let mut out = Vec::new();
+    walk(key, value, if recursive { MAX_DEPTH } else { 0 }, &mut out);
+    out
+}
+
+/// Subkey levels walked below the start key; an uninstall root needs one.
+#[cfg(windows)]
+const MAX_DEPTH: u32 = 3;
+
+#[cfg(windows)]
+fn open_key(key: &str) -> Option<windows_registry::Key> {
+    let (root, sub) = key.split_once('\\').unwrap_or((key, ""));
+    let hive = match root.to_ascii_uppercase().as_str() {
+        "HKCU" | "HKEY_CURRENT_USER" => windows_registry::CURRENT_USER,
+        "HKLM" | "HKEY_LOCAL_MACHINE" => windows_registry::LOCAL_MACHINE,
+        _ => return None,
+    };
+    hive.open(sub).ok()
+}
+
+/// A string value as text; `REG_EXPAND_SZ` has its `%VARS%` expanded from the
+/// environment. Anything that is not text, or not valid UTF-16, is absent.
+#[cfg(windows)]
+fn text_of(v: windows_registry::Value) -> Option<String> {
+    let expand = v.ty() == windows_registry::Type::ExpandString;
+    let s = String::try_from(v).ok()?;
+    Some(if expand { expand_percent_vars(&s, &|n| std::env::var(n).ok()) } else { s })
+}
+
+#[cfg(windows)]
+fn walk(key: &str, value: Option<&str>, depth: u32, out: &mut Vec<RegValue>) {
+    let Some(open) = open_key(key) else { return };
+    let mut found: Vec<(String, windows_registry::Value)> = Vec::new();
+    match value {
+        Some(n) => found.extend(open.get_value(n).ok().map(|v| (n.to_owned(), v))),
+        None => found.extend(open.values().into_iter().flatten()),
     }
-    if recursive {
-        cmd.arg("/s");
+    for (name, v) in found {
+        if let Some(data) = text_of(v) {
+            out.push(RegValue { key: key.to_owned(), name, data });
+        }
     }
-    match cmd.output() {
-        Ok(o) if o.status.success() => parse_reg_output(&String::from_utf8_lossy(&o.stdout)),
-        _ => Vec::new(),
+    if depth > 0 {
+        for sub in open.keys().into_iter().flatten() {
+            walk(&format!("{key}\\{sub}"), value, depth - 1, out);
+        }
     }
 }
 
-/// `reg.exe query` exists only on Windows.
+/// The registry exists only on Windows.
 #[cfg(not(windows))]
 #[must_use]
 pub fn query(_key: &str, _value: Option<&str>, _recursive: bool) -> Vec<RegValue> {
@@ -99,40 +106,6 @@ pub fn query(_key: &str, _value: Option<&str>, _recursive: bool) -> Vec<RegValue
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    const OUT: &str = "\r\nHKEY_CURRENT_USER\\Software\\Valve\\Steam\r\n    SteamPath    REG_SZ    c:/program files (x86)/steam\r\n    Language    REG_SZ    english\r\n\r\nEnd of search: 2 match(es) found.\r\n";
-
-    #[test]
-    fn values_parse_with_spaces_in_data() {
-        let v = parse_reg_output(OUT);
-        assert_eq!(v.len(), 2);
-        assert_eq!(v[0].key, r"HKEY_CURRENT_USER\Software\Valve\Steam");
-        assert_eq!(v[0].name, "SteamPath");
-        assert_eq!(v[0].data, "c:/program files (x86)/steam");
-    }
-
-    #[test]
-    fn recursive_output_keeps_each_values_key() {
-        let t = "HKLM\\A\\One\n    DisplayName    REG_SZ    Some Game\nHKLM\\A\\Two\n    DisplayName    REG_SZ    Other\n";
-        let v = parse_reg_output(t);
-        assert_eq!((v[0].key.as_str(), v[0].data.as_str()), (r"HKLM\A\One", "Some Game"));
-        assert_eq!((v[1].key.as_str(), v[1].data.as_str()), (r"HKLM\A\Two", "Other"));
-    }
-
-    #[test]
-    fn errors_and_junk_yield_nothing() {
-        assert!(parse_reg_output("ERROR: The system was unable to find the key.").is_empty());
-        assert!(parse_reg_output("").is_empty());
-        assert!(parse_reg_output("    REG_SZ only").is_empty());
-    }
-
-    #[test]
-    fn empty_data_and_expand_sz() {
-        let t = "HKCU\\X\n    Personal    REG_EXPAND_SZ    %USERPROFILE%\\Documents\n    E    REG_SZ    \n";
-        let v = parse_reg_output(t);
-        assert_eq!(v[0].data, r"%USERPROFILE%\Documents");
-        assert_eq!(v[1].data, "");
-    }
 
     #[test]
     fn percent_vars_expand_and_unknowns_stay() {
