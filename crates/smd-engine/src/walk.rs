@@ -5,11 +5,14 @@ use smd_core::{
     Activation, ContentIncompleteReason, ModKey, ParseCompleteness, ScanCompleteness, SourceRole,
     UnparsedReason,
 };
+use std::collections::HashSet;
+
 use smd_fs::ReadOnlyRoot;
 use smd_index::{FileRecord, SourceInput};
 use smd_ingest::{ContentState, Inventory, ModRecord};
 use smd_profiles::Profile;
 
+use crate::hash_pass::hash_contended;
 use crate::output::ScanDiagnostic;
 use crate::request::{Progress, ScanError, ScanRequest};
 use crate::rows;
@@ -39,7 +42,8 @@ pub(crate) fn absorb(total: &mut ScanCompleteness, part: ScanCompleteness) {
 
 /// Walk each source that is not `Inactive` and has a readable content root, in `SourceId`
 /// order, checking the cancellation token before each. Vanilla is walked from the
-/// installed tree like any other source; no profile data stands in for it.
+/// installed tree like any other source; no profile data stands in for it. The walk is
+/// stat-only; a second pass then hashes just the paths two or more sources ship.
 pub(crate) fn walk_sources(
     inv: &Inventory,
     profile: &Profile,
@@ -65,6 +69,7 @@ pub(crate) fn walk_sources(
         })
         .collect();
     let total = todo.len();
+    let (mut parts, mut metas) = (Vec::new(), Vec::new());
     for (i, (rec, root, vanilla)) in todo.into_iter().enumerate() {
         if req.cancel.is_cancelled() {
             return Err(ScanError::Cancelled);
@@ -74,9 +79,19 @@ pub(crate) fn walk_sources(
             (cb.0)(Progress { index: i + 1, total, key: rec.key.as_str().to_owned(), name });
         }
         match ReadOnlyRoot::open(root) {
-            Ok(handle) => walk_one(&mut w, rec, &handle, (profile, vanilla), req),
+            Ok(handle) => {
+                let outcome = handle.walk(&req.limits);
+                parts.push((handle, outcome));
+                metas.push((rec, vanilla));
+            }
             Err(e) => unopened(&mut w, &rec.key, &e),
         }
+    }
+    let benign = |p: &str| profile.is_benign(p);
+    let cancelled = || req.cancel.is_cancelled();
+    hash_contended(&mut parts, &req.limits, &benign, &cancelled).ok_or(ScanError::Cancelled)?;
+    for ((_, outcome), (rec, vanilla)) in parts.into_iter().zip(metas) {
+        finish_one(&mut w, rec, outcome, (profile, vanilla));
     }
     Ok(w)
 }
@@ -100,32 +115,32 @@ pub(crate) const ASSET_ARCHIVE_UNREAD: &str = "scan.asset_archive_unread";
 /// Vanilla's over-cap files that the profile declares asset-only archives are stood down
 /// from `Unparsed(Oversize)`, so they stay out of the incompleteness count, and their
 /// diagnostics are re-coded rather than dropped. A mod's oversize file is never stood down.
-fn stand_down_asset_archives(outcome: &mut smd_fs::WalkOutcome, p: &Profile) -> Vec<String> {
-    let mut paths = Vec::new();
+fn stand_down_asset_archives(outcome: &mut smd_fs::WalkOutcome, p: &Profile) -> HashSet<String> {
+    let mut paths = HashSet::new();
     for f in &mut outcome.records {
         let over = f.completeness == ParseCompleteness::Unparsed(UnparsedReason::Oversize);
         if over && p.is_asset_archive(f.path.as_str()) {
             f.completeness = ParseCompleteness::NotApplicable;
-            paths.push(f.path.as_str().to_owned());
+            paths.insert(f.path.as_str().to_owned());
         }
     }
     paths
 }
 
-fn walk_one(
+fn finish_one(
     w: &mut Walked,
     rec: &ModRecord,
-    root: &ReadOnlyRoot,
+    mut outcome: smd_fs::WalkOutcome,
     (p, vanilla): (&Profile, bool),
-    r: &ScanRequest,
 ) {
-    let mut outcome = root.walk(&r.limits);
-    let archives = if vanilla { stand_down_asset_archives(&mut outcome, p) } else { Vec::new() };
+    let archives: HashSet<String> =
+        if vanilla { stand_down_asset_archives(&mut outcome, p) } else { HashSet::new() };
     absorb(&mut w.completeness, outcome.completeness(&rec.key));
     w.diagnostics.extend(outcome.diagnostics.iter().map(|d| {
         let mut row = rows::from_fs(rec.key.as_str(), d);
         let declared = d.code == smd_fs::codes::LIMIT_EXCEEDED
-            && archives.iter().any(|a| *a == d.path.to_lowercase());
+            && !archives.is_empty()
+            && archives.contains(&d.path.to_lowercase());
         if declared {
             row.code = ASSET_ARCHIVE_UNREAD.to_owned();
             row.detail = format!(
@@ -139,7 +154,7 @@ fn walk_one(
     // overlay contributions: a shared `descriptor.mod` is not a conflict.
     let records = outcome
         .records
-        .iter()
+        .into_iter()
         .filter(|f| !p.is_benign(f.path.as_str()))
         .map(FileRecord::from)
         .collect();

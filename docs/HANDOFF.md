@@ -80,6 +80,14 @@ Reuse its shape for the next wave, with the corrected model routing.
   (`game_version` JSON field, schema 1 additive). `verified_range = ["4.*"]` is a guess,
   not an observation.
 
+## Perf change on `perf/lazy-hash`
+
+The walk no longer hashes every file. `ReadOnlyRoot::walk` is stat-only; the engine then
+hashes only paths shipped by two or more sources (`smd-engine/src/hash_pass.rs`, doc 12
+"Lazy content hashing"). An oversize or unreadable file at a path only one source ships
+no longer makes that source incomplete, and raises no diagnostic. Item 5 below (24
+oversize files) should shrink accordingly; re-run the 71-mod scan natively to confirm.
+
 ## Next steps, in order
 
 Windows-first. Each item names its gate.
@@ -87,8 +95,11 @@ Windows-first. Each item names its gate.
 1. **H22, Windows half of the secure walk.** This is the top priority now that Windows
    is the target. `crates/smd-fs/src/sys_other.rs` is type-checked only:
    - no final-path check on the opened handle;
-   - no reparse-tag allow-list (junctions, symlinks, OneDrive cloud placeholders: list
-     them, never hydrate them);
+   - reparse handling is now attribute-based (`smd-fs/src/winattrs.rs`, unit-tested on
+     Linux): symlinks and junctions are refused; dedup and hydrated placeholder files
+     are regular; offline placeholders are listed, never read, `fs.cloud_placeholder`.
+     The exact reparse tag still needs `unsafe`, so unknown tags are not distinguished.
+     Unverified on real Windows;
    - mapped network drives are treated as local, because detecting them needs
      `GetDriveTypeW`, which needs `unsafe`, and the crate forbids it. Decide on a
      reviewed exception.

@@ -23,6 +23,7 @@ mod root;
 mod steam_vdf;
 mod sys;
 mod walk;
+mod winattrs;
 
 pub use hashing::hash_reader;
 pub use host::{

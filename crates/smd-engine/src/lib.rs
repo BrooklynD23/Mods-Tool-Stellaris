@@ -19,6 +19,7 @@
 #![forbid(unsafe_code)]
 
 mod certainty;
+mod hash_pass;
 mod locate;
 mod output;
 mod request;

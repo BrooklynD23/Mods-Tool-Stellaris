@@ -30,11 +30,11 @@ pub struct FileRecord {
     pub ambiguous: bool,
 }
 
-impl From<&WalkRecord> for FileRecord {
-    fn from(r: &WalkRecord) -> FileRecord {
+impl From<WalkRecord> for FileRecord {
+    fn from(r: WalkRecord) -> FileRecord {
         FileRecord {
-            path: r.path.clone(),
-            raw_name: r.raw_name.clone(),
+            path: r.path,
+            raw_name: r.raw_name,
             blob: r.blob,
             completeness: r.completeness,
             ambiguous: r.ambiguous,
