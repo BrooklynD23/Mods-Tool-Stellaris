@@ -347,6 +347,7 @@ function Show-Mods($P) {
                 Supported  = $m.supported_version
                 LastLaunch = $(if ($leaf -and $enabled.ContainsKey("mod/$leaf")) { 'enabled' } else { '' })
                 File       = $leaf
+                Origin     = $(if ($m.PSObject.Properties['origin']) { $m.origin } else { '' })
             }
         }
     } elseif (Test-Path $modDir) {
@@ -359,13 +360,15 @@ function Show-Mods($P) {
                 Supported = (Read-DescriptorField $text 'supported_version')
                 LastLaunch = $(if ($enabled.ContainsKey("mod/$($f.Name)")) { 'enabled' } else { '' })
                 File      = $f.Name
+                Origin    = 'mod_file'
             }
         }
     }
     if ($rows.Count -eq 0) { Write-Warn2 'No launcher .mod files found.'; return }
-    $rows | Sort-Object Name | Format-Table -AutoSize Name, Workshop, Supported, LastLaunch | Out-Host
+    $rows | Sort-Object Name | Format-Table -AutoSize Name, Workshop, Supported, LastLaunch, Origin | Out-Host
     $on = @($rows | Where-Object { $_.LastLaunch }).Count
-    Write-Info "$($rows.Count) mods registered with the launcher; $on enabled at the last launch (dlc_load.json)."
+    Write-Info 'Origin: mod_file = launcher file; workshop_dir, unregistered_dir, loose_archive = on disk with no launcher file (the game does not load unregistered ones); launcher_db_only = only in the launcher database.'
+    Write-Info "$($rows.Count) mods found; $on enabled at the last launch (dlc_load.json)."
     Write-Info 'The launcher database is the authority on the current playset; the scan reads it.'
     $ws = 0
     foreach ($d in @($P.WorkshopDirs)) {

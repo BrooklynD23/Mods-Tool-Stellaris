@@ -169,6 +169,7 @@ impl OrderChain {
             order: Confidence::Fallback,
             activation: Confidence::Fallback,
             snapshot: SnapshotMethod::NotApplicable,
+            unmatched: 0,
         };
         ChainOutcome { playset, order_source: "none", diagnostics }
     }

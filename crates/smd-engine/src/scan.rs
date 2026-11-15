@@ -39,23 +39,11 @@ pub fn scan(req: &ScanRequest) -> Result<ScanOutput, ScanError> {
     diags.extend(walked.diagnostics);
     let mut completeness = inv.completeness.clone();
     absorb(&mut completeness, walked.completeness);
-    if inv.discovery_incomplete {
-        // Not a mod: smd-core has no discovery-incomplete field or Unreadable reason yet,
-        // so this rides content_incomplete under a synthetic key and says so in the text.
-        let key = ModKey("(discovery)".into());
-        let why = Some(
-            "not a mod: mod discovery was incomplete, so mods may be missing from this scan".into(),
-        );
-        completeness.content_incomplete.push((
-            key,
-            smd_core::ContentIncompleteReason::Truncated,
-            why,
-        ));
-    }
     let index = build_index(&inv, &profile, walked.inputs);
     let incomplete: BTreeSet<ModKey> =
         completeness.content_incomplete.iter().map(|(k, _, _)| k.clone()).collect();
-    let findings = run_rules(&index, req, &incomplete, &mut diags)?;
+    let findings =
+        run_rules(&index, req, (&incomplete, completeness.discovery_incomplete), &mut diags)?;
     diags.sort_by(|a, b| (&a.location, &a.code, &a.detail).cmp(&(&b.location, &b.code, &b.detail)));
     Ok(ScanOutput {
         provenance: inv.provenance.clone(),
@@ -121,7 +109,7 @@ fn build_index(
 fn run_rules(
     index: &ScanIndex,
     req: &ScanRequest,
-    incomplete: &BTreeSet<ModKey>,
+    incomplete: (&BTreeSet<ModKey>, bool),
     diags: &mut Vec<ScanDiagnostic>,
 ) -> Result<Vec<ResolvedFinding>, ScanError> {
     let all = smd_rules::registry();
@@ -140,7 +128,7 @@ fn run_rules(
     diags.extend(out.diagnostics.iter().map(rows::from_core));
     let mut found = out.findings;
     for f in &mut found {
-        f.certainty = certainty_of(index, f, incomplete);
+        f.certainty = certainty_of(index, f, incomplete.0, incomplete.1);
     }
     let mut resolved: Vec<ResolvedFinding> =
         found.iter().map(|f| index.resolve_finding(f)).collect();

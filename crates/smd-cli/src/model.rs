@@ -54,6 +54,7 @@ fn located_mod(m: LocatedMod) -> LocateMod {
         content_root: m.content_root.as_deref().map(text),
         readable: m.readable,
         remote_file_id: m.remote_file_id,
+        origin: m.origin.to_owned(),
     }
 }
 

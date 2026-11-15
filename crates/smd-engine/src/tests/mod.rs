@@ -233,3 +233,21 @@ fn progress_fires_once_per_walked_source_in_order() {
     req.progress = None;
     assert_eq!(with.diagnostics, scan(&req).expect("scans").diagnostics);
 }
+
+#[test]
+#[cfg(unix)] // a link in `mod/` is how discovery is made incomplete here
+fn incomplete_discovery_is_a_flag_not_a_mod_and_lowers_every_finding() {
+    let w = three();
+    w.dlc_load(&["111", "222", "333"]);
+    let clean = scan(&w.request()).expect("scans");
+    assert!(!clean.completeness.discovery_incomplete);
+    assert_eq!(clean.findings[0].certainty.completeness, Completeness::Complete);
+
+    std::os::unix::fs::symlink("/nonexistent", w.user.join("mod").join("linked.mod")).unwrap();
+    let out = scan(&w.request()).expect("scans");
+    let c = &out.completeness;
+    assert!(c.discovery_incomplete);
+    assert!(c.content_incomplete.is_empty(), "no fake mod key: {:?}", c.content_incomplete);
+    assert!(!out.inventory.iter().any(|m| m.mod_key.contains("discovery")));
+    assert_eq!(out.findings[0].certainty.completeness, Completeness::Partial);
+}

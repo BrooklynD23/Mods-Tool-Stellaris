@@ -56,6 +56,9 @@ fn completeness(out: &mut String, h: &HeaderView, color: bool) {
         let _ = writeln!(out, "    {}: {}", text(&u.reason), u.count);
     }
     let _ = writeln!(out, "  domains: {}", list_or_none(&h.domains));
+    if h.discovery_incomplete {
+        let _ = writeln!(out, "  discovery_incomplete: mods may be missing from this scan");
+    }
     if h.content_incomplete.is_empty() {
         let _ = writeln!(out, "  content_incomplete: (none)");
     }

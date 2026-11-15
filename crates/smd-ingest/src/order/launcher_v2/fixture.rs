@@ -13,7 +13,7 @@ pub(crate) enum PosKind {
 }
 
 const MODS: &str = "CREATE TABLE mods (id TEXT PRIMARY KEY, name TEXT, displayName TEXT, \
-    dirPath TEXT, archivePath TEXT, steamId TEXT, status TEXT);";
+    dirPath TEXT, archivePath TEXT, steamId TEXT, status TEXT, pdxId TEXT, gameRegistryId TEXT);";
 const PLAYSETS: &str = "CREATE TABLE playsets (id TEXT PRIMARY KEY, name TEXT, isActive BOOLEAN, \
     isRemoved BOOLEAN, loadOrder INTEGER, createdOn TEXT);";
 
@@ -68,6 +68,15 @@ impl Launcher {
                 [id],
             )
             .expect("insert mod");
+    }
+
+    /// Add a mod row with only these columns set (besides `id`).
+    pub(crate) fn mod_row_with(&self, id: &str, cols: &[(&str, &str)]) {
+        let names: Vec<&str> = std::iter::once("id").chain(cols.iter().map(|c| c.0)).collect();
+        let marks: Vec<String> = (1..=names.len()).map(|i| format!("?{i}")).collect();
+        let sql = format!("INSERT INTO mods ({}) VALUES ({})", names.join(", "), marks.join(", "));
+        let vals = std::iter::once(id).chain(cols.iter().map(|c| c.1));
+        self.conn.execute(&sql, rusqlite::params_from_iter(vals)).expect("insert mod");
     }
 
     /// Add a playset.

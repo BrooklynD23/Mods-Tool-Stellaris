@@ -98,6 +98,12 @@ Windows-first. Each item names its gate.
      (registry, OneDrive Documents, GOG, Game Pass); the Game Pass user-directory
      candidate in `profiles/stellaris.toml` is a placeholder guess.
    - `tools/windows/ModDoctor.ps1` can now call `smd locate --format json --no-redact`.
+   - DONE on `feat/discovery-sources` (needs a real install to verify): discovery also
+     finds unregistered `mod/<dir>`, loose `mod/*.zip` and launcher-DB-only mods, each with
+     an `origin`; the launcher playset join also uses `gameRegistryId`, `pdxId` and
+     `archivePath`, and an unmatched entry makes other mods `Unknown`, not `Inactive`.
+     Unverified: real `launcher-v2.sqlite` column contents (what `pdxId`, `dirPath` hold
+     for Paradox Mods downloads).
 5. **Real-playset noise follow-ups.** A scan of the owner's 71-mod playset reported
    2,432 same-path conflicts. It is still marked incomplete:
    - 24 oversize files inside mods;
@@ -114,9 +120,8 @@ Windows-first. Each item names its gate.
    - new ingest codes (`ingest.location_missing`, `ingest.discovery_incomplete`,
      `scan.asset_archive_unread`) that doc 05 doesn't fully list;
    - discovery lists directories with `std::fs::read_dir` rather than through `smd-fs`;
-   - discovery-incomplete is recorded under a fake `"(discovery)"` `ModKey`, so it
-     never lowers any finding's certainty. Add a first-class field to
-     `ScanCompleteness`;
+   - ~~discovery-incomplete is recorded under a fake `"(discovery)"` `ModKey`~~ DONE on
+     `feat/discovery-sources`: `ScanCompleteness::discovery_incomplete`, lowers certainty;
    - per-rule certainty ceilings live in an engine table (`smd-engine/src/certainty.rs`);
    - CLI exit code 3 is not documented in doc 04;
    - the Markdown code-span and account-redaction rules aren't written in doc 11.

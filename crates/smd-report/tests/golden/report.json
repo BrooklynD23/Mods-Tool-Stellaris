@@ -16,6 +16,7 @@
     "domains": [
       "event"
     ],
+    "discovery_incomplete": false,
     "content_incomplete": [],
     "inventory": [
       {

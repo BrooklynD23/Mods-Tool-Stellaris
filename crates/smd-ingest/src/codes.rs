@@ -15,6 +15,12 @@ pub const ROOT_REFUSED: &str = "ingest.root_refused";
 pub const MOD_PATH_MISSING: &str = "ingest.mod_path_missing";
 /// Two mods derived the same [`ModKey`](smd_core::ModKey); the later one was re-keyed.
 pub const DUPLICATE_KEY: &str = "ingest.duplicate_mod_key";
+/// A directory under `mod/` holds a `descriptor.mod` but no launcher `*.mod` file points
+/// at it: the launcher does not know it, so the game does not load it.
+pub const MOD_UNREGISTERED: &str = "ingest.mod_unregistered";
+/// The launcher database was not read during discovery (absent, unreadable or unverified),
+/// so mods only it registers (Paradox Mods downloads, folders added by hand) were not seen.
+pub const LAUNCHER_DB_NOT_CONSULTED: &str = "ingest.launcher_db_not_consulted";
 /// A load-order source named a mod that discovery did not find.
 pub const PLAYSET_MOD_UNMATCHED: &str = "ingest.playset_mod_unmatched";
 /// A load-order source failed and the chain moved on.

@@ -144,7 +144,14 @@ fn locate_json_finds_game_workshop_user_and_every_mod() {
     assert_eq!(beta["remote_file_id"], "777");
     assert!(beta["mod_file"].is_null() && beta["version"].is_null());
     assert_eq!(j["incomplete"], false);
-    assert!(j["diagnostics"].as_array().unwrap().is_empty(), "{j:#}");
+    assert_eq!(
+        (alpha["origin"].as_str(), beta["origin"].as_str()),
+        (Some("mod_file"), Some("workshop_dir"))
+    );
+    // No launcher database here: the one diagnostic says it was not consulted.
+    let codes: Vec<&str> =
+        j["diagnostics"].as_array().unwrap().iter().filter_map(|d| d["code"].as_str()).collect();
+    assert_eq!(codes, ["ingest.launcher_db_not_consulted"], "{j:#}");
 }
 
 #[test]

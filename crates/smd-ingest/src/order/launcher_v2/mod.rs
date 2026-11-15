@@ -21,10 +21,12 @@ use super::{ChainSource, SourceAttempt, SourceOptions};
 use crate::codes::{self, IngestDiagnostic};
 use crate::{Discovery, KEY_USER_DIR, discover};
 
+pub(crate) mod db_mods;
 mod header;
+pub(crate) mod join;
 mod mount;
-mod playset;
-mod rows;
+pub(crate) mod playset;
+pub(crate) mod rows;
 mod schema;
 mod snapshot;
 mod verify;
@@ -136,7 +138,8 @@ impl LauncherV2Sqlite {
         let result = match result {
             Ok(loaded) => {
                 let rows = &loaded.verified.rows;
-                Ok(playset::build(rows, &found.mods, loaded.method, &mut diagnostics))
+                let base = loc.get(KEY_USER_DIR).unwrap_or(Path::new(""));
+                Ok(playset::build(rows, &found.mods, base, loaded.method, &mut diagnostics))
             }
             Err(Some(failed)) => Err(refuse(failed, &build, &mut diagnostics)),
             Err(None) => Err(OrderError::NotPresent),
@@ -305,3 +308,5 @@ pub(crate) mod fixture;
 mod tests;
 #[cfg(test)]
 mod tests_data;
+#[cfg(test)]
+mod tests_join;

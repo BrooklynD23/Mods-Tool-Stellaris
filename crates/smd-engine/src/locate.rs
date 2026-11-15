@@ -45,6 +45,9 @@ pub struct LocatedMod {
     pub readable: bool,
     /// The workshop id, when the descriptor names one.
     pub remote_file_id: Option<String>,
+    /// How it was found: `mod_file`, `workshop_dir`, `unregistered_dir`, `loose_archive` or
+    /// `launcher_db_only`.
+    pub origin: &'static str,
 }
 
 /// Where everything is, and every mod there.
@@ -91,6 +94,7 @@ fn located_mod(m: &DiscoveredMod) -> LocatedMod {
         content_root: m.content_root.clone(),
         readable: m.content == ContentState::Readable,
         remote_file_id: d.remote_file_id.as_deref().map(str::to_owned),
+        origin: m.origin.as_str(),
     }
 }
 

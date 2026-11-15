@@ -62,6 +62,9 @@ fn completeness(out: &mut String, h: &HeaderView) {
         "- domains: {}",
         if domains.is_empty() { "(none)".into() } else { domains.join(", ") }
     );
+    if h.discovery_incomplete {
+        out.push_str("- discovery_incomplete: mods may be missing from this scan\n");
+    }
     if h.content_incomplete.is_empty() {
         out.push_str("- content_incomplete: (none)\n");
     }

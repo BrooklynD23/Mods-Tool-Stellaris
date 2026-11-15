@@ -11,7 +11,7 @@ use smd_fs::ReadOnlyRoot;
 
 use super::listing::{self, Entry, Kind};
 use super::refuse::Guard;
-use super::{ContentState, UnreadReason};
+use super::{ContentState, ModOrigin, UnreadReason};
 use crate::codes::{self, IngestDiagnostic};
 use crate::descriptor::{FILE_MAX, KeyValuesReader};
 use smd_core::DiagSeverity;
@@ -25,6 +25,10 @@ pub(super) struct Raw {
     pub role: SourceRole,
     pub content_root: Option<PathBuf>,
     pub content: ContentState,
+    pub origin: ModOrigin,
+    /// The resolved `path=`/`archive=` (or directory/file) this mod stands for, readable
+    /// or not. What other sources compare against to say "already found".
+    pub source_path: Option<PathBuf>,
 }
 
 /// Where a descriptor is resolved from, and what it must not swallow.
@@ -83,6 +87,8 @@ pub(super) fn unread(dir_name: &str, mod_file: Option<&str>, why: UnreadReason) 
         role: SourceRole::Local,
         content_root: None,
         content: ContentState::Unread(why),
+        origin: ModOrigin::ModFile,
+        source_path: None,
     }
 }
 
@@ -147,7 +153,7 @@ fn one_mod_file(
         raw.diagnostics = dd;
         return raw;
     }
-    let (role, content_root, content) = locate(ctx, &desc, file, sink);
+    let Resolved { role, content_root, content, source_path } = locate(ctx, &desc, file, sink);
     let source = match role {
         SourceRole::Archive => DescriptorSource::Archive,
         SourceRole::Workshop => DescriptorSource::Workshop,
@@ -162,16 +168,22 @@ fn one_mod_file(
         role,
         content_root,
         content,
+        origin: ModOrigin::ModFile,
+        source_path,
     }
 }
 
+/// What `path=`/`archive=` resolved to.
+struct Resolved {
+    role: SourceRole,
+    content_root: Option<PathBuf>,
+    content: ContentState,
+    source_path: Option<PathBuf>,
+}
+
 /// Resolve `path=` (or `archive=`) once and decide whether the content may be walked.
-fn locate(
-    ctx: &Ctx<'_>,
-    desc: &Descriptor,
-    subject: &str,
-    sink: &mut Sink,
-) -> (SourceRole, Option<PathBuf>, ContentState) {
+fn locate(ctx: &Ctx<'_>, desc: &Descriptor, subject: &str, sink: &mut Sink) -> Resolved {
+    let none = |role, content| Resolved { role, content_root: None, content, source_path: None };
     let archive_only = desc.path.is_none() && desc.archive.is_some();
     let role = if archive_only {
         SourceRole::Archive
@@ -184,22 +196,26 @@ fn locate(
         let d =
             IngestDiagnostic::warn(codes::MOD_PATH_MISSING, subject, "names no path or archive");
         sink.diags.push(d);
-        return (role, None, ContentState::Unread(UnreadReason::NoPath));
+        return none(role, ContentState::Unread(UnreadReason::NoPath));
     };
     let resolved = match ctx.guard.resolve(ctx.user_dir, declared) {
         Ok(p) => p,
         Err(why) => {
             sink.diags.push(IngestDiagnostic::error(codes::ROOT_REFUSED, subject, why));
-            return (role, None, ContentState::Unread(UnreadReason::RootRefused));
+            return none(role, ContentState::Unread(UnreadReason::RootRefused));
         }
     };
+    let source_path = Some(resolved.clone());
     if archive_only {
-        return (role, None, ContentState::Unread(UnreadReason::Archive));
+        let content = ContentState::Unread(UnreadReason::Archive);
+        return Resolved { role, content_root: None, content, source_path };
     }
     if resolved.is_dir() {
-        return (role, Some(resolved), ContentState::Readable);
+        let content_root = Some(resolved);
+        return Resolved { role, content_root, content: ContentState::Readable, source_path };
     }
     let why = format!("{} is not a directory", resolved.display());
     sink.diags.push(IngestDiagnostic::warn(codes::MOD_PATH_MISSING, subject, why));
-    (role, None, ContentState::Unread(UnreadReason::PathMissing))
+    let content = ContentState::Unread(UnreadReason::PathMissing);
+    Resolved { role, content_root: None, content, source_path }
 }
