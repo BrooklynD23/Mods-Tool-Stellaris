@@ -91,11 +91,13 @@ Windows-first. Each item names its gate.
 3. **H6, strict profile loader.** `crates/smd-profiles/src/profile.rs` ignores unknown
    keys and doesn't reject overlapping globs of equal specificity. Doc 10 says both are
    load errors. Add the precedence goldens.
-4. **Steam library enumeration inside `smd`.** Parse `libraryfolders.vdf` (H24 caps,
-   plus a fuzz target) and find the OS default paths, so that `smd scan` works without
-   `--game-dir`, `--user-dir` and `--workshop-dir`.
-   - Today only `tools/windows/ModDoctor.ps1` detects paths.
-   - `smd` accepts only one `--workshop-dir`.
+4. **Steam library enumeration inside `smd`.** DONE on `feat/locate` (needs Windows
+   evidence): `smd locate` and `smd scan` without path flags, N workshop roots, GOG and
+   Xbox probes (doc 05 § Discovery).
+   - Still open: the `libraryfolders.vdf` fuzz target; running it on a real Windows box
+     (registry, OneDrive Documents, GOG, Game Pass); the Game Pass user-directory
+     candidate in `profiles/stellaris.toml` is a placeholder guess.
+   - `tools/windows/ModDoctor.ps1` can now call `smd locate --format json --no-redact`.
 5. **Real-playset noise follow-ups.** A scan of the owner's 71-mod playset reported
    2,432 same-path conflicts. It is still marked incomplete:
    - 24 oversize files inside mods;

@@ -15,6 +15,7 @@ pub mod codes;
 mod descriptor;
 mod discovery;
 mod inventory;
+mod locate;
 pub mod order;
 #[cfg(test)]
 mod testutil;
@@ -23,9 +24,10 @@ pub use codes::IngestDiagnostic;
 pub use descriptor::{DEPTH_MAX, FILE_MAX, KeyValuesReader, LIST_MAX, READER_ID, VALUE_MAX};
 pub use discovery::{
     ContentState, DiscoveredMod, Discovery, DiscoveryOptions, KEY_INSTALL, KEY_USER_DIR,
-    KEY_WORKSHOP, MODS_SUBDIR, UnreadReason, discover,
+    KEY_WORKSHOP, MODS_SUBDIR, UnreadReason, discover, workshop_key,
 };
 pub use inventory::{Inventory, ModRecord, inventory};
+pub use locate::{Candidate, Located, Overrides, Store, locate};
 pub use order::{
     ChainOutcome, ChainSource, DirectoryScan, DlcLoadJson, LauncherV2Options, LauncherV2Sqlite,
     OrderChain, SourceAttempt, SourceOptions, source_by_name,

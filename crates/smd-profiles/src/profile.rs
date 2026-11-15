@@ -4,6 +4,7 @@ use serde::Deserialize;
 use smd_core::{SamePath, SourceSpec};
 
 use crate::glob;
+use crate::locations::{Locations, Stores};
 
 /// What a `replace_path` drops, as the profile states it. Mirrors the resolver's own enum
 /// by name; `smd-engine` maps between them, because this crate sits below the index.
@@ -50,6 +51,10 @@ struct Raw {
     #[serde(default)]
     game: RawGame,
     #[serde(default)]
+    locations: Locations,
+    #[serde(default)]
+    stores: Stores,
+    #[serde(default)]
     load_order: RawLoadOrder,
     #[serde(default)]
     dir: Vec<RawDir>,
@@ -60,8 +65,13 @@ struct Raw {
 }
 
 #[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 struct RawGame {
     id: Option<String>,
+    // Display-only; read so that `[game]` can reject unknown keys.
+    #[allow(dead_code)]
+    name: Option<String>,
+    steam_id: Option<u32>,
 }
 
 #[derive(Deserialize, Default)]
@@ -99,12 +109,15 @@ struct Dir {
 
 /// The parts of a game profile that Stage A reads.
 ///
-/// Every other key is ignored for now. Strict rejection of unknown keys (REVIEW-2026-10
-/// H6) belongs to the stage-keyed loader that replaces this reader; until then a typo in
-/// a key this reader does not model is silently dropped.
+/// `[game]`, `[locations]` and `[stores]` reject unknown keys. Every other key is ignored
+/// for now: strict rejection everywhere (REVIEW-2026-10 H6) belongs to the stage-keyed
+/// loader that replaces this reader.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Profile {
     id: Box<str>,
+    steam_id: Option<u32>,
+    locations: Locations,
+    stores: Stores,
     sources: Vec<Box<str>>,
     same_filename_replaces: bool,
     scope: ReplacePathScope,
@@ -139,6 +152,7 @@ impl Profile {
     /// [`ProfileError`] when the text is not TOML, or a modelled key has an unknown value.
     pub fn from_toml(text: &str) -> Result<Profile, ProfileError> {
         let raw: Raw = toml::from_str(text).map_err(|e| ProfileError::Syntax(e.to_string()))?;
+        raw.locations.check()?;
         let dirs = raw
             .dir
             .into_iter()
@@ -149,6 +163,9 @@ impl Profile {
             .collect::<Result<Vec<_>, ProfileError>>()?;
         Ok(Profile {
             id: raw.game.id.unwrap_or_default().into(),
+            steam_id: raw.game.steam_id,
+            locations: raw.locations,
+            stores: raw.stores,
             sources: raw.load_order.sources.into_iter().map(Into::into).collect(),
             same_filename_replaces: raw.load_order.same_filename_replaces_whole_file,
             scope: scope(raw.load_order.replace_path_scope.as_deref())?,
@@ -167,6 +184,24 @@ impl Profile {
     #[must_use]
     pub fn id(&self) -> &str {
         &self.id
+    }
+
+    /// The Steam app id, when the profile declares one.
+    #[must_use]
+    pub fn steam_id(&self) -> Option<u32> {
+        self.steam_id
+    }
+
+    /// `[locations]`: where the game's directories live, as templates.
+    #[must_use]
+    pub fn locations(&self) -> &Locations {
+        &self.locations
+    }
+
+    /// `[stores]`: how to recognise non-Steam installs.
+    #[must_use]
+    pub fn stores(&self) -> &Stores {
+        &self.stores
     }
 
     /// The load-order sources to try, in order, by registry name.

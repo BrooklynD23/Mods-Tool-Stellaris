@@ -20,7 +20,7 @@ pub(crate) fn diagnostics_stream(rows: &[crate::view::DiagView]) -> String {
     encode(&rows)
 }
 
-fn encode<T: serde::Serialize>(value: &T) -> String {
+pub(crate) fn encode<T: serde::Serialize>(value: &T) -> String {
     // The view holds only strings, integers, and options, none of which can fail to
     // serialise; the fallback keeps the function total without a panic path.
     let mut s = serde_json::to_string_pretty(value)

@@ -4,6 +4,8 @@ use smd_core::{
     Activation, ActivationCertainty, Completeness, Confidence, Role, SemanticCertainty,
 };
 
+use std::path::PathBuf;
+
 use crate::{ScanError, scan};
 use fixture::World;
 
@@ -127,14 +129,36 @@ fn a_cancelled_scan_is_an_error_not_a_partial_result() {
 }
 
 #[test]
-fn unreadable_roots_and_unsupported_requests_are_errors() {
+fn unreadable_roots_are_errors() {
     let w = three();
     let mut req = w.request();
     req.game_dir = w.game.join("nowhere");
     assert!(matches!(scan(&req), Err(ScanError::RootUnreadable { role: "game", .. })));
     let mut req = w.request();
-    req.workshop_dirs.push(w.workshop.clone());
-    assert!(matches!(scan(&req), Err(ScanError::Unsupported(_))));
+    req.workshop_dirs.push(w.workshop.join("nowhere"));
+    assert!(matches!(scan(&req), Err(ScanError::RootUnreadable { role: "workshop", .. })));
+}
+
+#[test]
+fn several_workshop_roots_are_scanned_and_a_repeated_root_is_read_once() {
+    let w = three();
+    let second = w.home.join("lib2-workshop");
+    let dir = second.join("444");
+    std::fs::create_dir_all(&dir).expect("mkdir");
+    std::fs::write(dir.join("descriptor.mod"), "name=\"Mod 444\"\nremote_file_id=\"444\"\n")
+        .unwrap();
+    std::fs::create_dir_all(dir.join("common/traits")).unwrap();
+    std::fs::write(dir.join(SHARED), "dddd").unwrap();
+    let mut req = w.request();
+    req.workshop_dirs.push(PathBuf::from(format!("{}/./", w.workshop.display())));
+    req.workshop_dirs.push(second);
+    let out = scan(&req).expect("scans");
+    let mut keys: Vec<&str> = out.inventory.iter().map(|m| m.mod_key.as_str()).collect();
+    keys.sort_unstable();
+    keys.retain(|k| k.len() == 3);
+    assert_eq!(keys, ["111", "222", "333", "444"]);
+    assert_eq!(out.findings.len(), 1);
+    assert_eq!(out.findings[0].participants.len(), 4);
 }
 
 #[test]

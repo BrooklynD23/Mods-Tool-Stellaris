@@ -6,7 +6,7 @@
 //!
 //! # What exists so far
 //!
-//! `smd scan`. [`run`] parses hand-rolled arguments ([`args`]), runs the scan through
+//! `smd scan` and `smd locate`. [`run`] parses hand-rolled arguments ([`args`]), runs the scan through
 //! `smd-api`, maps the text-only outcome onto `smd-report`'s model ([`model`]), and prints
 //! the report. The binary (`src/main.rs`) only supplies the process environment.
 

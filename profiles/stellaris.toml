@@ -57,6 +57,20 @@ mods_subdir      = "mod"
 # so the resolver must search every library rather than assume co-location.
 steam_library_index = ["config/libraryfolders.vdf", "steamapps/libraryfolders.vdf"]
 
+[stores]
+# How to recognise an install that Steam did not make. Read by smd-ingest's locator.
+executable = "stellaris.exe"
+# Uninstall-registry DisplayName prefix of a GOG (or other installer) entry; the entry's
+# InstallLocation is accepted only when it holds `executable`.
+gog_display_name_prefix = "Stellaris"
+# Xbox / Game Pass: under a drive root, `XboxGames/<name>/Content`.
+xbox_install = "XboxGames/Stellaris/Content"
+# Extra user_dir templates, tried after the OS default.
+# UNVERIFIED: the Game Pass edition may keep its data in a different Documents subfolder.
+# The entry below is a placeholder guess, not an observed path; confirm on a Game Pass
+# machine (docs/VERIFY.md) and replace or drop it.
+extra_user_dirs = ["{DOCUMENTS}/Paradox Interactive/Stellaris Game Pass"]
+
 [load_order]
 sources    = ["launcher_v2_sqlite", "dlc_load_json", "directory_scan"]
 

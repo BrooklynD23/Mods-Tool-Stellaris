@@ -6,7 +6,8 @@
 //!
 //! # What exists so far
 //!
-//! One command, [`Command::Scan`], and its text-only [`ScanOutcome`]. Nothing here carries
+//! Two commands: [`Command::Scan`] with its text-only [`ScanOutcome`], and
+//! [`Command::Locate`] with [`LocateOutput`]. Nothing here carries
 //! a `SourceId`, `PathId` or `SymbolId` (Invariant C1): an outcome is mod keys, display
 //! names, paths as text, and [`ResolvedFinding`]s. The adapters (`smd-cli`, later the GUI
 //! and Python bindings) see the engine only through this crate, so the request and
@@ -20,7 +21,8 @@ use smd_core::{PlaysetProvenance, ResolvedFinding, ScanCompleteness};
 use smd_engine::ScanOutput;
 
 pub use smd_engine::{
-    CancellationToken, ModRow, ScanDiagnostic, ScanError, ScanRequest, WalkLimits,
+    CancellationToken, Candidate, LocateOutput, LocateRequest, LocatedMod, ModRow, Overrides,
+    ScanDiagnostic, ScanError, ScanRequest, Store, WalkLimits,
 };
 
 /// Something the engine can be asked to do.
@@ -28,6 +30,8 @@ pub use smd_engine::{
 pub enum Command {
     /// Scan an install and its mods for same-path conflicts.
     Scan(ScanRequest),
+    /// Find the game's directories on this machine and every mod under them.
+    Locate(LocateRequest),
 }
 
 /// What a command produced.
@@ -35,6 +39,8 @@ pub enum Command {
 pub enum Outcome {
     /// The result of [`Command::Scan`].
     Scan(ScanOutcome),
+    /// The result of [`Command::Locate`].
+    Locate(Box<LocateOutput>),
 }
 
 /// A finished scan, as text.
@@ -71,6 +77,9 @@ impl From<ScanOutput> for ScanOutcome {
 pub fn execute(command: Command) -> Result<Outcome, ScanError> {
     match command {
         Command::Scan(request) => smd_engine::scan(&request).map(|o| Outcome::Scan(o.into())),
+        Command::Locate(request) => {
+            smd_engine::locate(&request).map(|o| Outcome::Locate(Box::new(o)))
+        }
     }
 }
 
