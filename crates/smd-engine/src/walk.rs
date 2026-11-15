@@ -11,7 +11,7 @@ use smd_ingest::{ContentState, Inventory, ModRecord};
 use smd_profiles::Profile;
 
 use crate::output::ScanDiagnostic;
-use crate::request::{ScanError, ScanRequest};
+use crate::request::{Progress, ScanError, ScanRequest};
 use crate::rows;
 
 /// Everything the walks produced.
@@ -49,18 +49,29 @@ pub(crate) fn walk_sources(
         completeness: ScanCompleteness::default(),
         diagnostics: Vec::new(),
     };
-    for rec in &inv.records {
+    let todo: Vec<(&ModRecord, &std::path::Path, bool)> = inv
+        .records
+        .iter()
+        .filter_map(|rec| {
+            let m = inv.table.get(rec.source);
+            let inactive = m.is_none_or(|m| m.activation == Activation::Inactive);
+            let (ContentState::Readable, Some(root), false) =
+                (rec.content, rec.content_root.as_deref(), inactive)
+            else {
+                return None;
+            };
+            Some((rec, root, m.is_some_and(|m| m.role == SourceRole::Vanilla)))
+        })
+        .collect();
+    let total = todo.len();
+    for (i, (rec, root, vanilla)) in todo.into_iter().enumerate() {
         if req.cancel.is_cancelled() {
             return Err(ScanError::Cancelled);
         }
-        let inactive =
-            inv.table.get(rec.source).is_none_or(|m| m.activation == Activation::Inactive);
-        let (ContentState::Readable, Some(root), false) =
-            (rec.content, rec.content_root.as_deref(), inactive)
-        else {
-            continue;
-        };
-        let vanilla = inv.table.get(rec.source).is_some_and(|m| m.role == SourceRole::Vanilla);
+        if let Some(cb) = &req.progress {
+            let name = inv.table.get(rec.source).map(|m| m.name.to_string()).unwrap_or_default();
+            (cb.0)(Progress { index: i + 1, total, key: rec.key.as_str().to_owned(), name });
+        }
         match ReadOnlyRoot::open(root) {
             Ok(handle) => walk_one(&mut w, rec, &handle, (profile, vanilla), req),
             Err(e) => unopened(&mut w, &rec.key, &e),

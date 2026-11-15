@@ -26,7 +26,7 @@ mod tests;
 mod walk;
 
 pub use output::{ModRow, ScanDiagnostic, ScanOutput};
-pub use request::{ScanError, ScanRequest};
+pub use request::{Progress, ProgressFn, ScanError, ScanRequest};
 pub use scan::scan;
 pub use smd_fs::WalkLimits;
 pub use smd_rules::CancellationToken;
