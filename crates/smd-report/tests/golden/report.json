@@ -1,0 +1,219 @@
+{
+  "header": {
+    "order_source": "directory_scan",
+    "order_certainty": "inferred",
+    "activation_certainty": "fallback",
+    "snapshot_method": "not_applicable",
+    "files_total": 120,
+    "partial": 1,
+    "unparsed_total": 1,
+    "unparsed": [
+      {
+        "reason": "oversize",
+        "count": 1
+      }
+    ],
+    "domains": [
+      "event"
+    ],
+    "content_incomplete": [],
+    "inventory": [
+      {
+        "mod_key": "vanilla",
+        "name": "Base game",
+        "role": "vanilla",
+        "activation": "active",
+        "activation_basis": "always active",
+        "position": "0",
+        "version": null,
+        "path": "game",
+        "descriptor_diagnostics": []
+      },
+      {
+        "mod_key": "281990_1001",
+        "name": "Alpha Traits",
+        "role": "workshop",
+        "activation": "unknown",
+        "activation_basis": "not established",
+        "position": "unknown",
+        "version": "1.2",
+        "path": "workshop/1001",
+        "descriptor_diagnostics": [
+          "supported_version is not a valid pattern"
+        ]
+      },
+      {
+        "mod_key": "281990_1002",
+        "name": "Beta [Fix](https://e.x)",
+        "role": "workshop",
+        "activation": "unknown",
+        "activation_basis": "not established",
+        "position": "unknown",
+        "version": "2.0.1",
+        "path": "workshop/1002",
+        "descriptor_diagnostics": []
+      },
+      {
+        "mod_key": "local_gamma",
+        "name": "Gamma",
+        "role": "local",
+        "activation": "unknown",
+        "activation_basis": "not established",
+        "position": "unknown",
+        "version": "1.2",
+        "path": "mod/gamma",
+        "descriptor_diagnostics": []
+      }
+    ]
+  },
+  "scan_complete": false,
+  "summary": null,
+  "incomplete_note": "scan incomplete: some files or sources were not fully read, so the findings below may be missing conflicts",
+  "findings": [
+    {
+      "rule": "core.file_overwrite",
+      "subject": "common/traits/00_traits.txt",
+      "certainty": {
+        "completeness": "unparsed",
+        "activation": "conditional",
+        "order": "fallback",
+        "semantics": "unmodelled"
+      },
+      "gaps": [
+        "order_unknown"
+      ],
+      "participants": [
+        {
+          "role": "winner",
+          "mod_key": "281990_1001",
+          "mod_name": "Alpha",
+          "path": "common/traits/00_traits.txt",
+          "offset": 12,
+          "len": 40,
+          "line": 3
+        },
+        {
+          "role": "shadowed",
+          "mod_key": "281990_1002",
+          "mod_name": "Beta",
+          "path": "common/traits/00_traits.txt",
+          "offset": 12,
+          "len": 40,
+          "line": 3
+        }
+      ],
+      "participants_hidden": 0,
+      "participants_more": null,
+      "facts": [
+        [
+          "files",
+          "2"
+        ],
+        [
+          "identical",
+          "false"
+        ]
+      ]
+    },
+    {
+      "rule": "core.file_overwrite",
+      "subject": "localisation/english/l_english.yml",
+      "certainty": {
+        "completeness": "partial",
+        "activation": "conditional",
+        "order": "fallback",
+        "semantics": "unmodelled"
+      },
+      "gaps": [
+        "order_unknown"
+      ],
+      "participants": [
+        {
+          "role": "winner",
+          "mod_key": "281990_1001",
+          "mod_name": "Alpha Traits",
+          "path": "localisation/english/l_english.yml",
+          "offset": 12,
+          "len": 40,
+          "line": 3
+        },
+        {
+          "role": "shadowed",
+          "mod_key": "281990_1002",
+          "mod_name": "Beta [Fix](https://e.x)",
+          "path": "localisation/english/l_english.yml",
+          "offset": 12,
+          "len": 40,
+          "line": 3
+        },
+        {
+          "role": "identical",
+          "mod_key": "local_gamma",
+          "mod_name": "Gamma",
+          "path": "localisation/english/l_english.yml",
+          "offset": 12,
+          "len": 40,
+          "line": 3
+        }
+      ],
+      "participants_hidden": 0,
+      "participants_more": null,
+      "facts": [
+        [
+          "files",
+          "2"
+        ],
+        [
+          "identical",
+          "false"
+        ]
+      ]
+    },
+    {
+      "rule": "core.file_overwrite",
+      "subject": "events/pirate_events.txt",
+      "certainty": {
+        "completeness": "unparsed",
+        "activation": "conditional",
+        "order": "fallback",
+        "semantics": "unmodelled"
+      },
+      "gaps": [
+        "order_unknown"
+      ],
+      "participants": [
+        {
+          "role": "contributor",
+          "mod_key": "local_gamma",
+          "mod_name": "Gamma",
+          "path": "events/pirate_events.txt",
+          "offset": 12,
+          "len": 40,
+          "line": 3
+        }
+      ],
+      "participants_hidden": 0,
+      "participants_more": null,
+      "facts": [
+        [
+          "files",
+          "2"
+        ],
+        [
+          "identical",
+          "false"
+        ]
+      ]
+    }
+  ],
+  "findings_hidden": 0,
+  "findings_more": null,
+  "diagnostics": [
+    {
+      "level": "warn",
+      "code": "clausewitz.unbalanced_brace",
+      "location": "events/pirate_events.txt",
+      "detail": "brace never closed"
+    }
+  ]
+}

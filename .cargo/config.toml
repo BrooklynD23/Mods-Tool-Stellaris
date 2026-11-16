@@ -1,0 +1,3 @@
+[alias]
+# `cargo xtask lint` is the documented command in ADR-0002 § 7 and in CI.
+xtask = "run --quiet --package xtask --"

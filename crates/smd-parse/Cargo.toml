@@ -1,0 +1,17 @@
+[package]
+name = "smd-parse"
+description = "Lexers, the parser registry, and fact emission."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+smd-core = { workspace = true }
+smd-fs = { workspace = true }
+smd-profiles = { workspace = true }
+
+[lints]
+workspace = true

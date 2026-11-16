@@ -1,0 +1,20 @@
+# Probe P4 (traits, FIOS per prior art). This file name sorts AFTER every vanilla trait file.
+#
+# PREPARE before the run - the probe is void until this is done:
+#   1. In your game install, find the vanilla definition of trait_thrifty
+#      (grep -rn "^trait_thrifty" common/traits/). Record the vanilla FILE NAME in the run log.
+#   2. Paste that whole block below, VERBATIM, then change only its `cost` to 9.
+#
+# The marker trait below proves this file was parsed. If "SMD PROBE4 MARKER" is visible
+# but trait_thrifty still shows its vanilla cost, vanilla won the filename comparison.
+
+# --- paste vanilla trait_thrifty here, with cost = 9 ---
+
+trait_smd_probe4_marker = {
+	cost = 4
+	icon = "gfx/interface/icons/traits/trait_intelligent.dds"
+	allowed_archetypes = { BIOLOGICAL }
+	modifier = {
+		pop_happiness = 0.01
+	}
+}

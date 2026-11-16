@@ -1,0 +1,5 @@
+[toolchain]
+# Stable for build, test, clippy, and release. Nightly exists for the `cargo-fuzz` job
+# only, which pins its own toolchain; no other job may require it (ADR-0001).
+channel = "stable"
+components = ["rustfmt", "clippy"]
