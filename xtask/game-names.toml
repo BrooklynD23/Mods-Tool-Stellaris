@@ -1,0 +1,19 @@
+# The game-name vocabulary the `game-name` gate matches, case-insensitively, as a
+# whole-word substring of any `.rs` file in a crate without `game_names_allowed = true`.
+#
+# It lives in data rather than in `xtask/src/`, for the obvious reason: a hard-coded list
+# of game names inside the linter would be the first thing that linter has to flag.
+names = [
+    "stellaris",
+    "ck3",
+    "crusader kings",
+    "eu4",
+    "europa universalis",
+    "vic3",
+    "victoria 3",
+    "hoi4",
+    "hearts of iron",
+    "imperator",
+    "factorio",
+    "skyrim",
+]

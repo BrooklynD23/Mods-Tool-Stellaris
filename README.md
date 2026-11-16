@@ -8,8 +8,11 @@ actually likely to matter.
 Designed to expand to other Paradox titles and then other Steam games through a
 data-driven game-profile seam.
 
-> **Status: design phase.** No implementation yet. The complete architecture lives in
-> [`docs/`](docs/README.md) — start with [`docs/README.md`](docs/README.md).
+> **Status: M0 — skeleton.** The workspace, the `smd-core` data contracts, and the
+> `cargo xtask lint` gates exist; every other crate is a documented stub. The complete
+> architecture lives in [`docs/`](docs/README.md) — start with
+> [`docs/README.md`](docs/README.md), and with
+> [`docs/REVIEW-2026-08.md`](docs/REVIEW-2026-08.md) for what changed after review.
 
 ## What it does
 
@@ -43,16 +46,40 @@ you see for yourself.
   edits — the rule, its cases, a weight, an explanation — and CI fails if any is missing
   ([contract](docs/adr/0002-extensibility-contract.md)).
 
-## Repository layout (planned)
+## Repository layout
 
 ```
 crates/     the workspace — see docs/architecture/02-modules-and-crates.md
-ui/         Svelte front-end
-profiles/   per-game knowledge as TOML
-policy/     severity weights and explanation catalogue
+xtask/      lint gates (layers.toml, allowances.toml, game-names.toml)
 docs/       this design
-xtask/      lint gates, fixture generation, release tooling
+ui/         Svelte front-end                    (M7)
+profiles/   per-game knowledge as TOML          (M0.5)
+policy/     severity weights and explanations   (M5)
 ```
+
+## Building
+
+A stable Rust toolchain is the only prerequisite; `rust-toolchain.toml` pins the channel
+and `rustup` installs it on first build.
+
+```sh
+cargo test  --workspace                                  # unit tests and doctests
+cargo clippy --workspace --all-targets -- -D warnings     # includes the 60-line and
+                                                          # 5-parameter function gates
+cargo fmt --all --check
+cargo xtask lint                                          # the structural gates
+```
+
+`cargo xtask lint` fails the build on a file over 300 **code** lines, a dependency edge
+that contradicts [`xtask/layers.toml`](xtask/layers.toml), a game name outside
+`smd-profiles`, a broken relative link under `docs/`, and any drift in
+`[profile.release]` — where `panic = "unwind"` is load-bearing for `catch_unwind` rule
+isolation and must not be traded for binary size.
+
+Exemptions are per-file and need both halves: an inline
+`// xtask:allow(<rule>) reason: …` and an entry in
+[`xtask/allowances.toml`](xtask/allowances.toml). There is deliberately no
+workspace-wide counter to increment.
 
 ## Prior art
 
@@ -64,4 +91,13 @@ mods.
 
 ## Licence
 
-TBD before first release.
+Dual-licensed under either of
+
+- Apache License, Version 2.0 ([`LICENSE-APACHE`](LICENSE-APACHE))
+- MIT license ([`LICENSE-MIT`](LICENSE-MIT))
+
+at your option — the Rust ecosystem norm. Contributions are accepted under the same terms.
+
+The inbound source-reading policy that goes with this choice (REVIEW-2026-08 § G43) is
+still owed: prior-art source under a copyleft licence must not be read while writing
+equivalent Rust here.

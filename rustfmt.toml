@@ -1,0 +1,5 @@
+# Stable options only: `cargo fmt --check` runs on stable in CI, and an unstable option
+# would silently do nothing there while formatting differently on a contributor's nightly.
+style_edition = "2024"
+max_width = 100
+use_small_heuristics = "Max"

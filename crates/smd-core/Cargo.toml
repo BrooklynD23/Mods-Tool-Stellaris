@@ -1,0 +1,27 @@
+[package]
+name = "smd-core"
+description = "Shared data contracts. Depends on nothing, knows nothing about any game."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[features]
+# `serde` is on by default so that `cargo test --workspace` exercises the `RawFact`
+# round-trip that Invariant C1 depends on. It stays optional so a `--no-default-features`
+# build of the contracts crate really does pull nothing but `smallvec` and `bitflags`.
+default = ["serde"]
+serde = ["dep:serde", "smallvec/serde", "bitflags/serde"]
+
+[dependencies]
+bitflags = { workspace = true }
+smallvec = { workspace = true, features = ["union", "const_generics"] }
+serde = { workspace = true, optional = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

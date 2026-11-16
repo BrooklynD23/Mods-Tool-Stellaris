@@ -1,0 +1,22 @@
+[package]
+name = "smd-engine"
+description = "Orchestration: the pipeline, the thread pool, and the job supervisor."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+smd-core = { workspace = true }
+smd-fs = { workspace = true }
+smd-profiles = { workspace = true }
+smd-ingest = { workspace = true }
+smd-parse = { workspace = true }
+smd-index = { workspace = true }
+smd-rules = { workspace = true }
+smd-policy = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,0 +1,15 @@
+[package]
+name = "smd-report"
+description = "Renderers over `ResolvedFinding`: json, markdown, html, table."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+smd-core = { workspace = true }
+
+[lints]
+workspace = true

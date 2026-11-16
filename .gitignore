@@ -4,3 +4,17 @@
 # Rust
 /target/
 **/*.rs.bk
+*.pdb
+*.profraw
+
+# Editors and OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Front-end (ui/ lands at M7)
+node_modules/
+ui/dist/
+ui/.svelte-kit/

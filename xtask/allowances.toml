@@ -1,0 +1,28 @@
+# Per-file lint exemptions — the ratchet.
+#
+# There is deliberately **no workspace-wide integer** here. One mutable line that every
+# branch increments and every merge fights over is exactly the central-list pathology
+# ADR-0002 § 2 exists to remove. Per-file allowances conflict only when two branches touch
+# the same file, which is when a conflict is information.
+#
+# Every entry needs a matching inline `// xtask:allow(<rule>) reason: …` in the file
+# itself, and every such inline comment needs an entry here. A stale allowance on either
+# side is a lint failure, so an exemption cannot outlive the code that needed it.
+#
+# [[allowance]]
+# file   = "crates/smd-parse/src/tables.rs"
+# rule   = "file-length"
+# reason = "byte-class table; splitting it across files makes it harder to review"
+
+# The doc-comment and fixture allowlist for the game-name gate is the same mechanism:
+# entries with rule = "game-name".
+
+[[allowance]]
+file = "xtask/src/lint/gamenames/tests.rs"
+rule = "game-name"
+reason = """
+The game-name gate's own fixtures. Checking that a real name is flagged and that \
+`stack30` is not requires the literals, and a gate with no negative fixture is a gate \
+nobody can trust. The gate's implementation file needs no exemption: its prose uses \
+placeholders."""
+
