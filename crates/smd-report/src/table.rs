@@ -59,6 +59,10 @@ fn completeness(out: &mut String, h: &HeaderView, color: bool) {
     if h.discovery_incomplete {
         let _ = writeln!(out, "  discovery_incomplete: mods may be missing from this scan");
     }
+    if h.game_version_unverified {
+        let _ =
+            writeln!(out, "  game_version_unverified: verdicts rest on an unchecked game version");
+    }
     if h.content_incomplete.is_empty() {
         let _ = writeln!(out, "  content_incomplete: (none)");
     }

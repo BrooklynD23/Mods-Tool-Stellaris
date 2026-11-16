@@ -44,6 +44,21 @@ fn walk_alone_opens_nothing_and_flags_nothing() {
 }
 
 #[test]
+fn hashing_reuses_the_parent_directory_chain() {
+    let d = tempfile::tempdir().unwrap();
+    for i in 0..5 {
+        put(d.path(), &format!("a/b/c/f{i}.txt"), b"x");
+    }
+    let r = ReadOnlyRoot::open(d.path()).unwrap();
+    let mut out = r.walk(&CAP);
+    super::lazy::DIR_OPENS.with(|c| c.set(0));
+    let tried = r.hash_records(&mut out, &CAP, &|_| true);
+    assert_eq!(tried, 5);
+    assert!(out.records.iter().all(|r| r.blob.is_some()));
+    assert_eq!(super::lazy::DIR_OPENS.with(Cell::get), 3, "a, b, c once, not 5 x 3");
+}
+
+#[test]
 fn uncontended_oversize_stays_complete() {
     let d = tempfile::tempdir().unwrap();
     put(d.path(), "big.bin", &[1u8; 64]);

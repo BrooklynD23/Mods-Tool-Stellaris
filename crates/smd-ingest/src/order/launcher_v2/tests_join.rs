@@ -14,6 +14,7 @@ fn ident(file: Option<&str>, remote: Option<&str>, paths: &[&str]) -> Ident {
     Ident {
         mod_file: file.map(str::to_owned),
         remote_id: remote.map(str::to_owned),
+        evidenced: true,
         paths: paths.iter().map(PathBuf::from).collect(),
     }
 }
@@ -51,6 +52,15 @@ fn every_key_joins_alone() {
     for (r, want) in cases {
         assert_eq!(join::find(&r, &idents, base), want, "{r:?}");
     }
+}
+
+#[test]
+fn an_unevidenced_steam_id_also_meets_a_pdx_id_row() {
+    let bare = Ident { evidenced: false, ..ident(Some("x.mod"), Some("steam:300"), &[]) };
+    let strict = ident(None, Some("steam:300"), &[]);
+    let r = row(|r| r.pdx_id = some("300"));
+    assert_eq!(join::find(&r, &[bare], Path::new("/u")), Some(0));
+    assert_eq!(join::find(&r, &[strict], Path::new("/u")), None, "evidenced Steam stays Steam");
 }
 
 #[test]

@@ -109,6 +109,39 @@ fn launcher_db_only_rows_become_mods_and_claimed_rows_do_not() {
 }
 
 #[test]
+fn a_db_row_for_a_mod_without_a_pdx_prefix_is_not_a_second_source() {
+    let (w, l) = db_world();
+    // A Paradox mod whose launcher file lacks `pdx_`: keyed `steam:555`; its row has only
+    // a `pdxId` and a path that is not spelled like the found one.
+    let dir = w.user.join("mod").join("pd555");
+    handmade(&dir, "Paradox Unprefixed");
+    w.mod_file(
+        "pd555",
+        &format!("name=\"P\"\npath=\"{}\"\nremote_file_id=\"555\"\n", dir.display()),
+    );
+    l.mod_row_with("r1", &[("pdxId", "555"), ("displayName", "P")]);
+    let d = discover(&w.locations(), &w.options());
+    assert_eq!(
+        d.mods.len(),
+        1,
+        "{:?}",
+        d.mods.iter().map(|m| (&m.name, m.origin)).collect::<Vec<_>>()
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_db_row_whose_dir_resolves_to_a_found_root_is_skipped() {
+    let (w, l) = db_world();
+    let alpha = w.local_mod("alpha", "Alpha");
+    let link = w.tmp.path().join("alias");
+    std::os::unix::fs::symlink(&alpha, &link).unwrap();
+    l.mod_row_with("r1", &[("dirPath", &link.to_string_lossy()), ("pdxId", "9")]);
+    let d = discover(&w.locations(), &w.options());
+    assert_eq!(d.mods.len(), 1);
+}
+
+#[test]
 fn launcher_db_paths_go_through_the_refuse_guard_and_missing_ones_are_inventoried() {
     let (w, l) = db_world();
     l.mod_row_with(

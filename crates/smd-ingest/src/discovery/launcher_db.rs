@@ -45,7 +45,13 @@ pub(super) fn db_only_mods(
             continue;
         }
         let Some(raw) = one_row(row, user_dir, guard, sink) else { continue };
-        idents.push(ident(&raw));
+        // The row's directory may resolve to a content root already found (a link, another
+        // spelling): a second source with the same files would conflict with itself.
+        let id = ident(&raw);
+        if idents.iter().any(|i| join::share_path(&id, i)) {
+            continue;
+        }
+        idents.push(id);
         out.push(raw);
     }
     out
@@ -64,6 +70,7 @@ fn ident(r: &Raw) -> Ident {
     Ident {
         mod_file: r.mod_file.as_deref().map(str::to_owned),
         remote_id: remote_ref(r),
+        evidenced: r.ids.is_some() || join::evidenced_file(r.mod_file.as_deref()),
         paths: r.content_root.iter().chain(&r.source_path).cloned().collect(),
     }
 }

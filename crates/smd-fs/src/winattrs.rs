@@ -35,10 +35,11 @@ pub(crate) fn is_offline(attrs: u32) -> bool {
 pub(crate) fn kind_of(f: Facts) -> Kind {
     if f.surrogate {
         Kind::Link
+    } else if is_offline(f.attrs) {
+        // Before `Dir`: listing an online-only directory makes the provider download it.
+        Kind::Offline
     } else if f.attrs & FILE_ATTRIBUTE_DIRECTORY != 0 {
         Kind::Dir
-    } else if is_offline(f.attrs) {
-        Kind::Offline
     } else {
         Kind::File
     }
@@ -75,6 +76,17 @@ mod tests {
             FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS,
         ] {
             assert_eq!(kind_of(f(REPARSE | bit, false)), Kind::Offline);
+        }
+    }
+
+    #[test]
+    fn offline_directories_are_never_listed() {
+        for bit in [
+            FILE_ATTRIBUTE_OFFLINE,
+            FILE_ATTRIBUTE_RECALL_ON_OPEN,
+            FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS,
+        ] {
+            assert_eq!(kind_of(f(FILE_ATTRIBUTE_DIRECTORY | bit, false)), Kind::Offline);
         }
     }
 

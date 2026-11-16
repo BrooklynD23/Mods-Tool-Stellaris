@@ -43,6 +43,7 @@ pub(crate) struct HeaderView {
     pub unparsed: Vec<UnparsedView>,
     pub domains: Vec<String>,
     pub discovery_incomplete: bool,
+    pub game_version_unverified: bool,
     pub content_incomplete: Vec<ContentIncompleteView>,
     pub inventory: Vec<InventoryView>,
 }
