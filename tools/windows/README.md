@@ -21,6 +21,10 @@ internet, run `Unblock-File .\tools\windows\ModDoctor.ps1` once.
 | Workshop | `steamapps\workshop\content\281990` in the library that holds the game |
 | Launcher DB, last launch, local mods, saves, error log | Inside the user data folder |
 
+Once `smd.exe` is built, detection and the mod list come from `smd locate --format json`
+(every Steam library, every Workshop folder, Workshop mods included). Before the first
+build, or if that call fails, the script's own PowerShell detection is used.
+
 Detected paths can be overridden with menu option 9 (saved to
 `%LOCALAPPDATA%\StellarisModDoctor\paths.json`) or with `-GameDir`, `-UserDir` and
 `-WorkshopDir`. Arguments beat saved values, and saved values beat detection.
@@ -36,7 +40,12 @@ The first scan builds `smd.exe` from this repository. That needs:
   administrator approval.
 
 The script asks before installing either one (`-Yes` skips the question). It rebuilds
-`smd.exe` automatically when the sources are newer than the binary.
+`smd.exe` automatically when the sources are newer than the binary. `CARGO_TARGET_DIR` is
+honoured when the script looks for the built binary.
+
+`-Action Scan` and `-Action Report` exit with smd's exit code (0 ok, 1 could not run,
+2 bad command line, 3 scan finished with an Error-class diagnostic). A report is not
+written when smd exits 1 or 2. Output is read as UTF-8, so non-ASCII mod names survive.
 
 ## What it never does
 

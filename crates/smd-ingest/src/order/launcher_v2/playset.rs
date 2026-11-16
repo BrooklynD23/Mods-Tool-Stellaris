@@ -1,44 +1,60 @@
 //! Turning verified launcher rows into a [`Playset`] keyed by [`ModKey`].
 
-use std::path::PathBuf;
+use std::path::Path;
 
-use smd_core::{Confidence, ModKey, Playset, PlaysetEntry, SnapshotMethod};
+use smd_core::{Confidence, Playset, PlaysetEntry, SnapshotMethod, SourceRole};
 
-use super::rows::{ModRow, Rows};
+use super::join::{self, Ident};
+use super::rows::Rows;
 use crate::DiscoveredMod;
 use crate::codes::{self, IngestDiagnostic};
 
-/// The discovered mod a launcher `mods` row refers to: by workshop id, else by directory.
-fn find<'a>(row: &ModRow, mods: &'a [DiscoveredMod]) -> Option<&'a DiscoveredMod> {
-    if let Some(steam) = row.steam_id.as_deref() {
-        let by_id = mods.iter().find(|m| m.descriptor.remote_file_id.as_deref() == Some(steam));
-        if by_id.is_some() {
-            return by_id;
-        }
+/// The platform-qualified id of a discovered mod: its key when that is one, else the
+/// descriptor's id under the mod's role.
+fn remote_ref(m: &DiscoveredMod) -> Option<String> {
+    let key = m.key.as_str();
+    if key.starts_with("steam:") || key.starts_with("pdx:") {
+        return Some(key.to_owned());
     }
-    let dir = row.dir_path.as_deref()?;
-    let canon = std::fs::canonicalize(dir).unwrap_or_else(|_| PathBuf::from(dir));
-    mods.iter().find(|m| m.content_root.as_deref() == Some(canon.as_path()))
+    let id = m.descriptor.remote_file_id.as_deref()?;
+    Some(join::remote(m.role == SourceRole::ParadoxMods, id))
 }
 
-/// Build the playset. An entry that matches no discovered mod is dropped with a
-/// diagnostic; positions become the ordinal among the entries kept.
+/// How a discovered mod is recognised by the join.
+pub(crate) fn ident(m: &DiscoveredMod) -> Ident {
+    Ident {
+        mod_file: m.mod_file.as_deref().map(str::to_owned),
+        remote_id: remote_ref(m),
+        evidenced: m.key.as_str().starts_with("pdx:")
+            || join::evidenced_file(m.mod_file.as_deref()),
+        paths: m.content_root.iter().chain(&m.source_path).cloned().collect(),
+    }
+}
+
+/// Build the playset. An entry that matches no discovered mod is counted in
+/// [`Playset::unmatched`] and reported; positions become the ordinal among the entries
+/// kept. `base` is the user directory, which a relative launcher path is relative to.
 pub(super) fn build(
     rows: &Rows,
     mods: &[DiscoveredMod],
+    base: &Path,
     method: SnapshotMethod,
     diags: &mut Vec<IngestDiagnostic>,
 ) -> Playset {
+    let idents: Vec<Ident> = mods.iter().map(ident).collect();
     let mut entries: Vec<PlaysetEntry> = Vec::new();
+    let mut unmatched = 0u32;
     for e in &rows.entries {
         let row = rows.mods.iter().find(|m| m.id == e.mod_id);
-        let Some(found) = row.and_then(|r| find(r, mods)) else {
+        let found = row.and_then(|r| join::find(r, &idents, base)).map(|i| &mods[i]);
+        let Some(found) = found else {
             let label = row.and_then(|r| r.display_name.as_deref()).unwrap_or(&e.mod_id);
             let why = "in the launcher playset but not found on disk";
             diags.push(IngestDiagnostic::warn(codes::PLAYSET_MOD_UNMATCHED, label, why));
+            unmatched = unmatched.saturating_add(1);
             continue;
         };
-        let key: ModKey = found.key.clone();
+        let key = found.key.clone();
         if entries.iter().any(|x| x.key == key) {
             continue;
         }
@@ -51,5 +67,6 @@ pub(super) fn build(
         order: Confidence::Exact,
         activation: Confidence::Exact,
         snapshot: method,
+        unmatched,
     }
 }

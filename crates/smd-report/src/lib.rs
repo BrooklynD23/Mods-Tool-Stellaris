@@ -29,6 +29,7 @@
 mod build;
 mod escape;
 mod json;
+mod locate;
 mod markdown;
 mod model;
 mod redact;
@@ -36,6 +37,7 @@ mod table;
 mod view;
 
 pub use json::Json;
+pub use locate::{LocateCandidate, LocateMod, LocateReport, render_locate};
 pub use markdown::Markdown;
 pub use model::{Caps, DiagnosticRow, InventoryRow, RenderOptions, ReportHeader, ReportModel};
 pub use redact::RedactionContext;

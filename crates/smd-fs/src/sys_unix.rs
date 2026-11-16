@@ -12,7 +12,7 @@ use rustix::fs::{
 };
 use rustix::io::Errno;
 
-use super::{Kind, OpenErr, OpenedDir, OpenedFile, Stamp};
+use super::{Entry, Kind, Listed, OpenErr, OpenedDir, OpenedFile, Stamp};
 
 /// A directory handle plus the device of the root it descends from.
 pub(crate) struct Dir {
@@ -47,27 +47,28 @@ pub(super) fn open_root(path: &Path) -> io::Result<Dir> {
     Ok(Dir { fd, root_dev: dev_of(&st) })
 }
 
-pub(super) fn list(dir: &Dir) -> io::Result<Vec<OsString>> {
+pub(super) fn list(dir: &Dir) -> io::Result<Vec<Listed>> {
     let mut out = Vec::new();
     for entry in RxDir::read_from(&dir.fd).map_err(io_err)? {
         let entry = entry.map_err(io_err)?;
         let bytes = entry.file_name().to_bytes();
         if bytes != b"." && bytes != b".." {
-            out.push(OsString::from_vec(bytes.to_vec()));
+            out.push(Listed { name: OsString::from_vec(bytes.to_vec()), pre: None });
         }
     }
     Ok(out)
 }
 
-pub(super) fn classify(dir: &Dir, name: &OsStr) -> io::Result<Kind> {
+pub(super) fn classify(dir: &Dir, name: &OsStr) -> io::Result<Entry> {
     let st = statat(&dir.fd, name.as_bytes(), AtFlags::SYMLINK_NOFOLLOW).map_err(io_err)?;
-    Ok(match FileType::from_raw_mode(st.st_mode) {
+    let kind = match FileType::from_raw_mode(st.st_mode) {
         FileType::RegularFile => Kind::File,
         FileType::Directory => Kind::Dir,
         // The target is never stat'ed: that could trigger an automount or network I/O.
         FileType::Symlink => Kind::Link,
         _ => Kind::Special,
-    })
+    };
+    Ok(Entry { kind, size: stamp_of(&st).size })
 }
 
 fn open_err(e: Errno) -> OpenErr {

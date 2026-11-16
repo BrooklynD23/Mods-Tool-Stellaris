@@ -22,8 +22,11 @@ to text only at render time.
 #[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct SymbolKey { pub domain: DomainId, pub symbol: SymbolId }
 
-/// Stable across runs and machines. Workshop id when present, else a hash of the
-/// descriptor's identifying fields. Used for cache keys, suppressions, and saved config.
+/// Stable across runs and machines. `steam:<id>` or `pdx:<id>` when the mod has a platform
+/// id (the platform is part of the key: ids of different platforms may be the same number),
+/// else `h-<hash>` of the descriptor's name, directory name and archive file name. The
+/// descriptor `version` is not hashed: a version bump keeps the key. Treat as an opaque
+/// string (reports and JSON do). Used for cache keys, suppressions, and saved config.
 pub struct ModKey(pub Box<str>);
 
 impl SourceId {
@@ -71,7 +74,7 @@ pub struct SourceMeta {
 
 pub enum Activation { Active, Inactive, Unknown }
 
-pub enum SourceRole { Vanilla, Dlc, Workshop, Local, Archive }
+pub enum SourceRole { Vanilla, Dlc, Workshop, ParadoxMods, Local, Archive }
 
 /// Scan-wide; one per scan, from the `LoadOrderSource` chain (§ `05`). The only home of
 /// order and activation confidence — there is no per-source copy to disagree with it.

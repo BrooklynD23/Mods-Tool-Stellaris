@@ -10,7 +10,7 @@
 # side is a lint failure, so an exemption cannot outlive the code that needed it.
 #
 # [[allowance]]
-# file   = "crates/smd-parse/src/tables.rs"
+# file   = "crates/smd-index/src/tables.rs"
 # rule   = "file-length"
 # reason = "byte-class table; splitting it across files makes it harder to review"
 

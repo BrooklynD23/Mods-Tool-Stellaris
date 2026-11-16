@@ -9,7 +9,10 @@ use smd_core::{ContentIncompleteReason, ParseCompleteness, UnparsedReason};
 use crate::{ReadOnlyRoot, WalkLimits, WalkOutcome};
 
 fn walk_with(root: &Path, limits: &WalkLimits) -> WalkOutcome {
-    ReadOnlyRoot::open(root).unwrap().walk(limits)
+    let r = ReadOnlyRoot::open(root).unwrap();
+    let mut out = r.walk(limits);
+    r.hash_records(&mut out, limits, &|_| true);
+    out
 }
 
 fn walk_root(root: &Path) -> WalkOutcome {

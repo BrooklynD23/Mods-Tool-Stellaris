@@ -5,26 +5,44 @@
 //! location; OS-default and Steam-library discovery are the resolver's job.
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use smd_core::{Descriptor, Diagnostic, ModKey, ResolvedLocations, SourceRole};
 
 use crate::codes::{self, IngestDiagnostic};
+use crate::order::LauncherV2Sqlite;
+use crate::order::launcher_v2::LauncherRead;
 
 mod candidate;
 mod keys;
+mod launcher_db;
 mod listing;
+mod origin;
 mod refuse;
+mod unregistered;
 mod workshop;
 
 pub(crate) use candidate::UNASSIGNED;
 pub(crate) use keys::VANILLA_KEY;
+pub use origin::ModOrigin;
 
 /// The game install directory.
 pub const KEY_INSTALL: &str = "install";
 /// The user data directory, holding `mod/`, `dlc_load.json` and `launcher-v2.sqlite`.
 pub const KEY_USER_DIR: &str = "user_dir";
-/// A workshop content directory (one subdirectory per subscribed mod).
+/// A workshop content directory (one subdirectory per subscribed mod). A second and later
+/// root is keyed [`workshop_key`]`(n)`, so one `ResolvedLocations` can carry any number.
 pub const KEY_WORKSHOP: &str = "workshop";
+
+/// The location key of the `n`th workshop root: `workshop`, `workshop.1`, `workshop.2`...
+#[must_use]
+pub fn workshop_key(n: usize) -> String {
+    if n == 0 { KEY_WORKSHOP.to_owned() } else { format!("{KEY_WORKSHOP}.{n}") }
+}
+
+fn is_workshop_key(key: &str) -> bool {
+    key == KEY_WORKSHOP || key.strip_prefix("workshop.").is_some_and(|n| n.parse::<usize>().is_ok())
+}
 /// The launcher-descriptor subdirectory of the user directory.
 pub const MODS_SUBDIR: &str = "mod";
 
@@ -95,6 +113,11 @@ pub struct DiscoveredMod {
     pub content_root: Option<PathBuf>,
     /// Whether the content may be walked.
     pub content: ContentState,
+    /// How it was found; says whether the game will load it.
+    pub origin: ModOrigin,
+    /// The resolved `path=`/`archive=` (or directory/file) the mod stands for, readable or
+    /// not. Other sources are compared against it to tell "already found".
+    pub source_path: Option<PathBuf>,
 }
 
 /// Everything discovery found, in `ModKey` byte order.
@@ -110,6 +133,8 @@ pub struct Discovery {
     /// link, special file or bound kept an entry out. Absence from `mods` is then not
     /// "not installed".
     pub incomplete: bool,
+    /// The scan's one read of the launcher database, shared with the order chain.
+    pub(crate) launcher: Option<Arc<LauncherRead>>,
 }
 
 fn existing(loc: &ResolvedLocations, key: &str, sink: &mut candidate::Sink) -> Option<PathBuf> {
@@ -129,7 +154,10 @@ fn existing(loc: &ResolvedLocations, key: &str, sink: &mut candidate::Sink) -> O
 /// by the id it names or by the `ugc_<id>.mod` convention.
 fn workshop_claims(raw: &candidate::Raw, ws: &Path) -> Vec<PathBuf> {
     let mut ids: Vec<String> = Vec::new();
-    ids.extend(raw.descriptor.remote_file_id.as_deref().map(str::to_owned));
+    // A Paradox Mods id is not a workshop directory name.
+    if raw.role != SourceRole::ParadoxMods {
+        ids.extend(raw.descriptor.remote_file_id.as_deref().map(str::to_owned));
+    }
     if let Some(id) = raw.dir_name.strip_prefix("ugc_") {
         ids.push(id.to_owned());
     }
@@ -142,10 +170,28 @@ fn workshop_claims(raw: &candidate::Raw, ws: &Path) -> Vec<PathBuf> {
 /// Discover every mod under the given locations.
 #[must_use]
 pub fn discover(loc: &ResolvedLocations, opts: &DiscoveryOptions) -> Discovery {
+    discover_with_launcher(loc, opts, &LauncherV2Sqlite::default())
+}
+
+/// As [`discover`], reading the launcher database through `launcher` (its options and test
+/// hooks). That one read is kept on the result and reused by the order chain.
+#[must_use]
+pub fn discover_with_launcher(
+    loc: &ResolvedLocations,
+    opts: &DiscoveryOptions,
+    launcher: &LauncherV2Sqlite,
+) -> Discovery {
+    let mut launcher_read = None;
     let mut sink = candidate::Sink::default();
     let install = existing(loc, KEY_INSTALL, &mut sink);
     let user_dir = existing(loc, KEY_USER_DIR, &mut sink);
-    let workshop = existing(loc, KEY_WORKSHOP, &mut sink);
+    let mut workshops: Vec<PathBuf> = Vec::new();
+    for (key, _) in loc.iter().filter(|(k, _)| is_workshop_key(k)) {
+        let found = existing(loc, key, &mut sink);
+        // The same directory given twice (two spellings, two flags) is read once.
+        let dup = |w: &PathBuf, f: &PathBuf| smd_fs::same_host_dir(w, f);
+        workshops.extend(found.filter(|f| !workshops.iter().any(|w| dup(w, f))));
+    }
     let mut protected: Vec<PathBuf> = opts.home_dir().into_iter().collect();
     protected.extend(loc.iter().map(|(_, p)| p.to_path_buf()));
     protected.extend(user_dir.iter().map(|u| u.join(MODS_SUBDIR)));
@@ -154,7 +200,7 @@ pub fn discover(loc: &ResolvedLocations, opts: &DiscoveryOptions) -> Discovery {
     if let Some(user) = &user_dir {
         raws = candidate::user_mods(&candidate::Ctx { guard: &guard, user_dir: user }, &mut sink);
     }
-    if let Some(ws) = &workshop {
+    for ws in &workshops {
         let ws_canon = std::fs::canonicalize(ws).unwrap_or_else(|_| ws.clone());
         // A launcher file that was rejected or refused still names a workshop directory
         // (or its `ugc_<id>` name does); that directory is the same mod, not another.
@@ -167,9 +213,26 @@ pub fn discover(loc: &ResolvedLocations, opts: &DiscoveryOptions) -> Discovery {
         }
         raws.extend(workshop::workshop_mods(ws, &claimed, &smd_fs::same_host_dir, &mut sink));
     }
+    match &user_dir {
+        Some(user) => {
+            let claimed: Vec<PathBuf> = raws
+                .iter()
+                .flat_map(|r| r.content_root.iter().chain(&r.source_path).cloned())
+                .collect();
+            raws.extend(unregistered::unregistered(user, &claimed, &mut sink));
+            let read = Arc::new(launcher.read_once(loc));
+            raws.extend(launcher_db::db_only_mods(&read, user, &guard, &raws, &mut sink));
+            launcher_read = Some(read);
+        }
+        None => {
+            let why = "there is no user directory, so mods only the launcher registers were not looked for";
+            let d = IngestDiagnostic::warn(codes::LAUNCHER_DB_NOT_CONSULTED, "", why);
+            sink.diags.push(d);
+        }
+    }
     let candidate::Sink { mut diags, incomplete } = sink;
     let mods = finish(raws, &mut diags);
-    Discovery { install, mods, diagnostics: diags, incomplete }
+    Discovery { install, mods, diagnostics: diags, incomplete, launcher: launcher_read }
 }
 
 /// Key every candidate (in the fixed order they were found), then sort by key bytes.
@@ -179,7 +242,7 @@ fn finish(raws: Vec<candidate::Raw>, diags: &mut Vec<IngestDiagnostic>) -> Vec<D
     for r in raws {
         let trusted = r.content != ContentState::Unread(UnreadReason::DescriptorInvalid)
             && r.content != ContentState::Unread(UnreadReason::DescriptorUnreadable);
-        let derived = keys::derive(&r.descriptor, &r.dir_name, trusted);
+        let derived = keys::derive(r.ids.as_ref(), &r.descriptor, &r.dir_name, trusted);
         let (key, dup) = claims.claim(derived, &r.descriptor, &r.dir_name);
         diags.extend(dup);
         let name: Box<str> = if r.descriptor.name.is_empty() {
@@ -197,6 +260,8 @@ fn finish(raws: Vec<candidate::Raw>, diags: &mut Vec<IngestDiagnostic>) -> Vec<D
             role: r.role,
             content_root: r.content_root,
             content: r.content,
+            origin: r.origin,
+            source_path: r.source_path,
         });
     }
     out.sort_by(|a, b| a.key.cmp(&b.key));
@@ -205,3 +270,7 @@ fn finish(raws: Vec<candidate::Raw>, diags: &mut Vec<IngestDiagnostic>) -> Vec<D
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_identity;
+#[cfg(test)]
+mod tests_sources;

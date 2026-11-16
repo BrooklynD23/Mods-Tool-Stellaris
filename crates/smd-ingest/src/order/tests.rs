@@ -29,7 +29,10 @@ fn dlc_json(w: &World, listed: &[&str]) {
 }
 
 fn activation(p: &Playset, key: &str) -> Option<(u32, bool)> {
-    p.entries.iter().find(|e| e.key.as_str() == key).map(|e| (e.position, e.enabled))
+    p.entries
+        .iter()
+        .find(|e| e.key.as_str().trim_start_matches("steam:") == key)
+        .map(|e| (e.position, e.enabled))
 }
 
 use smd_core::Playset;
@@ -53,7 +56,11 @@ fn dlc_load_json_order_and_activation() {
     let chain = OrderChain::new(vec![Box::new(src)]);
     let inv = crate::inventory(&w.locations(), &chain, &w.options());
     let state = |k: &str| {
-        let (id, _) = inv.table.iter().find(|(_, m)| m.key.as_str() == k).expect(k);
+        let (id, _) = inv
+            .table
+            .iter()
+            .find(|(_, m)| m.key.as_str().trim_start_matches("steam:") == k)
+            .expect(k);
         let m = inv.table.get(id).unwrap();
         (m.activation, m.rank.clone())
     };
@@ -208,13 +215,17 @@ fn activation_disagreement_reported() {
         inv.diagnostics.iter().filter(|d| d.code == codes::ACTIVATION_DISAGREEMENT).collect();
     assert_eq!(d.len(), 1, "{:?}", inv.diagnostics);
     let text = &d[0].detail;
-    assert!(text.contains("only per launcher_v2_sqlite: [333]"), "{text}");
-    assert!(text.contains("only per dlc_load_json: [444]"), "{text}");
-    for agreed in ["111", "222"] {
+    assert!(text.contains("only per launcher_v2_sqlite: [steam:333]"), "{text}");
+    assert!(text.contains("only per dlc_load_json: [steam:444]"), "{text}");
+    for agreed in ["steam:111", "steam:222"] {
         assert!(!text.contains(agreed), "{agreed} is not part of the disagreement: {text}");
     }
     let active = |k: &str| {
-        let (id, _) = inv.table.iter().find(|(_, m)| m.key.as_str() == k).unwrap();
+        let (id, _) = inv
+            .table
+            .iter()
+            .find(|(_, m)| m.key.as_str().trim_start_matches("steam:") == k)
+            .unwrap();
         inv.table.get(id).unwrap().activation
     };
     assert_eq!(active("333"), smd_core::Activation::Active, "the DB wins");

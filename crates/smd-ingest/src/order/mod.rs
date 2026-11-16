@@ -16,7 +16,7 @@ use crate::{Discovery, DiscoveryOptions};
 
 mod directory_scan;
 mod dlc_load;
-mod json_caps;
+pub(crate) mod json_caps;
 pub mod launcher_v2;
 
 pub use directory_scan::DirectoryScan;
@@ -42,6 +42,12 @@ pub trait ChainSource: LoadOrderSource {
     /// As [`load`](ChainSource::load), over a discovery the caller already ran, so one
     /// inventory sees one discovery however many sources consult it.
     fn load_with(&self, loc: &ResolvedLocations, found: &Discovery) -> SourceAttempt;
+
+    /// The launcher-database reader, when this is one: discovery reads the database
+    /// through it, so its options (and test hooks) reach the scan's single read.
+    fn launcher(&self) -> Option<&LauncherV2Sqlite> {
+        None
+    }
 }
 
 /// What the chain concluded.
@@ -117,6 +123,12 @@ impl OrderChain {
         (OrderChain { sources }, diags)
     }
 
+    /// The chain's launcher-database reader, if it has one.
+    #[must_use]
+    pub fn launcher(&self) -> Option<&LauncherV2Sqlite> {
+        self.sources.iter().find_map(|s| s.launcher())
+    }
+
     /// Try each source in order; the first to answer wins. Each source discovers for
     /// itself; prefer [`run_with`](OrderChain::run_with).
     #[must_use]
@@ -169,6 +181,7 @@ impl OrderChain {
             order: Confidence::Fallback,
             activation: Confidence::Fallback,
             snapshot: SnapshotMethod::NotApplicable,
+            unmatched: 0,
         };
         ChainOutcome { playset, order_source: "none", diagnostics }
     }

@@ -1,3 +1,7 @@
 # Golden files are byte-exact renderer output (LF). Without this, a Windows checkout with
 # core.autocrlf=true turns them into CRLF and the golden tests fail.
 crates/smd-report/tests/golden/* text eol=lf
+
+# Windows batch files must be CRLF or cmd.exe mis-parses labels.
+*.bat text eol=crlf
+*.cmd text eol=crlf

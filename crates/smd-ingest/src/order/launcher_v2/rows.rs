@@ -34,11 +34,15 @@ pub(super) struct Entry {
 
 /// The `mods` row an entry points at.
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
-pub(super) struct ModRow {
+pub(crate) struct ModRow {
     pub id: String,
     pub steam_id: Option<String>,
     pub dir_path: Option<String>,
     pub display_name: Option<String>,
+    /// `mod/<file>.mod`, the key `dlc_load.json` uses.
+    pub game_registry_id: Option<String>,
+    pub pdx_id: Option<String>,
+    pub archive_path: Option<String>,
 }
 
 /// The verified content of a snapshot.
@@ -158,23 +162,31 @@ fn entries(conn: &Connection, playset: &str) -> Result<Vec<Entry>, Fail> {
 fn mods(conn: &Connection, schema: Schema) -> Result<Vec<ModRow>, Fail> {
     let col = |present: bool, name: &str| if present { name.to_owned() } else { "NULL".to_owned() };
     let sql = format!(
-        "SELECT id, {}, {}, {} FROM mods",
+        "SELECT id, {}, {}, {}, {}, {}, {} FROM mods",
         col(schema.steam_id, "steamId"),
         col(schema.dir_path, "dirPath"),
         col(schema.display_name, "displayName"),
+        col(schema.game_registry_id, "gameRegistryId"),
+        col(schema.pdx_id, "pdxId"),
+        col(schema.archive_path, "archivePath"),
     );
     let mut st = conn.prepare(&sql).map_err(|e| io(&e))?;
-    let raw: Vec<[Value; 4]> = st
-        .query_map([], |r| Ok([r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?]))
+    let raw: Vec<[Value; 7]> = st
+        .query_map([], |r| {
+            Ok([r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?])
+        })
         .and_then(Iterator::collect)
         .map_err(|e| io(&e))?;
     let mut out = Vec::with_capacity(raw.len());
-    for [id, steam, dir, name] in &raw {
+    for [id, steam, dir, name, registry, pdx, archive] in &raw {
         out.push(ModRow {
             id: ident(id, "mods.id")?,
             steam_id: opt_text(steam),
             dir_path: opt_text(dir),
             display_name: opt_text(name),
+            game_registry_id: opt_text(registry),
+            pdx_id: opt_text(pdx),
+            archive_path: opt_text(archive),
         });
     }
     Ok(out)

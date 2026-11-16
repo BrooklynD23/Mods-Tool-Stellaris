@@ -68,6 +68,26 @@ It completed. The script was saved outside the repo at
 `~/.claude/projects/-mnt-e-Programming-Github-Repo-Mods-Tool-Stellaris/1c7aa16b-b682-40d8-b8f8-b5ad4f4a9572/workflows/scripts/smd-implement-m1-wf_3ff10c10-e2c.js`.
 Reuse its shape for the next wave, with the corrected model routing.
 
+## Cleanup and game-version drift (chore/cleanup-version)
+
+- Deleted the five 12-line stub crates (`smd-gui`, `smd-py`, `smd-policy`, `smd-parse`,
+  `smd-testkit`). Nothing used them; docs mark them planned (M2/M5/M7). Re-add each with
+  its `xtask/layers.toml` entry when its milestone starts.
+- `[version]` is now typed (`Profile::version()`, unknown keys rejected) with a new
+  `verified_range` key. `smd-ingest` reads `launcher-settings.json` (`rawVersion`, then
+  `version`; user dir, then install dir) and warns `ingest.game_version_unverified` when
+  out of range or unreadable. It shows in `smd scan` diagnostics and `smd locate`
+  (`game_version` JSON field, schema 1 additive). `verified_range = ["4.*"]` is a guess,
+  not an observation.
+
+## Perf change on `perf/lazy-hash`
+
+The walk no longer hashes every file. `ReadOnlyRoot::walk` is stat-only; the engine then
+hashes only paths shipped by two or more sources (`smd-engine/src/hash_pass.rs`, doc 12
+"Lazy content hashing"). An oversize or unreadable file at a path only one source ships
+no longer makes that source incomplete, and raises no diagnostic. Item 5 below (24
+oversize files) should shrink accordingly; re-run the 71-mod scan natively to confirm.
+
 ## Next steps, in order
 
 Windows-first. Each item names its gate.
@@ -75,8 +95,11 @@ Windows-first. Each item names its gate.
 1. **H22, Windows half of the secure walk.** This is the top priority now that Windows
    is the target. `crates/smd-fs/src/sys_other.rs` is type-checked only:
    - no final-path check on the opened handle;
-   - no reparse-tag allow-list (junctions, symlinks, OneDrive cloud placeholders: list
-     them, never hydrate them);
+   - reparse handling is now attribute-based (`smd-fs/src/winattrs.rs`, unit-tested on
+     Linux): symlinks and junctions are refused; dedup and hydrated placeholder files
+     are regular; offline placeholders are listed, never read, `fs.cloud_placeholder`.
+     The exact reparse tag still needs `unsafe`, so unknown tags are not distinguished.
+     Unverified on real Windows;
    - mapped network drives are treated as local, because detecting them needs
      `GetDriveTypeW`, which needs `unsafe`, and the crate forbids it. Decide on a
      reviewed exception.
@@ -91,11 +114,19 @@ Windows-first. Each item names its gate.
 3. **H6, strict profile loader.** `crates/smd-profiles/src/profile.rs` ignores unknown
    keys and doesn't reject overlapping globs of equal specificity. Doc 10 says both are
    load errors. Add the precedence goldens.
-4. **Steam library enumeration inside `smd`.** Parse `libraryfolders.vdf` (H24 caps,
-   plus a fuzz target) and find the OS default paths, so that `smd scan` works without
-   `--game-dir`, `--user-dir` and `--workshop-dir`.
-   - Today only `tools/windows/ModDoctor.ps1` detects paths.
-   - `smd` accepts only one `--workshop-dir`.
+4. **Steam library enumeration inside `smd`.** DONE on `feat/locate` (needs Windows
+   evidence): `smd locate` and `smd scan` without path flags, N workshop roots, GOG and
+   Xbox probes (doc 05 § Discovery).
+   - Still open: the `libraryfolders.vdf` fuzz target; running it on a real Windows box
+     (registry, OneDrive Documents, GOG, Game Pass); the Game Pass user-directory
+     candidate in `profiles/stellaris.toml` is a placeholder guess.
+   - `tools/windows/ModDoctor.ps1` can now call `smd locate --format json --no-redact`.
+   - DONE on `feat/discovery-sources` (needs a real install to verify): discovery also
+     finds unregistered `mod/<dir>`, loose `mod/*.zip` and launcher-DB-only mods, each with
+     an `origin`; the launcher playset join also uses `gameRegistryId`, `pdxId` and
+     `archivePath`, and an unmatched entry makes other mods `Unknown`, not `Inactive`.
+     Unverified: real `launcher-v2.sqlite` column contents (what `pdxId`, `dirPath` hold
+     for Paradox Mods downloads).
 5. **Real-playset noise follow-ups.** A scan of the owner's 71-mod playset reported
    2,432 same-path conflicts. It is still marked incomplete:
    - 24 oversize files inside mods;
@@ -112,9 +143,12 @@ Windows-first. Each item names its gate.
    - new ingest codes (`ingest.location_missing`, `ingest.discovery_incomplete`,
      `scan.asset_archive_unread`) that doc 05 doesn't fully list;
    - discovery lists directories with `std::fs::read_dir` rather than through `smd-fs`;
-   - discovery-incomplete is recorded under a fake `"(discovery)"` `ModKey`, so it
-     never lowers any finding's certainty. Add a first-class field to
-     `ScanCompleteness`;
+   - ~~discovery-incomplete is recorded under a fake `"(discovery)"` `ModKey`~~ DONE on
+     `feat/discovery-sources`: `ScanCompleteness::discovery_incomplete`, lowers certainty;
+   - ~~`ModKey` was the raw `remote_file_id` (Steam/Paradox collision), hashed `version`, and
+     the launcher DB was read twice~~ DONE on `fix/mod-identity`: keys are `steam:`/`pdx:`/
+     `h-`, `SourceRole::ParadoxMods`, one read per scan (doc 05, "Mod sources and origin").
+     Unverified: real launcher `pdxId`/`source` contents (VERIFY V03);
    - per-rule certainty ceilings live in an engine table (`smd-engine/src/certainty.rs`);
    - CLI exit code 3 is not documented in doc 04;
    - the Markdown code-span and account-redaction rules aren't written in doc 11.
@@ -174,3 +208,11 @@ Windows-first. Each item names its gate.
    release-pipeline decision.
 7. **Decisions still open** in the register: whether D1 ships the GUI or a report;
    macOS approval (deferred); whether to close PRs #1 and #2 once #3 merges.
+
+## Review round 2 (fix/review-round2)
+
+- Windows open: entries classified first (no-follow); links and offline refused; everything else (dedup/WOF/hydrated) opened WITHOUT FILE_FLAG_OPEN_REPARSE_POINT, re-verified on the handle. Offline directories are fs.cloud_placeholder, never listed, source content-incomplete. UNVERIFIED on real Windows.
+- Launcher join: ids carry `evidenced`; an unevidenced steam:X also matches a row pdxId. A DB-only row whose dir resolves to an already-found root is skipped.
+- Profile [version] source_dir is honoured (read first, other is fallback).
+- Unreadable/out-of-range game version sets ScanCompleteness::game_version_unverified: semantics capped at Unmodelled, header prints it, scan_complete false.
+- Hash pass sorts by path and reuses the parent directory chain.

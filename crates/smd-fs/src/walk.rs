@@ -6,19 +6,21 @@
 
 use std::ffi::OsString;
 
-use smd_core::{Blob, ContentIncompleteReason, DiagSeverity, ParseCompleteness, UnparsedReason};
+use smd_core::{ContentIncompleteReason, DiagSeverity, ParseCompleteness, UnparsedReason};
 
 use crate::limits::WalkLimits;
 use crate::normpath::{NormPath, shipped_name};
 use crate::record::{FsDiagnostic, Incomplete, WalkOutcome, WalkRecord, codes};
-use crate::sys::{Dir, Kind, OpenErr};
+use crate::sys::{Dir, Entry, Kind, Listed, OpenErr};
 
 mod collide;
+mod lazy;
 mod read;
 #[cfg(test)]
 #[cfg_attr(not(unix), allow(unused_imports))] // the race tests that use it are unix-only
 use read::BEFORE_READ;
-use read::hash_open;
+
+pub(crate) use lazy::{hash_pending, open_under};
 
 pub(crate) fn walk(root: &Dir, limits: &WalkLimits) -> WalkOutcome {
     let mut w = Walker { limits: *limits, out: WalkOutcome::default(), count: 0, stopped: false };
@@ -73,9 +75,9 @@ impl Walker {
         self.out.content_incomplete.push(Incomplete { reason, path });
     }
 
-    /// Add a record for `comps`. A path with no representable key is dropped loudly and
-    /// marks the source content-incomplete.
-    fn record(&mut self, comps: &[OsString], blob: Option<Blob>, c: ParseCompleteness) {
+    /// Add a record for `comps`; it has no blob until [`hash_pending`] reads it. A path
+    /// with no representable key is dropped loudly and marks the source content-incomplete.
+    fn record(&mut self, comps: &[OsString], size: u64, c: ParseCompleteness) {
         let rel = rel_display(comps);
         let (Some(path), lossy) = key_of(comps) else {
             self.diag(codes::UNREADABLE, &rel, "path has no representable identity key");
@@ -90,7 +92,8 @@ impl Walker {
             path,
             raw_name: shipped_name(&last),
             os_path: comps.to_vec(),
-            blob,
+            size,
+            blob: None,
             completeness: c,
             ambiguous: false,
             unrepresentable: lossy,
@@ -99,7 +102,7 @@ impl Walker {
 
     fn unparsed(&mut self, comps: &[OsString], why: UnparsedReason, code: &'static str, d: &str) {
         self.diag(code, &rel_display(comps), d);
-        self.record(comps, None, ParseCompleteness::Unparsed(why));
+        self.record(comps, 0, ParseCompleteness::Unparsed(why));
     }
 
     fn truncate(&mut self, comps: &[OsString], detail: &str) {
@@ -109,17 +112,17 @@ impl Walker {
     }
 
     fn dir(&mut self, dir: &Dir, comps: &mut Vec<OsString>, depth: usize) {
-        let mut names = match dir.list() {
+        let mut listed = match dir.list() {
             Ok(n) => n,
             Err(e) => return self.dir_unreadable(comps, &e),
         };
-        names.sort();
-        for name in names {
+        listed.sort_by(|a, b| a.name.cmp(&b.name));
+        for item in listed {
             if self.stopped {
                 return;
             }
-            comps.push(name);
-            self.entry(dir, comps, depth);
+            comps.push(item.name.clone());
+            self.entry(dir, comps, depth, item);
             comps.pop();
         }
     }
@@ -130,7 +133,7 @@ impl Walker {
         self.incomplete(ContentIncompleteReason::Truncated, &rel);
     }
 
-    fn entry(&mut self, dir: &Dir, comps: &mut Vec<OsString>, depth: usize) {
+    fn entry(&mut self, dir: &Dir, comps: &mut Vec<OsString>, depth: usize, item: Listed) {
         self.count += 1;
         if self.count > self.limits.entries {
             self.stopped = true;
@@ -139,16 +142,28 @@ impl Walker {
         if rel_len(comps) > self.limits.rel_path {
             return self.truncate(comps, "relative path length bound exceeded");
         }
-        let Some(name) = comps.last().cloned() else { return };
-        match dir.classify(&name) {
+        let found = match item.pre {
+            Some(r) => r,
+            None => dir.classify(&item.name),
+        };
+        match found {
             Err(e) => {
                 let why = UnparsedReason::Unreadable;
                 self.unparsed(comps, why, codes::UNREADABLE, &format!("not classified: {e}"));
             }
-            Ok(Kind::File) => self.file(dir, comps),
-            Ok(Kind::Dir) => self.subdir(dir, comps, depth),
-            Ok(Kind::Link) => self.link(comps),
-            Ok(Kind::Special) => self.refused(comps, codes::SPECIAL_SKIPPED, "not a regular file"),
+            Ok(Entry { kind: Kind::File, size }) => {
+                self.record(comps, size, ParseCompleteness::NotApplicable);
+            }
+            Ok(Entry { kind: Kind::Dir, .. }) => self.subdir(dir, comps, depth),
+            Ok(Entry { kind: Kind::Link, .. }) => self.link(comps),
+            Ok(Entry { kind: Kind::Special, .. }) => {
+                self.refused(comps, codes::SPECIAL_SKIPPED, "not a regular file");
+            }
+            Ok(Entry { kind: Kind::Offline, .. }) => {
+                // May be a directory: its subtree is then unseen, so the source is incomplete.
+                self.refused(comps, codes::CLOUD_PLACEHOLDER, "offline cloud placeholder not read");
+                self.incomplete(ContentIncompleteReason::Truncated, &rel_display(comps));
+            }
         }
     }
 
@@ -175,38 +190,8 @@ impl Walker {
                 self.incomplete(ContentIncompleteReason::LinkRefused, &rel);
             }
             Ok(o) => self.dir(&o.dir, comps, depth + 1),
-            Err(OpenErr::Link) => self.link(comps),
+            Err(OpenErr::Link | OpenErr::Offline) => self.link(comps),
             Err(OpenErr::Io(e)) => self.dir_unreadable(comps, &e),
-        }
-    }
-
-    fn file(&mut self, dir: &Dir, comps: &[OsString]) {
-        let Some(name) = comps.last() else { return };
-        let opened = match dir.open_file(name) {
-            Ok(o) => o,
-            Err(OpenErr::Link) => return self.link(comps),
-            Err(OpenErr::Io(e)) => {
-                let why = UnparsedReason::Unreadable;
-                return self.unparsed(comps, why, codes::UNREADABLE, &format!("open failed: {e}"));
-            }
-        };
-        if !opened.regular {
-            return self.refused(comps, codes::SPECIAL_SKIPPED, "handle is not a regular file");
-        }
-        if opened.foreign {
-            return self.refused(comps, codes::ESCAPED_ROOT, "handle is outside the root");
-        }
-        if opened.stamp.size > self.limits.file_cap {
-            let why = UnparsedReason::Oversize;
-            return self.unparsed(comps, why, codes::LIMIT_EXCEEDED, "file over the size cap");
-        }
-        match hash_open(&opened, &rel_display(comps)) {
-            Ok(blob) => self.record(comps, Some(blob), ParseCompleteness::NotApplicable),
-            Err(UnparsedReason::ChangedDuringScan) => {
-                let why = UnparsedReason::ChangedDuringScan;
-                self.unparsed(comps, why, codes::CHANGED_DURING_SCAN, "changed while reading");
-            }
-            Err(why) => self.unparsed(comps, why, codes::UNREADABLE, "read failed"),
         }
     }
 
@@ -224,3 +209,5 @@ impl Walker {
 mod tests;
 #[cfg(all(test, unix))]
 mod tests_boundary;
+#[cfg(all(test, unix))]
+mod tests_lazy;

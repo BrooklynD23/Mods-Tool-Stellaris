@@ -15,6 +15,12 @@ pub const ROOT_REFUSED: &str = "ingest.root_refused";
 pub const MOD_PATH_MISSING: &str = "ingest.mod_path_missing";
 /// Two mods derived the same [`ModKey`](smd_core::ModKey); the later one was re-keyed.
 pub const DUPLICATE_KEY: &str = "ingest.duplicate_mod_key";
+/// A directory under `mod/` holds a `descriptor.mod` but no launcher `*.mod` file points
+/// at it: the launcher does not know it, so the game does not load it.
+pub const MOD_UNREGISTERED: &str = "ingest.mod_unregistered";
+/// The launcher database was not read during discovery (absent, unreadable or unverified),
+/// so mods only it registers (Paradox Mods downloads, folders added by hand) were not seen.
+pub const LAUNCHER_DB_NOT_CONSULTED: &str = "ingest.launcher_db_not_consulted";
 /// A load-order source named a mod that discovery did not find.
 pub const PLAYSET_MOD_UNMATCHED: &str = "ingest.playset_mod_unmatched";
 /// A load-order source failed and the chain moved on.
@@ -79,5 +85,23 @@ impl IngestDiagnostic {
     }
 }
 
+/// The installed game version is outside the profile's verified range, or could not be
+/// read.
+pub const GAME_VERSION_UNVERIFIED: &str = "ingest.game_version_unverified";
+
 /// A profile named a load-order source this build does not have.
 pub const UNKNOWN_ORDER_SOURCE: &str = "ingest.unknown_order_source";
+
+/// Location discovery found nothing for a location; the diagnostic's subject is its key
+/// (`game_dir`, `user_dir`, `workshop_dir`).
+pub const LOCATE_UNRESOLVED: &str = "locate.unresolved";
+/// Discovery ran without a user directory, or (for a Steam or unattributed install)
+/// without any workshop directory, so "no mods" cannot be stated as fact.
+pub const LOCATE_INCOMPLETE: &str = "locate.incomplete";
+/// A drive letter did not answer within the probe timeout (an offline mapped drive) and
+/// was skipped, so an install on it could have been missed.
+pub const LOCATE_DRIVE_SLOW: &str = "locate.drive_slow";
+/// A flag or environment variable names a directory that does not exist.
+pub const LOCATE_OVERRIDE_MISSING: &str = "locate.override_missing";
+/// `libraryfolders.vdf` or an `appmanifest` is over a cap, malformed, or unreadable.
+pub const LOCATE_VDF_INVALID: &str = "locate.vdf_invalid";

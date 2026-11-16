@@ -58,6 +58,8 @@ fn fixture() -> ReportModel {
         unparsed: [(UnparsedReason::Oversize, 1)].into_iter().collect(),
         domains: vec!["event".into()],
         content_incomplete: Vec::new(),
+        discovery_incomplete: false,
+        game_version_unverified: false,
     };
     let mut m = model(completeness, vec![a, b, c, d], vec![f1, f2, f3]);
     m.header.provenance = provenance(Confidence::Inferred, Confidence::Fallback);

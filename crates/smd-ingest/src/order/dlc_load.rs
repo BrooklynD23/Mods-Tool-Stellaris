@@ -144,6 +144,7 @@ impl ChainSource for DlcLoadJson {
                 order: Confidence::Inferred,
                 activation: Confidence::Inferred,
                 snapshot: SnapshotMethod::NotApplicable,
+                unmatched: 0,
             }
         });
         SourceAttempt { result, diagnostics }
