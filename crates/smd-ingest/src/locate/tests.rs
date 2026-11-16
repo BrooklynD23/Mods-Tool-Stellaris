@@ -284,7 +284,7 @@ fn workshop_flags_replace_the_search_and_are_deduplicated() {
     fx.steam();
     fx.dir("libA/steamapps/workshop/content/4242");
     let w = fx.dir("ws");
-    let again = PathBuf::from(format!("{}/./", w.display()));
+    let again = PathBuf::from(format!("{}/./", crate::testutil::plain(&w)));
     let over = Overrides {
         workshop_dirs: vec![w.clone(), again, fx.root.join("gone")],
         ..Overrides::default()

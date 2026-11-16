@@ -88,7 +88,7 @@ fn a_launcher_path_matches_across_spelling_and_a_relative_one_against_the_user_d
     let dir = w.workshop.join("1");
     fs::create_dir_all(&dir).unwrap();
     let idents = [Ident { paths: vec![dir.clone()], ..Ident::default() }];
-    let spelled = row(|r| r.dir_path = Some(format!("{}/./../1/", dir.display())));
+    let spelled = row(|r| r.dir_path = Some(format!("{}/./../1/", crate::testutil::plain(&dir))));
     assert_eq!(join::find(&spelled, &idents, &w.user), Some(0));
     let relative = row(|r| r.dir_path = some("../workshop/1"));
     assert_eq!(join::find(&relative, &idents, &w.user), Some(0));

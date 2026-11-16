@@ -1,7 +1,7 @@
 //! Fixture builders shared by the unit tests. Nothing here needs a game install.
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use smd_core::ResolvedLocations;
 use tempfile::TempDir;
@@ -86,4 +86,12 @@ impl World {
         fs::write(&p, bytes).expect("write user file");
         p
     }
+}
+
+/// `p` as text without the Windows verbatim prefix, for building another spelling of it
+/// (`{plain}/./`). Fixture roots are canonical, and on Windows canonical means `\\?\C:\..`,
+/// which is never normalised: `/./` after it is an invalid name, not the same directory.
+pub(crate) fn plain(p: &Path) -> String {
+    let text = p.display().to_string();
+    text.strip_prefix(r"\\?\").map_or(text.clone(), str::to_owned)
 }

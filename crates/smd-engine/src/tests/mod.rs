@@ -160,7 +160,12 @@ fn several_workshop_roots_are_scanned_and_a_repeated_root_is_read_once() {
     std::fs::create_dir_all(dir.join("common/traits")).unwrap();
     std::fs::write(dir.join(SHARED), "dddd").unwrap();
     let mut req = w.request();
-    req.workshop_dirs.push(PathBuf::from(format!("{}/./", w.workshop.display())));
+    // The same root spelled differently. Built from the plain form: on Windows the fixture
+    // path is canonical (`\\?\C:\..`), and a verbatim path is never normalised, so
+    // `/./` after one is an invalid name (os error 123) rather than another spelling.
+    let plain = w.workshop.display().to_string();
+    let plain = plain.strip_prefix(r"\\?\").unwrap_or(&plain);
+    req.workshop_dirs.push(PathBuf::from(format!("{plain}/./")));
     req.workshop_dirs.push(second);
     let out = scan(&req).expect("scans");
     let mut keys: Vec<&str> = out.inventory.iter().map(|m| m.mod_key.as_str()).collect();

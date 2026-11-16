@@ -269,7 +269,10 @@ fn several_workshop_roots_are_all_read_and_an_identical_root_once() {
     fs::write(second.join("2002").join("descriptor.mod"), "name=\"Two\"\n").unwrap();
     let mut loc = w.locations();
     loc.insert(&workshop_key(1), second);
-    loc.insert(&workshop_key(2), PathBuf::from(format!("{}/./", w.workshop.display())));
+    loc.insert(
+        &workshop_key(2),
+        PathBuf::from(format!("{}/./", crate::testutil::plain(&w.workshop))),
+    );
     let d = discover(&loc, &w.options());
     let mut names: Vec<&str> = d.mods.iter().map(|m| &*m.name).collect();
     names.sort_unstable();

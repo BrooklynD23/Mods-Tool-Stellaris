@@ -34,7 +34,7 @@ jobs:
         run: rustup show active-toolchain || rustup toolchain install stable
       - uses: Swatinem/rust-cache@v2
       - name: Test
-        run: cargo test --workspace
+        run: cargo test --workspace --no-fail-fast
       - name: Clippy (lints cfg(not(unix)) code on Windows)
         run: |
           rustup component add clippy
