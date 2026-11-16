@@ -17,6 +17,7 @@
       "event"
     ],
     "discovery_incomplete": false,
+    "game_version_unverified": false,
     "content_incomplete": [],
     "inventory": [
       {

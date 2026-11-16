@@ -11,9 +11,6 @@ use crate::profile::ProfileError;
 #[serde(deny_unknown_fields)]
 pub(crate) struct RawVersion {
     source: Option<String>,
-    // Documentation of where the file lives; the reader tries the user directory, then
-    // the install directory.
-    #[allow(dead_code)]
     source_dir: Option<String>,
     #[serde(default)]
     fields: Vec<String>,
@@ -31,6 +28,9 @@ pub(crate) struct RawVersion {
 pub struct VersionSpec {
     /// File name holding the version, e.g. `launcher-settings.json`.
     pub file: Box<str>,
+    /// Which directory is read first: `"install"` or `"user"`; the other is the fallback.
+    /// Empty or unknown means user first.
+    pub source_dir: Box<str>,
     /// JSON keys to try, in order.
     pub fields: Vec<Box<str>>,
     /// Versions the profile's data was checked against; empty makes no claim.
@@ -49,6 +49,7 @@ impl VersionSpec {
             .collect::<Result<Vec<_>, _>>()?;
         Ok(VersionSpec {
             file: raw.source.unwrap_or_default().into(),
+            source_dir: raw.source_dir.unwrap_or_default().into(),
             fields: raw.fields.into_iter().map(Into::into).collect(),
             verified_range,
         })

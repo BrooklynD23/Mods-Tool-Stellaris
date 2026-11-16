@@ -5,7 +5,7 @@
 
 use std::collections::BTreeSet;
 
-use smd_core::{DiagSeverity, ModKey, ResolvedFinding, ResolvedLocations};
+use smd_core::{DiagSeverity, ModKey, ResolvedFinding, ResolvedLocations, ScanCompleteness};
 use smd_index::{IndexBuilder, OverlayRules, ReplacePathScope, ScanIndex};
 use smd_ingest::{
     DiscoveryOptions, Inventory, KEY_INSTALL, KEY_USER_DIR, OrderChain, SourceOptions,
@@ -34,18 +34,19 @@ pub fn scan(req: &ScanRequest) -> Result<ScanOutput, ScanError> {
     let (chain, mut diags) = from_profile(&profile, &opts);
     let inv = inventory(&loc, &chain, &disc);
     diags.extend(inv.diagnostics.iter().map(rows::from_ingest));
-    diags.extend(check_game_version(&loc, &profile).diagnostics.iter().map(rows::from_ingest));
+    let gv = check_game_version(&loc, &profile);
+    diags.extend(gv.diagnostics.iter().map(rows::from_ingest));
     cancelled(req)?;
     let walked = walk_sources(&inv, &profile, req)?;
     diags.extend(walked.diagnostics);
     let mut completeness = inv.completeness.clone();
     absorb(&mut completeness, walked.completeness);
     completeness.discovery_incomplete |= req.locations_incomplete;
+    completeness.game_version_unverified = !gv.diagnostics.is_empty();
     let index = build_index(&inv, &profile, walked.inputs);
     let incomplete: BTreeSet<ModKey> =
         completeness.content_incomplete.iter().map(|(k, _, _)| k.clone()).collect();
-    let findings =
-        run_rules(&index, req, (&incomplete, completeness.discovery_incomplete), &mut diags)?;
+    let findings = run_rules(&index, req, (&incomplete, &completeness), &mut diags)?;
     diags.sort_by(|a, b| (&a.location, &a.code, &a.detail).cmp(&(&b.location, &b.code, &b.detail)));
     Ok(ScanOutput {
         provenance: inv.provenance.clone(),
@@ -111,7 +112,7 @@ fn build_index(
 fn run_rules(
     index: &ScanIndex,
     req: &ScanRequest,
-    incomplete: (&BTreeSet<ModKey>, bool),
+    incomplete: (&BTreeSet<ModKey>, &ScanCompleteness),
     diags: &mut Vec<ScanDiagnostic>,
 ) -> Result<Vec<ResolvedFinding>, ScanError> {
     let all = smd_rules::registry();

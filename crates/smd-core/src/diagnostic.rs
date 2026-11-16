@@ -87,6 +87,10 @@ pub struct ScanCompleteness {
     /// special file or bound kept an entry out). Not a mod, so it is no `ModKey`'s entry:
     /// every finding is `Partial` and no "not installed" claim may stand on this scan.
     pub discovery_incomplete: bool,
+    /// The installed game version was unreadable or outside the profile's verified range,
+    /// so every finding rests on unverified game knowledge (semantics capped).
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub game_version_unverified: bool,
 }
 
 /// Why a source's content is incomplete.
@@ -147,6 +151,7 @@ mod tests {
                 Some("common/link".into()),
             )],
             discovery_incomplete: false,
+            game_version_unverified: false,
         };
         assert_eq!(c.unparsed[0].0, UnparsedReason::Refused);
         assert_eq!(c.content_incomplete[0].1, ContentIncompleteReason::LinkRefused);
@@ -166,6 +171,7 @@ mod tests {
                 None,
             )],
             discovery_incomplete: true,
+            game_version_unverified: true,
         };
         let json = serde_json::to_string(&c).expect("serialises");
         assert_eq!(serde_json::from_str::<ScanCompleteness>(&json).expect("deserialises"), c);

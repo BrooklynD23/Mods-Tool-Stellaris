@@ -38,6 +38,7 @@ pub(crate) fn absorb(total: &mut ScanCompleteness, part: ScanCompleteness) {
     total.domains.extend(part.domains);
     total.content_incomplete.extend(part.content_incomplete);
     total.discovery_incomplete |= part.discovery_incomplete;
+    total.game_version_unverified |= part.game_version_unverified;
 }
 
 /// Walk each source that is not `Inactive` and has a readable content root, in `SourceId`

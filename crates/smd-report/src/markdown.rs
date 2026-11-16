@@ -65,6 +65,9 @@ fn completeness(out: &mut String, h: &HeaderView) {
     if h.discovery_incomplete {
         out.push_str("- discovery_incomplete: mods may be missing from this scan\n");
     }
+    if h.game_version_unverified {
+        out.push_str("- game_version_unverified: verdicts rest on an unchecked game version\n");
+    }
     if h.content_incomplete.is_empty() {
         out.push_str("- content_incomplete: (none)\n");
     }

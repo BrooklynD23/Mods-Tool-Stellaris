@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 
 use smd_core::{
     Activation, ActivationCertainty, Certainty, Completeness, Confidence, Finding, ModKey,
-    ParseCompleteness, ResolutionGap, RuleId, SemanticCertainty,
+    ParseCompleteness, ResolutionGap, RuleId, ScanCompleteness, SemanticCertainty,
 };
 use smd_index::ScanIndex;
 
@@ -75,9 +75,11 @@ fn order(index: &ScanIndex, f: &Finding) -> Confidence {
 }
 
 /// `Verified` is earned per `[[dir]]` entry by a `verified` key, and no profile entry
-/// carries one yet, so the best a finding can be is `Assumed`.
-fn semantics(f: &Finding) -> SemanticCertainty {
-    if f.gaps.iter().any(|g| unmodelled(*g)) {
+/// carries one yet, so the best a finding can be is `Assumed`. An unreadable or
+/// out-of-range game version means the profile's data was not checked against this build,
+/// so nothing may rest on it: `Unmodelled`.
+fn semantics(f: &Finding, version_unverified: bool) -> SemanticCertainty {
+    if version_unverified || f.gaps.iter().any(|g| unmodelled(*g)) {
         SemanticCertainty::Unmodelled
     } else {
         SemanticCertainty::Assumed
@@ -121,13 +123,13 @@ pub(crate) fn certainty_of(
     index: &ScanIndex,
     f: &Finding,
     incomplete: &BTreeSet<ModKey>,
-    discovery_incomplete: bool,
+    scan: &ScanCompleteness,
 ) -> Certainty {
     let supported = Certainty {
-        completeness: completeness(index, f, incomplete, discovery_incomplete),
+        completeness: completeness(index, f, incomplete, scan.discovery_incomplete),
         activation: activation(index, f),
         order: order(index, f),
-        semantics: semantics(f),
+        semantics: semantics(f, scan.game_version_unverified),
     };
     meet(supported, rule_ceiling(f.rule, f.certainty))
 }

@@ -1,7 +1,7 @@
 //! Reading the installed game version and checking it against the profile (doc 10,
 //! `[version]`).
 //!
-//! The version file is tried in the user directory, then the install directory. Every
+//! The version file is tried in the profile's `source_dir` first, then the other one. Every
 //! way it can fail is a Warn, never an error: a scan is still worth running on an
 //! unverified version, but its verdicts then rest on an unchecked profile.
 
@@ -72,7 +72,12 @@ pub fn check_game_version(loc: &ResolvedLocations, profile: &Profile) -> GameVer
     let spec = profile.version();
     let mut problem = None;
     let mut found = None;
-    for key in [KEY_USER_DIR, KEY_INSTALL] {
+    let order = if &*spec.source_dir == "install" {
+        [KEY_INSTALL, KEY_USER_DIR]
+    } else {
+        [KEY_USER_DIR, KEY_INSTALL]
+    };
+    for key in order {
         let Some(dir) = loc.get(key) else { continue };
         match read_one(dir, &spec.file, &spec.fields) {
             Read::Missing => {}
@@ -141,6 +146,16 @@ mod tests {
         put(&w.install, br#"{"version":"4.2.0"}"#);
         let c = run(&w);
         assert_eq!(c.raw.as_deref(), Some("4.2.0"));
+        assert!(c.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn profile_source_dir_is_read_first() {
+        let w = World::new();
+        put(&w.user, br#"{"rawVersion":"v3.13.1"}"#);
+        put(&w.install, br#"{"rawVersion":"v4.0.5"}"#);
+        let c = run(&w);
+        assert_eq!(c.raw.as_deref(), Some("v4.0.5"), "the profile says install first");
         assert!(c.diagnostics.is_empty());
     }
 

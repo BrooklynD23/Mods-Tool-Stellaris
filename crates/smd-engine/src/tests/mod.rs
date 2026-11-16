@@ -61,8 +61,18 @@ fn h21_inactive_sources_are_not_participants() {
 }
 
 #[test]
+fn an_unverified_game_version_caps_semantics_and_is_flagged() {
+    let w = three();
+    w.dlc_load(&["111", "222", "333"]);
+    let out = scan(&w.request()).expect("no launcher-settings.json");
+    assert!(out.completeness.game_version_unverified);
+    assert_eq!(out.findings[0].certainty.semantics, SemanticCertainty::Unmodelled);
+}
+
+#[test]
 fn h12_certainty_is_computed_from_provenance_and_gaps() {
     let w = three();
+    w.vanilla("launcher-settings.json", r#"{"rawVersion":"v4.0.5"}"#);
     w.dlc_load(&["111", "222", "333"]);
     let out = scan(&w.request()).expect("scans");
     let f = &out.findings[0];

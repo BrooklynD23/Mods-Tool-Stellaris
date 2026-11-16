@@ -36,6 +36,11 @@ impl World {
         w
     }
 
+    /// An in-range game version, so the scan's verdicts are not capped as unverified.
+    pub fn game_version(&self) {
+        put(&self.game, "launcher-settings.json", r#"{"rawVersion":"v4.0.5"}"#);
+    }
+
     pub fn vanilla(&self, rel: &str, body: &str) {
         put(&self.game, rel, body);
     }

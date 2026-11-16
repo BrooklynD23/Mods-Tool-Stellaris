@@ -208,3 +208,11 @@ Windows-first. Each item names its gate.
    release-pipeline decision.
 7. **Decisions still open** in the register: whether D1 ships the GUI or a report;
    macOS approval (deferred); whether to close PRs #1 and #2 once #3 merges.
+
+## Review round 2 (fix/review-round2)
+
+- Windows open: entries classified first (no-follow); links and offline refused; everything else (dedup/WOF/hydrated) opened WITHOUT FILE_FLAG_OPEN_REPARSE_POINT, re-verified on the handle. Offline directories are fs.cloud_placeholder, never listed, source content-incomplete. UNVERIFIED on real Windows.
+- Launcher join: ids carry `evidenced`; an unevidenced steam:X also matches a row pdxId. A DB-only row whose dir resolves to an already-found root is skipped.
+- Profile [version] source_dir is honoured (read first, other is fallback).
+- Unreadable/out-of-range game version sets ScanCompleteness::game_version_unverified: semantics capped at Unmodelled, header prints it, scan_complete false.
+- Hash pass sorts by path and reuses the parent directory chain.

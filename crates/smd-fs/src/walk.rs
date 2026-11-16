@@ -160,7 +160,9 @@ impl Walker {
                 self.refused(comps, codes::SPECIAL_SKIPPED, "not a regular file");
             }
             Ok(Entry { kind: Kind::Offline, .. }) => {
+                // May be a directory: its subtree is then unseen, so the source is incomplete.
                 self.refused(comps, codes::CLOUD_PLACEHOLDER, "offline cloud placeholder not read");
+                self.incomplete(ContentIncompleteReason::Truncated, &rel_display(comps));
             }
         }
     }

@@ -25,6 +25,8 @@ pub(crate) fn ident(m: &DiscoveredMod) -> Ident {
     Ident {
         mod_file: m.mod_file.as_deref().map(str::to_owned),
         remote_id: remote_ref(m),
+        evidenced: m.key.as_str().starts_with("pdx:")
+            || join::evidenced_file(m.mod_file.as_deref()),
         paths: m.content_root.iter().chain(&m.source_path).cloned().collect(),
     }
 }

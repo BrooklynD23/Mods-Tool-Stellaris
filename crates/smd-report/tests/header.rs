@@ -53,6 +53,16 @@ fn a_complete_zero_finding_scan_says_so_with_the_header() {
 }
 
 #[test]
+fn an_unverified_game_version_is_shown_and_never_called_clean() {
+    let c = smd_core::ScanCompleteness { game_version_unverified: true, ..complete() };
+    let m = model(c, vec![row("k", "Alpha", "p")], vec![]);
+    for (name, out) in render_all(&m, &RenderOptions::default()) {
+        assert!(!out.to_lowercase().contains("no same-path conflicts"), "{name}:\n{out}");
+        assert!(out.contains("game_version_unverified"), "{name}:\n{out}");
+    }
+}
+
+#[test]
 fn incomplete_discovery_alone_is_never_called_clean() {
     let c = smd_core::ScanCompleteness { discovery_incomplete: true, ..complete() };
     let m = model(c, vec![row("k", "Alpha", "p")], vec![]);
