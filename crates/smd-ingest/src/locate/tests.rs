@@ -36,7 +36,9 @@ struct Fx {
 impl Fx {
     fn new() -> Fx {
         let tmp = tempfile::tempdir().expect("tempdir");
-        let root = tmp.path().canonicalize().expect("canonical");
+        // Plain, not verbatim: tests append `/`-separated segments to the root, and a
+        // Windows `\\?\` path is never normalised, so those would not resolve.
+        let root = PathBuf::from(crate::testutil::plain(&tmp.path().canonicalize().expect("c")));
         Fx { _tmp: tmp, root }
     }
 
@@ -65,12 +67,17 @@ impl Fx {
         let root = self.dir("home/.steam/steam");
         let vdf = format!(
             "\"libraryfolders\" {{ \"0\" {{ \"path\" \"{}\" }} \"1\" {{ \"path\" \"{}\" }} \"2\" {{ \"path\" \"{}\" }} }}",
-            root.display(),
-            a.display(),
-            b.display()
+            vdf_path(&root),
+            vdf_path(&a),
+            vdf_path(&b)
         );
         self.file("home/.steam/steam/config/libraryfolders.vdf", &vdf);
     }
+}
+
+/// A path as Steam writes it in a `.vdf`: backslashes escaped (`C:\\\\Steam`).
+fn vdf_path(p: &Path) -> String {
+    p.display().to_string().replace('\\', "\\\\")
 }
 
 fn profile() -> Profile {
