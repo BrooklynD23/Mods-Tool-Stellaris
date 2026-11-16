@@ -9,16 +9,87 @@ has to know about `libraryfolders.vdf` or SQLite.
 ```mermaid
 flowchart TB
     S1["Explicit CLI/GUI paths"] --> R{"Resolver"}
-    S2["Env: SMD_GAME_DIR, SMD_MODS_DIR"] --> R
+    S2["Env: SMD_GAME_DIR, SMD_USER_DIR"] --> R
     S3["Steam libraryfolders.vdf"] --> R
-    S4["OS default user dir"] --> R
-    S5["Registry / plist probes"] --> R
+    S4["Registry (Documents, uninstall entries)"] --> R
+    S5["OS default user dir"] --> R
     R --> OUT["ResolvedLocations"]
 ```
 
 Sources are tried in that order; the first that yields an existing directory wins, and
 the resolved set is shown in the UI so the user can see what was picked and override it.
 Silent auto-detection that guesses wrong is worse than asking.
+
+Implemented as `smd_ingest::locate(profile, overrides, env)`, which returns the `store`
+(`steam`, `gog`, `xbox`, `other`, `unknown`), the game, user and workshop directories,
+every Steam library, and **every candidate tried** (`key`, `path`, `origin`, `exists`).
+`smd locate` prints it with every mod `discover()` finds there; `smd scan` calls it for
+whatever `--game-dir` / `--user-dir` was left out, and exits 2 naming what was tried when
+one is still missing. The machine (OS, env vars, registry, drive roots) is injected as
+`smd_fs::HostEnv`, so tests use a fake one.
+
+- A **flag** that names a missing directory stops the search for that location (warn
+  `locate.override_missing`); a missing **env** value is recorded and falls through.
+- **Steam roots:** `SMD_STEAM_DIR`; on Windows the registry (`HKCU` `SteamPath`, `HKLM`
+  `WOW6432Node` `InstallPath`) and `%ProgramFiles(x86)%\Steam`; on Linux `~/.steam/steam`
+  and `~/.local/share/Steam`. Each root is a library, plus those its index files name.
+- **Game:** per library, `appmanifest_<id>.acf` `installdir`, else the profile's install
+  template. Then, on Windows, an uninstall entry whose `DisplayName` starts with the
+  profile's `[stores]` prefix (accepted only if `InstallLocation` holds the profile's
+  executable; GOG and similar), then the Xbox path under each drive root.
+- **User directory:** the profile's per-OS template (`{DOCUMENTS}` is the registry's
+  `User Shell Folders\Personal`, which follows OneDrive, else `%USERPROFILE%\Documents`),
+  then `[stores] extra_user_dirs` (some are UNVERIFIED candidates), then, on Linux, a
+  Proton prefix in each library.
+- **Workshop:** every library that has the workshop content directory contributes one
+  root; `--workshop-dir` flags replace the search. Discovery reads any number of roots
+  (`workshop`, `workshop.1`, ... in `ResolvedLocations`); identical roots
+  (`smd_fs::same_host_dir`) are read once.
+- Registry reads run `reg.exe query` (no `unsafe`); non-ASCII values follow the console
+  code page and may be garbled.
+
+### Mod sources and `origin`
+
+`discover()` finds mods in five ways; each `DiscoveredMod` carries a `ModOrigin`, printed by
+`smd locate` (table, markdown, and JSON `"origin"` on each mod):
+
+| `origin` | Found as | Content | Game loads it? |
+| --- | --- | --- | --- |
+| `mod_file` | `<user_dir>/mod/*.mod` | read via `path=` | yes if enabled |
+| `workshop_dir` | workshop dir no `.mod` claims | read | no launcher file |
+| `unregistered_dir` | `mod/<dir>/descriptor.mod`, no `.mod` points at it (warn `ingest.mod_unregistered`) | read | no: the launcher does not know it |
+| `loose_archive` | `mod/*.zip` no `archive=` names | unread (`Archive`) | no |
+| `launcher_db_only` | `launcher-v2.sqlite` `mods` row no other source claimed | read via `dirPath`, else unread | per the playset |
+
+"Claimed" is host path identity (`smd_fs::same_host_dir`, also tried with links resolved)
+against every mod's resolved `path=`/`archive=`. A launcher row's `dirPath`/`archivePath` is
+untrusted exactly like a descriptor's `path=` and goes through the same refuse guard
+(`ingest.root_refused`). Rows come from the launcher reader's verified read-only snapshot,
+never the live file. The snapshot is read once per scan: discovery keeps it on `Discovery`
+and the order chain's launcher source reuses it (test hooks reach that one read). If the database is absent, unreadable or fails verification, discovery
+is **not** marked incomplete for that alone, but the report carries warn
+`ingest.launcher_db_not_consulted` with the reason: mods only the launcher registers were
+not looked for.
+
+**Platform of an id (`ModKey`, `SourceRole`).** A descriptor's `remote_file_id` is a Steam id
+or a Paradox Mods id; the key carries the platform (`steam:<id>`, `pdx:<id>`) so the two
+never collide. Decided from the strongest evidence available: (1) a launcher row: `steamId`
+is Steam, else `pdxId` is Paradox (`SourceRole::ParadoxMods`); (2) the `*.mod` file name:
+`pdx_<id>` is Paradox, `ugc_<id>` Steam; (3) a workshop directory is Steam. With none of
+these the id is read as Steam-compatible (`steam:<id>`, role `Workshop`): never `pdx:`
+without evidence. A mod with no id is keyed `h-<hash>` (name, directory name, archive file
+name; not `version`, not `path=`).
+
+Playset entries join to mods by, in order: `gameRegistryId` (its file name is the `*.mod`
+file), `steamId` (against `steam:` ids), `pdxId` (against `pdx:` ids; `pdxId` is an
+assumption, so a Paradox mod with no `pdx_`/row evidence is `steam:`-keyed and found by
+`dirPath` instead), then `dirPath`/`archivePath` by path identity. An entry matching nothing is counted in
+`Playset::unmatched`; while it is non-zero a discovered mod missing from the playset is
+`Unknown`, not `Inactive`. Real launcher column contents are unverified (VERIFY V03).
+
+Discovery incompleteness is `ScanCompleteness::discovery_incomplete`, a flag (not a mod):
+it makes every finding's completeness `Partial`, the report's `scan_complete` false, and
+header line `discovery_incomplete`.
 
 ### Where things live
 
@@ -45,6 +116,11 @@ as an additional candidate. Multiple Steam libraries are normal and all are scan
 `libraryfolders.vdf` is Valve's KeyValues format — close enough to Clausewitz script in
 shape that `smd-syntax`'s lexer primitives are reused with a different token table
 rather than pulling in a separate VDF crate.
+
+As built, `smd_fs::steam_vdf` is a small standalone KeyValues reader (no new crate),
+capped at 1 MiB, depth 16 and 64 libraries; a cap that trips is an error, never a
+truncation. It reads the old flat and the new nested `libraryfolders.vdf`, and
+`installdir` from an `appmanifest`. The fuzz target is not written yet.
 
 ## Enumeration and the stat cache
 

@@ -1,5 +1,7 @@
 //! Reading and hashing one opened handle, with the pre/post-read stamp check.
 
+use std::ffi::OsString;
+
 use smd_core::{Blob, UnparsedReason};
 
 use crate::hashing::hash_reader;
@@ -16,11 +18,12 @@ thread_local! {
 }
 
 /// Read and hash an opened handle; `Err` is why it is `Unparsed`.
-pub(super) fn hash_open(o: &OpenedFile, rel: &str) -> Result<Blob, UnparsedReason> {
+pub(super) fn hash_open(o: &OpenedFile, rel: &[OsString]) -> Result<Blob, UnparsedReason> {
+    // The path string exists only for the test hook; production builds none per file.
     #[cfg(test)]
     BEFORE_READ.with(|h| {
         if let Some(f) = h.borrow().as_ref() {
-            f(rel);
+            f(&rel.iter().map(|c| c.to_string_lossy()).collect::<Vec<_>>().join("/"));
         }
     });
     #[cfg(not(test))]

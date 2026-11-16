@@ -25,7 +25,7 @@
 #>
 [CmdletBinding()]
 param(
-    [ValidateSet('Menu', 'Detect', 'Mods', 'Saves', 'Scan', 'Report', 'ErrorLog', 'Setup', 'Build')]
+    [ValidateSet('Menu', 'Detect', 'Paths', 'Mods', 'Saves', 'Scan', 'Report', 'ErrorLog', 'Setup', 'Build', 'Rebuild', 'Run', 'Test', 'Help')]
     [string]$Action = 'Menu',
     [string]$GameDir,
     [string]$UserDir,
@@ -46,7 +46,13 @@ $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $ConfigDir = Join-Path $env:LOCALAPPDATA 'StellarisModDoctor'
 $ConfigFile = Join-Path $ConfigDir 'paths.json'
 $CargoBin = Join-Path $env:USERPROFILE '.cargo\bin'
-$ExePath = Join-Path $RepoRoot 'target\release\smd.exe'
+# Honour CARGO_TARGET_DIR (relative values are relative to the repo, as cargo reads them there).
+$TargetDir = Join-Path $RepoRoot 'target'
+if ($env:CARGO_TARGET_DIR) {
+    $TargetDir = $env:CARGO_TARGET_DIR
+    if (-not [IO.Path]::IsPathRooted($TargetDir)) { $TargetDir = Join-Path $RepoRoot $TargetDir }
+}
+$ExePath = Join-Path $TargetDir 'release\smd.exe'
 
 # ---------------------------------------------------------------- output helpers
 
@@ -98,6 +104,44 @@ function Save-Paths($Paths) {
         UserDir     = $Paths.UserDir
         WorkshopDir = $Paths.WorkshopDir
     } | ConvertTo-Json | Set-Content -Path $ConfigFile -Encoding UTF8
+}
+
+# A trailing backslash before the closing quote breaks native argument quoting on PowerShell 5.1.
+function Format-DirArg([string]$Path) {
+    if (-not $Path) { return $Path }
+    $t = $Path.TrimEnd('\', '/')
+    if ($t -match '^[A-Za-z]:$') { return $Path }   # a drive root keeps its separator
+    return $t
+}
+
+function Set-Utf8Console {
+    # smd writes UTF-8; without this, 5.1 decodes it with the OEM code page and mangles mod names.
+    try {
+        $utf8 = New-Object Text.UTF8Encoding($false)
+        [Console]::OutputEncoding = $utf8
+        $script:OutputEncoding = $utf8
+    } catch { }   # no console (ISE, scheduled task): keep the default encoding
+}
+
+# `smd locate --format json` (schema 1) knows every Steam library and every workshop mod.
+# Returns $null when smd is not built yet, the call fails, or the schema is not the one we read;
+# the PowerShell detection below is the fallback.
+function Get-LocateInfo {
+    if (-not (Test-Path $ExePath)) { return $null }
+    $prev = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'   # native stderr must not become a terminating error on 5.1
+        Set-Utf8Console
+        $lines = & $ExePath locate --format json --no-redact 2>$null
+        if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 3) { return $null }   # 3 = finished with an Error diagnostic
+        $j = ($lines -join "`n") | ConvertFrom-Json
+        if (-not $j.PSObject.Properties['schema'] -or $j.schema -ne 1) { return $null }
+        return $j
+    } catch {
+        return $null
+    } finally {
+        $ErrorActionPreference = $prev
+    }
 }
 
 # ---------------------------------------------------------------- detection
@@ -185,7 +229,8 @@ function Find-UserDir {
 }
 
 function Get-GameVersion([string]$Game) {
-    if (-not $Game) { return $null }
+    # Test-Path first: Join-Path throws DriveNotFound for a typed path on a missing drive.
+    if (-not $Game -or -not (Test-Path -LiteralPath $Game)) { return $null }
     $settings = Join-Path $Game 'launcher-settings.json'
     if (-not (Test-Path $settings)) { return $null }
     try {
@@ -199,17 +244,27 @@ function Get-GameVersion([string]$Game) {
 
 function Resolve-Paths {
     $saved = Get-SavedPaths
-    $r = [ordered]@{ Store = $null; GameDir = $null; UserDir = $null; WorkshopDir = $null; Version = $null; Source = @{} }
+    $r = [ordered]@{ Store = $null; GameDir = $null; UserDir = $null; WorkshopDir = $null; WorkshopDirs = @(); Locate = $null; Version = $null; Source = @{} }
 
-    $found = Find-SteamInstall (Get-SteamRoot)
-    if (-not $found) { $found = Find-OtherInstall }
-    if ($found) {
-        $r.Store = $found.Store
-        $r.GameDir = $found.GameDir; $r.Source.GameDir = 'detected'
-        if ($found.WorkshopDir) { $r.WorkshopDir = $found.WorkshopDir; $r.Source.WorkshopDir = 'detected' }
+    $loc = Get-LocateInfo
+    if ($loc) {
+        $r.Locate = $loc
+        $r.Store = [string]$loc.store
+        if ($loc.game_dir) { $r.GameDir = $loc.game_dir; $r.Source.GameDir = 'smd locate' }
+        if ($loc.user_dir) { $r.UserDir = $loc.user_dir; $r.Source.UserDir = 'smd locate' }
+        $r.WorkshopDirs = @($loc.workshop_dirs | Where-Object { $_ })
+        if ($r.WorkshopDirs.Count) { $r.WorkshopDir = $r.WorkshopDirs[0]; $r.Source.WorkshopDir = 'smd locate' }
+    } else {
+        $found = Find-SteamInstall (Get-SteamRoot)
+        if (-not $found) { $found = Find-OtherInstall }
+        if ($found) {
+            $r.Store = $found.Store
+            $r.GameDir = $found.GameDir; $r.Source.GameDir = 'detected'
+            if ($found.WorkshopDir) { $r.WorkshopDir = $found.WorkshopDir; $r.Source.WorkshopDir = 'detected' }
+        }
+        $u = Find-UserDir
+        if ($u) { $r.UserDir = $u; $r.Source.UserDir = 'detected' }
     }
-    $u = Find-UserDir
-    if ($u) { $r.UserDir = $u; $r.Source.UserDir = 'detected' }
 
     # Saved choices beat detection; command-line arguments beat both.
     foreach ($name in 'GameDir', 'UserDir', 'WorkshopDir') {
@@ -217,6 +272,9 @@ function Resolve-Paths {
         $arg = Get-Variable -Name $name -ValueOnly
         if ($arg) { $r[$name] = $arg; $r.Source[$name] = 'argument' }
     }
+    # A saved or argument workshop folder replaces whatever was detected.
+    if ($r.Source['WorkshopDir'] -in 'saved', 'argument') { $r.WorkshopDirs = @($r.WorkshopDir) }
+    elseif (-not $r.Locate -and $r.WorkshopDir) { $r.WorkshopDirs = @($r.WorkshopDir) }
     $r.Version = Get-GameVersion $r.GameDir
     return [pscustomobject]$r
 }
@@ -281,7 +339,21 @@ function Show-Mods($P) {
     $enabled = Get-LastLaunchEnabled $P.UserDir
     $rows = @()
     $modDir = Join-Path $P.UserDir 'mod'
-    if (Test-Path $modDir) {
+    if ($P.Locate -and $P.Locate.PSObject.Properties['mods']) {
+        # smd locate lists launcher mods and Workshop mods from every Steam library.
+        foreach ($m in @($P.Locate.mods)) {
+            $leaf = ''
+            if ($m.mod_file) { $leaf = Split-Path -Leaf ([string]$m.mod_file) }
+            $rows += [pscustomobject]@{
+                Name       = $m.name
+                Workshop   = $m.remote_file_id
+                Supported  = $m.supported_version
+                LastLaunch = $(if ($leaf -and $enabled.ContainsKey("mod/$leaf")) { 'enabled' } else { '' })
+                File       = $leaf
+                Origin     = $(if ($m.PSObject.Properties['origin']) { $m.origin } else { '' })
+            }
+        }
+    } elseif (Test-Path $modDir) {
         foreach ($f in (Get-ChildItem $modDir -Filter '*.mod' -File -ErrorAction SilentlyContinue)) {
             $text = Get-Content -Encoding UTF8 $f.FullName -Raw -ErrorAction SilentlyContinue
             if ($null -eq $text) { $text = '' }
@@ -291,18 +363,21 @@ function Show-Mods($P) {
                 Supported = (Read-DescriptorField $text 'supported_version')
                 LastLaunch = $(if ($enabled.ContainsKey("mod/$($f.Name)")) { 'enabled' } else { '' })
                 File      = $f.Name
+                Origin    = 'mod_file'
             }
         }
     }
     if ($rows.Count -eq 0) { Write-Warn2 'No launcher .mod files found.'; return }
-    $rows | Sort-Object Name | Format-Table -AutoSize Name, Workshop, Supported, LastLaunch | Out-Host
+    $rows | Sort-Object Name | Format-Table -AutoSize Name, Workshop, Supported, LastLaunch, Origin | Out-Host
     $on = @($rows | Where-Object { $_.LastLaunch }).Count
-    Write-Info "$($rows.Count) mods registered with the launcher; $on enabled at the last launch (dlc_load.json)."
+    Write-Info 'Origin: mod_file = launcher file; workshop_dir, unregistered_dir, loose_archive = on disk with no launcher file (the game does not load unregistered ones); launcher_db_only = only in the launcher database.'
+    Write-Info "$($rows.Count) mods found; $on enabled at the last launch (dlc_load.json)."
     Write-Info 'The launcher database is the authority on the current playset; the scan reads it.'
-    if ($P.WorkshopDir -and (Test-Path $P.WorkshopDir)) {
-        $ws = @(Get-ChildItem $P.WorkshopDir -Directory -ErrorAction SilentlyContinue).Count
-        Write-Info "$ws subscribed Workshop items on disk."
+    $ws = 0
+    foreach ($d in @($P.WorkshopDirs)) {
+        if ($d -and (Test-Path $d)) { $ws += @(Get-ChildItem $d -Directory -ErrorAction SilentlyContinue).Count }
     }
+    if ($ws) { Write-Info "$ws subscribed Workshop items on disk." }
 }
 
 function Show-Saves($P) {
@@ -409,9 +484,19 @@ function Invoke-Setup {
 function Test-BuildStale {
     if (-not (Test-Path $ExePath)) { return $true }
     $built = (Get-Item $ExePath).LastWriteTime
-    $newest = Get-ChildItem (Join-Path $RepoRoot 'crates'), (Join-Path $RepoRoot 'profiles') -Recurse -File -Include '*.rs', '*.toml' -ErrorAction SilentlyContinue |
-        Sort-Object LastWriteTime -Descending | Select-Object -First 1
-    return ($newest -and $newest.LastWriteTime -gt $built)
+    # Cheap: enumerate crates/ lazily and stop at the first file newer than the exe.
+    foreach ($dir in 'crates', 'profiles') {
+        $root = Join-Path $RepoRoot $dir
+        if (-not (Test-Path $root)) { continue }
+        foreach ($f in [IO.Directory]::EnumerateFiles($root, '*', [IO.SearchOption]::AllDirectories)) {
+            if ($f -match '\.(rs|toml)$' -and [IO.File]::GetLastWriteTime($f) -gt $built) { return $true }
+        }
+    }
+    foreach ($f in 'Cargo.toml', 'Cargo.lock') {
+        $p = Join-Path $RepoRoot $f
+        if ((Test-Path $p) -and (Get-Item $p).LastWriteTime -gt $built) { return $true }
+    }
+    return $false
 }
 
 function Invoke-Build([switch]$Force) {
@@ -437,8 +522,10 @@ function Invoke-Build([switch]$Force) {
 # ---------------------------------------------------------------- scan
 
 function Get-ScanArgs($P, [string]$Fmt) {
-    $a = @('scan', '--game-dir', $P.GameDir, '--user-dir', $P.UserDir, '--format', $Fmt)
-    if ($P.WorkshopDir -and (Test-Path $P.WorkshopDir)) { $a += @('--workshop-dir', $P.WorkshopDir) }
+    $a = @('scan', '--game-dir', (Format-DirArg $P.GameDir), '--user-dir', (Format-DirArg $P.UserDir), '--format', $Fmt)
+    foreach ($w in @($P.WorkshopDirs)) {
+        if ($w -and (Test-Path $w)) { $a += @('--workshop-dir', (Format-DirArg $w)) }
+    }
     if ($NoRedact) { $a += '--no-redact' }
     return $a
 }
@@ -464,19 +551,23 @@ function Write-ExitMeaning([int]$Code) {
     }
 }
 
+# Returns smd's exit code (1 when the scan never ran), so -Action can exit with it.
 function Invoke-Scan($P, [string]$Fmt) {
-    if (-not (Test-ScanReady $P)) { return }
-    if (-not (Invoke-Build -Force:$Rebuild)) { return }
+    if (-not (Test-ScanReady $P)) { return 1 }
+    if (-not (Invoke-Build -Force:$Rebuild)) { return 1 }
     Write-Title "Scan ($Fmt)"
-    & $ExePath @(Get-ScanArgs $P $Fmt)
-    Write-ExitMeaning $LASTEXITCODE
+    Set-Utf8Console
+    & $ExePath @(Get-ScanArgs $P $Fmt) | Out-Host
+    $code = $LASTEXITCODE
+    Write-ExitMeaning $code
     Write-Info 'Severity scores are not part of this release; findings are listed with how certain each one is.'
+    return $code
 }
 
 function Invoke-Report($P, [string]$Fmt) {
     if ($Fmt -eq 'table') { $Fmt = 'md' }
-    if (-not (Test-ScanReady $P)) { return }
-    if (-not (Invoke-Build -Force:$Rebuild)) { return }
+    if (-not (Test-ScanReady $P)) { return 1 }
+    if (-not (Invoke-Build -Force:$Rebuild)) { return 1 }
     $target = $OutFile
     if (-not $target) {
         $dir = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'StellarisModDoctor'
@@ -484,14 +575,17 @@ function Invoke-Report($P, [string]$Fmt) {
         $target = Join-Path $dir ('report-{0}.{1}' -f (Get-Date -Format 'yyyyMMdd-HHmmss'), $Fmt)
     }
     Write-Title 'Writing report'
+    Set-Utf8Console
     $lines = & $ExePath @(Get-ScanArgs $P $Fmt)
     $code = $LASTEXITCODE
+    Write-ExitMeaning $code
+    if ($code -eq 1 -or $code -eq 2) { return $code }   # no report was produced; write nothing
     # UTF-8 without a BOM, so JSON parsers and Markdown viewers read it cleanly on 5.1 too.
     [IO.File]::WriteAllLines($target, [string[]]$lines, (New-Object Text.UTF8Encoding($false)))
-    Write-ExitMeaning $code
     Write-Ok "Saved $target"
     if (-not $NoRedact) { Write-Info 'Your home folder and account name are redacted, so the file is safe to share.' }
     if ($Action -eq 'Menu' -and (Confirm-Step 'Show it in Explorer?')) { Start-Process explorer.exe -ArgumentList "/select,`"$target`"" }
+    return $code
 }
 
 # ---------------------------------------------------------------- menu
@@ -505,7 +599,7 @@ function Set-CustomPaths($P) {
         if ($value -eq '-') { $new[$name] = $null }
         elseif ($value) {
             $value = $value.Trim('"')
-            if (Test-Path $value) { $new[$name] = (Resolve-Path $value).Path } else { Write-Warn2 "$value does not exist; keeping the old value." }
+            if (Test-Path $value) { $new[$name] = Format-DirArg (Resolve-Path $value).Path } else { Write-Warn2 "$value does not exist; keeping the old value." }
         }
     }
     Save-Paths ([pscustomobject]$new)
@@ -547,9 +641,9 @@ function Show-Menu {
                 '1' { Show-Detection $P }
                 '2' { Show-Mods $P }
                 '3' { Show-Saves $P }
-                '4' { Invoke-Scan $P 'table' }
-                '5' { Invoke-Report $P 'md' }
-                '6' { Invoke-Report $P 'json' }
+                '4' { Invoke-Scan $P 'table' | Out-Null }
+                '5' { Invoke-Report $P 'md' | Out-Null }
+                '6' { Invoke-Report $P 'json' | Out-Null }
                 '7' { Show-ErrorLog $P }
                 '8' { Open-Folder $P }
                 '9' { Set-CustomPaths $P }
@@ -564,6 +658,75 @@ function Show-Menu {
     }
 }
 
+# ---------------------------------------------------------------- dev.bat actions
+# dev.bat passes its arguments straight through (the first one binds to -Action), so
+# every dev.bat command is an -Action here and cmd.exe never re-parses a path.
+
+function Show-DevHelp {
+    Write-Host 'usage: dev.bat [command] [options]'
+    Write-Host ''
+    Write-Host '  run       build, list every installed mod, save and open reports\latest.md (default)'
+    Write-Host '  menu      interactive menu'
+    Write-Host '  paths     show the detected game, user and workshop folders'
+    Write-Host '  mods      list every installed mod and where it came from'
+    Write-Host '  scan      scan and print the conflict table here'
+    Write-Host '  report    save a report (-Format md|json, -OutFile <path>)'
+    Write-Host '  saves     list save games'
+    Write-Host '  errorlog  show the game''s last error log'
+    Write-Host '  setup     check / install Rust and the VS C++ Build Tools'
+    Write-Host '  rebuild   force a release build of smd'
+    Write-Host '  test      developer gate: fmt, tests, clippy, xtask lint'
+    Write-Host ''
+    Write-Host 'options: -GameDir <p> -UserDir <p> -WorkshopDir <p> -Format table|json|md -OutFile <p> -NoRedact -Rebuild'
+    Write-Host 'example: dev.bat scan -NoRedact -GameDir "D:\Games\Stellaris"'
+}
+
+# Build, list mods, write reports\latest.<ext> in the repo and open it. Returns the exit code.
+function Invoke-DevRun {
+    Write-Title 'Step 1 of 3: build smd'
+    if (-not (Invoke-Build -Force:$Rebuild)) { return 1 }
+    $P = Resolve-Paths   # again: a fresh build lets `smd locate` do the detection
+    Write-Title 'Step 2 of 3: every installed mod'
+    Show-Mods $P
+    $fmt = if ($Format -eq 'json') { 'json' } else { 'md' }
+    if (-not $OutFile) {
+        $dir = Join-Path $RepoRoot 'reports'
+        if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir | Out-Null }
+        $script:OutFile = Join-Path $dir "latest.$fmt"
+    }
+    # A failed scan must never leave the previous report behind to be opened.
+    if (Test-Path $OutFile) { Remove-Item -LiteralPath $OutFile -Force }
+    Write-Title 'Step 3 of 3: conflict report'
+    $code = Invoke-Report $P $fmt
+    if (Test-Path $OutFile) { Start-Process notepad.exe -ArgumentList "`"$OutFile`"" }
+    else { Write-Bad "No report was written (exit code $code). The messages above say why." }
+    return $code
+}
+
+# fmt, test, clippy, xtask lint; stops at the first failure. Returns the exit code.
+function Invoke-DevTest {
+    Update-SessionPath
+    if (-not (Test-Cargo)) { Write-Bad 'cargo not found. Run "dev.bat setup" first.'; return 1 }
+    $steps = @(
+        @('fmt', '--all', '--check'),
+        @('test', '--workspace'),
+        @('clippy', '--workspace', '--all-targets', '--', '-D', 'warnings'),
+        @('xtask', 'lint')
+    )
+    Push-Location $RepoRoot
+    try {
+        foreach ($s in $steps) {
+            Write-Title ('cargo ' + ($s -join ' '))
+            & cargo @s | Out-Host   # keep test output off the return value
+            if ($LASTEXITCODE -ne 0) { Write-Bad "cargo $($s[0]) failed (exit $LASTEXITCODE)."; return $LASTEXITCODE }
+        }
+    } finally {
+        Pop-Location
+    }
+    Write-Ok 'Every gate passed.'
+    return 0
+}
+
 # ---------------------------------------------------------------- entry point
 
 Update-SessionPath
@@ -576,11 +739,16 @@ $paths = Resolve-Paths
 switch ($Action) {
     'Menu' { Show-Detection $paths; Show-Menu }
     'Detect' { Show-Detection $paths }
+    'Paths' { Show-Detection $paths }
     'Mods' { Show-Mods $paths }
     'Saves' { Show-Saves $paths }
     'ErrorLog' { Show-ErrorLog $paths }
     'Setup' { if (-not (Invoke-Setup)) { exit 1 } }
     'Build' { if (-not (Invoke-Build -Force)) { exit 1 } }
-    'Scan' { Invoke-Scan $paths $Format }
-    'Report' { Invoke-Report $paths $Format }
+    'Rebuild' { if (-not (Invoke-Build -Force)) { exit 1 } }
+    'Run' { exit (Invoke-DevRun) }
+    'Test' { exit (Invoke-DevTest) }
+    'Help' { Show-DevHelp }
+    'Scan' { exit (Invoke-Scan $paths $Format) }
+    'Report' { exit (Invoke-Report $paths $Format) }
 }

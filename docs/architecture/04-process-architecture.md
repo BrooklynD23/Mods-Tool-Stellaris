@@ -388,6 +388,18 @@ The scan exits non-zero from the CLI only on `Error`-class diagnostics or an int
 failure — **never** because conflicts were found. Conflicts are the expected output.
 (`--fail-on critical` exists for CI users who want the other behaviour.)
 
+CLI exit codes:
+
+| Code | Meaning |
+| --- | --- |
+| 0 | Scan completed. Conflicts may have been found. |
+| 1 | The scan could not run, or the report could not be written. |
+| 2 | Bad command line. |
+| 3 | Scan completed but emitted at least one `Error`-class diagnostic (a file or directory was not read). The report is still printed. |
+
+Progress (`[n/N] <name>` per source walked) goes to stderr only, when stderr is a terminal
+or `--progress` is given. It never touches stdout.
+
 ## Determinism
 
 Reproducibility is a testability requirement, not a nicety, because snapshot tests depend

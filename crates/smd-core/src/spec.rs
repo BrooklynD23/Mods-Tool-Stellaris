@@ -73,6 +73,10 @@ pub struct Playset {
     pub activation: Confidence,
     /// How the underlying data was read.
     pub snapshot: SnapshotMethod,
+    /// Entries the source listed that matched no discovered mod, and so are not in
+    /// `entries`. While non-zero, a discovered mod missing from `entries` may be one of
+    /// them: its activation is `Unknown`, not `Inactive`.
+    pub unmatched: u32,
 }
 
 /// Why an order source could not answer.

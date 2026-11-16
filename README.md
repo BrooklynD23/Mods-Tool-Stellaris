@@ -47,6 +47,15 @@ you see for yourself.
   edits — the rule, its cases, a weight, an explanation — and CI fails if any is missing
   ([contract](docs/adr/0002-extensibility-contract.md)).
 
+## Run it (Windows)
+
+Double-click `dev.bat` in the repository root. It offers to install Rust and the VS C++
+Build Tools if they are missing, builds `smd`, lists every installed mod (Steam workshop
+in every library, launcher `.mod` files, hand-copied folders, loose zips, mods only the
+Paradox launcher database knows), then saves `reports\latest.md` and opens it. Run
+`dev.bat help` for the other commands. Everything is read-only for the game, launcher,
+mods and saves.
+
 ## Repository layout
 
 ```

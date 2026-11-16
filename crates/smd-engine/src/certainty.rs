@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 
 use smd_core::{
     Activation, ActivationCertainty, Certainty, Completeness, Confidence, Finding, ModKey,
-    ParseCompleteness, ResolutionGap, RuleId, SemanticCertainty,
+    ParseCompleteness, ResolutionGap, RuleId, ScanCompleteness, SemanticCertainty,
 };
 use smd_index::ScanIndex;
 
@@ -23,8 +23,15 @@ fn unmodelled(g: ResolutionGap) -> bool {
     )
 }
 
-fn completeness(index: &ScanIndex, f: &Finding, incomplete: &BTreeSet<ModKey>) -> Completeness {
-    let mut worst = Completeness::Complete;
+fn completeness(
+    index: &ScanIndex,
+    f: &Finding,
+    incomplete: &BTreeSet<ModKey>,
+    discovery_incomplete: bool,
+) -> Completeness {
+    // A mod discovery missed may overlap any finding, so none is complete.
+    let mut worst =
+        if discovery_incomplete { Completeness::Partial } else { Completeness::Complete };
     for p in &f.participants {
         let key = index.sources().get(p.site.source).map(|m| &m.key);
         if key.is_some_and(|k| incomplete.contains(k)) {
@@ -68,9 +75,11 @@ fn order(index: &ScanIndex, f: &Finding) -> Confidence {
 }
 
 /// `Verified` is earned per `[[dir]]` entry by a `verified` key, and no profile entry
-/// carries one yet, so the best a finding can be is `Assumed`.
-fn semantics(f: &Finding) -> SemanticCertainty {
-    if f.gaps.iter().any(|g| unmodelled(*g)) {
+/// carries one yet, so the best a finding can be is `Assumed`. An unreadable or
+/// out-of-range game version means the profile's data was not checked against this build,
+/// so nothing may rest on it: `Unmodelled`.
+fn semantics(f: &Finding, version_unverified: bool) -> SemanticCertainty {
+    if version_unverified || f.gaps.iter().any(|g| unmodelled(*g)) {
         SemanticCertainty::Unmodelled
     } else {
         SemanticCertainty::Assumed
@@ -114,12 +123,13 @@ pub(crate) fn certainty_of(
     index: &ScanIndex,
     f: &Finding,
     incomplete: &BTreeSet<ModKey>,
+    scan: &ScanCompleteness,
 ) -> Certainty {
     let supported = Certainty {
-        completeness: completeness(index, f, incomplete),
+        completeness: completeness(index, f, incomplete, scan.discovery_incomplete),
         activation: activation(index, f),
         order: order(index, f),
-        semantics: semantics(f),
+        semantics: semantics(f, scan.game_version_unverified),
     };
     meet(supported, rule_ceiling(f.rule, f.certainty))
 }

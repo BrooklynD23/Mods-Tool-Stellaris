@@ -124,6 +124,36 @@ returns size and mtime as part of enumeration, so the layer costs no extra sysca
 8. **Capability-gated index building.** Structures nobody asked for are never built —
    gating reference extraction off saves 120 MB and a slice of the parse stage. (§ `08`)
 
+### Lazy content hashing (implemented)
+
+A content hash has one consumer: telling whether two copies of one path are identical
+(Stage A agreement, `core.file_overwrite`). A path one source ships is never compared, so
+reading it is pure cost; an eager walk that hashed every file of a 71-mod playset (vanilla's
+~58k `.dds` included) took ~10 minutes.
+
+The walk is therefore two passes. **Pass 1** (`ReadOnlyRoot::walk`) is stat-only: name,
+kind and size come from the listing (on Windows `DirEntry::metadata`, no extra open), no
+file is opened, and every record has `blob: None`. **Pass 2** (`ReadOnlyRoot::hash_records`,
+driven by `smd-engine::hash_pass`) hashes only the records at a path that two or more
+non-benign sources ship. Consequences:
+
+- An oversize or unreadable file at an **uncontended** path is never read, raises no
+  diagnostic and does not make its source incomplete. At a **contended** path the existing
+  caps and diagnostics apply unchanged.
+- A lone contributor now has no blob, so its `Agreement` reads `Differs`; nothing consumes
+  agreement for fewer than two live contributors.
+- Output stays deterministic: the contended set depends only on the walked paths, and
+  diagnostics are re-sorted after the pass.
+- The warm-cache design above (stat key to content hash) is unaffected; it simply has far
+  fewer misses to fill.
+
+Windows entry classification follows H22 and lives in `smd-fs/src/winattrs.rs`: only
+name-surrogate reparse points (symlinks, junctions, std's `is_symlink`) are refused links;
+dedup and hydrated cloud-placeholder files are regular files; an offline placeholder
+(`RECALL_ON_DATA_ACCESS`, `RECALL_ON_OPEN`, `OFFLINE`) is listed but never read and is
+reported `fs.cloud_placeholder`. The exact reparse tag cannot be read without `unsafe`
+(ceiling noted with a `ponytail:` comment in that file). Unverified on a real Windows host.
+
 ### Why `read()` rather than mmap
 
 Four reasons, any one of them sufficient:

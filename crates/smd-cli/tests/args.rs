@@ -7,15 +7,30 @@ use std::process::Command;
 use common::{World, seeded, stdout};
 
 fn smd(args: &[&str]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_smd")).args(args).output().expect("run smd")
+    // Locations are searched for when a flag is missing; point the search at nothing.
+    Command::new(env!("CARGO_BIN_EXE_smd"))
+        .args(args)
+        .env("HOME", "/nonexistent-smd-home")
+        .env_remove("USERPROFILE")
+        .env_remove("XDG_DATA_HOME")
+        .env_remove("SMD_STEAM_DIR")
+        .env_remove("SMD_GAME_DIR")
+        .env_remove("SMD_USER_DIR")
+        .output()
+        .expect("run smd")
 }
 
 #[test]
 fn cli_rejects_bad_args() {
+    // A directory that exists on every OS: `/tmp` is absent on Windows, which turns the
+    // "the other location cannot be found" case into "the given directory is missing".
+    let tmp = std::env::temp_dir();
+    let tmp = tmp.to_str().expect("utf-8 temp dir");
     for args in [
         &["scan", "--bogus"][..],
-        &["scan", "--user-dir", "/tmp"],
-        &["scan", "--game-dir", "/tmp"],
+        &["scan", "--user-dir", tmp],
+        &["scan", "--game-dir", tmp],
+        &["locate", "--max-findings", "3"],
         &["scan", "--game-dir"],
         &["scan", "--game-dir", "/a", "--user-dir", "/b", "--format", "xml"],
         &["scan", "--game-dir", "/a", "--user-dir", "/b", "--max-findings", "many"],

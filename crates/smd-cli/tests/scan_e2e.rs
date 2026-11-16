@@ -90,6 +90,7 @@ fn scan_e2e_unreadable_suppresses_clean() {
 #[test]
 fn scan_e2e_zero_findings_prints_header() {
     let w = World::new("home");
+    w.game_version();
     for id in ["1001", "1002"] {
         w.mod_with(id, id, &[file(&format!("common/traits/only_{id}.txt"), id)]);
     }

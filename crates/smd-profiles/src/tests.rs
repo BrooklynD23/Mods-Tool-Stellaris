@@ -84,3 +84,30 @@ fn asset_archives_are_declared_by_pattern() {
     assert!(!p.is_asset_archive("dlc/readme.zip"));
     assert!(!p.is_asset_archive("common/big.zip"));
 }
+
+#[test]
+fn shipped_profile_exposes_locations_and_stores() {
+    let p = shipped();
+    assert_eq!(p.steam_id(), Some(281_990));
+    let l = p.locations();
+    assert!(l.user_dir["windows"].starts_with("{DOCUMENTS}/"));
+    assert!(l.workshop.as_deref().unwrap().contains("{STEAM_LIB}"));
+    assert_eq!(l.steam_library_index.len(), 2);
+    let s = p.stores();
+    assert_eq!(s.executable.as_deref(), Some("stellaris.exe"));
+    assert!(s.xbox_install.as_deref().unwrap().starts_with("XboxGames/"));
+    assert!(!s.extra_user_dirs.is_empty());
+}
+
+#[test]
+fn unknown_keys_in_touched_tables_are_load_errors() {
+    for bad in [
+        "[locations]\nworkshp = \"x\"\n",
+        "[stores]\nexecutible = \"x\"\n",
+        "[game]\nstem_id = 1\n",
+        "[locations.user_dir]\nbeos = \"x\"\n",
+    ] {
+        assert!(Profile::from_toml(bad).is_err(), "{bad}");
+    }
+    assert!(Profile::from_toml("[locations.user_dir]\nwindows = \"x\"\n").is_ok());
+}

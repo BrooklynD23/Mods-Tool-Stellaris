@@ -1,7 +1,7 @@
 //! Fixture builders shared by the unit tests. Nothing here needs a game install.
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use smd_core::ResolvedLocations;
 use tempfile::TempDir;
@@ -70,9 +70,28 @@ impl World {
         dir
     }
 
+    /// A Paradox Mods-style mod: a `pdx_<id>.mod` launcher file with a `remote_file_id` and
+    /// a content dir under `mod/`.
+    pub(crate) fn paradox_mod(&self, id: &str, name: &str) -> PathBuf {
+        let dir = self.user.join("mod").join(format!("pdx_dir_{id}"));
+        fs::create_dir_all(&dir).expect("mkdir pdx");
+        let body =
+            format!("name=\"{name}\"\npath=\"{}\"\nremote_file_id=\"{id}\"\n", dir.display());
+        self.mod_file(&format!("pdx_{id}"), &body);
+        dir
+    }
+
     pub(crate) fn write_user(&self, file: &str, bytes: &[u8]) -> PathBuf {
         let p = self.user.join(file);
         fs::write(&p, bytes).expect("write user file");
         p
     }
+}
+
+/// `p` as text without the Windows verbatim prefix, for building another spelling of it
+/// (`{plain}/./`). Fixture roots are canonical, and on Windows canonical means `\\?\C:\..`,
+/// which is never normalised: `/./` after it is an invalid name, not the same directory.
+pub(crate) fn plain(p: &Path) -> String {
+    let text = p.display().to_string();
+    text.strip_prefix(r"\\?\").map_or(text.clone(), str::to_owned)
 }

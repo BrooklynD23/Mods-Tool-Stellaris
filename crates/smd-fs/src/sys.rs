@@ -22,7 +22,26 @@ pub(crate) enum Kind {
     /// is treated as possibly a directory.
     Link,
     /// FIFO, socket, device: never opened.
+    #[cfg_attr(not(unix), allow(dead_code))] // the Windows classifier has no such kind
     Special,
+    /// A cloud placeholder whose content is offline: listed, never read (reading would
+    /// hydrate it). Only the Windows backend produces it.
+    Offline,
+}
+
+/// What a directory entry is, and its size from the same stat.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub(crate) struct Entry {
+    pub kind: Kind,
+    /// Bytes; meaningful for [`Kind::File`] only.
+    pub size: u64,
+}
+
+/// One listed name; `pre` is its [`Entry`] when the listing itself carried the facts
+/// (Windows), sparing a second stat per entry.
+pub(crate) struct Listed {
+    pub name: OsString,
+    pub pre: Option<io::Result<Entry>>,
 }
 
 /// Size and mtime of an opened handle; compared before and after a read.
@@ -54,6 +73,9 @@ pub(crate) struct OpenedDir {
 pub(crate) enum OpenErr {
     /// The entry turned out to be a link at open time.
     Link,
+    /// An offline cloud placeholder: opening is fine, reading would hydrate it.
+    #[cfg_attr(unix, allow(dead_code))] // only the Windows backend produces it
+    Offline,
     Io(io::Error),
 }
 
@@ -65,13 +87,13 @@ impl Dir {
         imp::open_root(path)
     }
 
-    /// Entry names, unsorted, without `.` and `..`.
-    pub(crate) fn list(&self) -> io::Result<Vec<OsString>> {
+    /// Entries, unsorted, without `.` and `..`.
+    pub(crate) fn list(&self) -> io::Result<Vec<Listed>> {
         imp::list(self)
     }
 
     /// Classify an entry without following it.
-    pub(crate) fn classify(&self, name: &OsStr) -> io::Result<Kind> {
+    pub(crate) fn classify(&self, name: &OsStr) -> io::Result<Entry> {
         imp::classify(self, name)
     }
 

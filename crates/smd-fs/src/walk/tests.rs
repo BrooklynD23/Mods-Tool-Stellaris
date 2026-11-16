@@ -16,8 +16,12 @@ fn put(root: &Path, rel: &str, bytes: &[u8]) {
     fs::write(p, bytes).unwrap();
 }
 
+/// Walk, then hash every file, as the eager walk used to.
 fn walk_root(root: &Path, limits: &WalkLimits) -> WalkOutcome {
-    ReadOnlyRoot::open(root).unwrap().walk(limits)
+    let r = ReadOnlyRoot::open(root).unwrap();
+    let mut out = r.walk(limits);
+    r.hash_records(&mut out, limits, &|_| true);
+    out
 }
 
 fn codes_of(o: &WalkOutcome) -> Vec<&'static str> {

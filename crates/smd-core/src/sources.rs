@@ -170,6 +170,8 @@ pub enum SourceRole {
     Dlc,
     /// A Steam Workshop subscription.
     Workshop,
+    /// A Paradox Mods subscription (its ids are not Steam's).
+    ParadoxMods,
     /// A directory under the user mod folder.
     Local,
     /// A zipped mod read through the VFS.

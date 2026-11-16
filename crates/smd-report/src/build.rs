@@ -64,7 +64,11 @@ fn more(hidden: usize, what: &str) -> Option<String> {
 }
 
 fn is_complete(c: &ScanCompleteness) -> bool {
-    c.partial == 0 && c.unparsed.iter().all(|(_, n)| *n == 0) && c.content_incomplete.is_empty()
+    c.partial == 0
+        && c.unparsed.iter().all(|(_, n)| *n == 0)
+        && c.content_incomplete.is_empty()
+        && !c.discovery_incomplete
+        && !c.game_version_unverified
 }
 
 fn header(h: &ReportHeader) -> HeaderView {
@@ -83,6 +87,8 @@ fn header(h: &ReportHeader) -> HeaderView {
             .map(|(why, n)| UnparsedView { reason: snake(&format!("{why:?}")), count: *n })
             .collect(),
         domains: c.domains.iter().map(ToString::to_string).collect(),
+        discovery_incomplete: c.discovery_incomplete,
+        game_version_unverified: c.game_version_unverified,
         content_incomplete: c
             .content_incomplete
             .iter()
