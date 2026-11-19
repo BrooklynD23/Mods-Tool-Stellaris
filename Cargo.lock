@@ -396,6 +396,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "smd-parse"
+version = "0.0.0"
+dependencies = [
+ "smd-core",
+ "smd-fs",
+ "smd-profiles",
+]
+
+[[package]]
 name = "smd-profiles"
 version = "0.0.0"
 dependencies = [
