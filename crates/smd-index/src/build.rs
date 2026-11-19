@@ -11,6 +11,7 @@ use smd_fs::{NormPath, WalkRecord};
 use crate::derived::{BitSet, Derived};
 use crate::index::ScanIndex;
 use crate::interner::InternerBuilder;
+use crate::meta::PlaysetMeta;
 use crate::overlay::{Contribution, OverlayTable};
 use crate::overlay_rules::OverlayRules;
 use crate::replace::{ReplaceDecl, normalise_prefix};
@@ -60,6 +61,7 @@ pub struct IndexBuilder {
     rules: OverlayRules,
     inputs: Vec<SourceInput>,
     diags: Vec<Diagnostic>,
+    meta: PlaysetMeta,
 }
 
 type Row<'a> = (u32, u32, &'a str, Option<Blob>, &'a FileRecord);
@@ -72,7 +74,14 @@ impl IndexBuilder {
         provenance: PlaysetProvenance,
         rules: OverlayRules,
     ) -> IndexBuilder {
-        IndexBuilder { sources, provenance, rules, inputs: Vec::new(), diags: Vec::new() }
+        IndexBuilder {
+            sources,
+            provenance,
+            rules,
+            inputs: Vec::new(),
+            diags: Vec::new(),
+            meta: PlaysetMeta::default(),
+        }
     }
 
     /// Add one source's walk. Call order does not affect the result.
@@ -87,6 +96,12 @@ impl IndexBuilder {
         self
     }
 
+    /// Descriptors and the game version, for the `dep.*` and `meta.*` rules.
+    pub fn set_meta(&mut self, meta: PlaysetMeta) -> &mut Self {
+        self.meta = meta;
+        self
+    }
+
     /// Assign ids (ascending `NormPath` bytes), build the overlay, and run Stages A and B.
     #[must_use]
     pub fn build(self) -> ScanIndex {
@@ -94,6 +109,9 @@ impl IndexBuilder {
         for r in self.inputs.iter().flat_map(|i| &i.records) {
             pb.insert(r.path.as_str());
             sb.insert(&r.raw_name);
+        }
+        for text in self.meta.strings(&self.sources) {
+            sb.insert(&text);
         }
         // `replace_path` prefixes are subjects too (`Subject::Directory`), so they need ids.
         for prefix in self.inputs.iter().flat_map(|i| &i.replace_paths) {
@@ -126,6 +144,7 @@ impl IndexBuilder {
             scope: self.rules.scope(),
             derived: Derived::default(),
             diags: Arc::new(self.diags),
+            meta: Arc::new(self.meta),
         };
         index.derived = derive(&index);
         index

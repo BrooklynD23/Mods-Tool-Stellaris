@@ -6,7 +6,9 @@
 use std::collections::BTreeSet;
 
 use smd_core::{DiagSeverity, ModKey, ResolvedFinding, ResolvedLocations, ScanCompleteness};
-use smd_index::{IndexBuilder, OverlayRules, ReplacePathScope, ScanIndex};
+use smd_index::{
+    IndexBuilder, ModDescriptors, OverlayRules, PlaysetMeta, ReplacePathScope, ScanIndex,
+};
 use smd_ingest::{
     DiscoveryOptions, Inventory, KEY_INSTALL, KEY_USER_DIR, OrderChain, SourceOptions,
     check_game_version, inventory, workshop_key,
@@ -43,7 +45,8 @@ pub fn scan(req: &ScanRequest) -> Result<ScanOutput, ScanError> {
     absorb(&mut completeness, walked.completeness);
     completeness.discovery_incomplete |= req.locations_incomplete;
     completeness.game_version_unverified = !gv.diagnostics.is_empty();
-    let index = build_index(&inv, &profile, walked.inputs);
+    let gv = gv.raw.as_deref().and_then(smd_profiles::parse_game_version);
+    let index = build_index(&inv, &profile, walked.inputs, gv);
     let incomplete: BTreeSet<ModKey> =
         completeness.content_incomplete.iter().map(|(k, _, _)| k.clone()).collect();
     let findings = run_rules(&index, req, (&incomplete, &completeness), &mut diags)?;
@@ -94,6 +97,7 @@ fn build_index(
     inv: &Inventory,
     profile: &Profile,
     inputs: Vec<smd_index::SourceInput>,
+    game_version: Option<smd_core::GameVersion>,
 ) -> ScanIndex {
     let scope = match profile.replace_path_scope() {
         smd_profiles::ReplacePathScope::VanillaOnly => ReplacePathScope::VanillaOnly,
@@ -106,7 +110,20 @@ fn build_index(
     for input in inputs {
         builder.add_source(input);
     }
+    builder.set_meta(meta_of(inv, game_version));
     builder.build()
+}
+
+fn meta_of(inv: &Inventory, game_version: Option<smd_core::GameVersion>) -> PlaysetMeta {
+    let descriptors = inv
+        .records
+        .iter()
+        .map(|r| ModDescriptors {
+            declared: r.descriptor.clone(),
+            inner: r.inner_descriptor.clone(),
+        })
+        .collect();
+    PlaysetMeta { game_version, descriptors }
 }
 
 fn run_rules(
