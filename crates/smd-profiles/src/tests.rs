@@ -40,11 +40,15 @@ fn values_come_from_the_text_not_from_the_code() {
 }
 
 #[test]
-fn modelled_keys_with_unknown_values_are_rejected_and_other_keys_ignored() {
+fn unknown_values_and_unknown_keys_are_rejected() {
     let bad = "[load_order]\nreplace_path_scope = \"sideways\"\n";
     assert!(matches!(Profile::from_toml(bad), Err(ProfileError::Value { .. })));
     let extra = "[load_order]\nsome_future_key = 1\n[[dir]]\nglob = \"a/**\"\nmerge = \"x\"\n";
-    assert!(Profile::from_toml(extra).is_ok());
+    assert!(matches!(Profile::from_toml(extra), Err(ProfileError::UnknownKey { .. })));
+    let known = "[[dir]]\nglob = \"a/**\"\nmerge = \"x\"\nmerge_confidence = \"corroborated\"\n";
+    assert!(Profile::from_toml(known).is_ok(), "later-stage keys are recognised");
+    let tied = "[[dir]]\nglob = \"a/**\"\n[[dir]]\nglob = \"a/*.txt\"\n";
+    assert!(matches!(Profile::from_toml(tied), Err(ProfileError::OverlappingGlobs { .. })));
 }
 
 #[test]
