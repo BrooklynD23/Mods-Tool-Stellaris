@@ -68,6 +68,7 @@ deps = [
     "smd-profiles",
     "smd-ingest",
     "smd-index",
+    "smd-parse",
     "smd-rules",
 ]
 

@@ -354,6 +354,7 @@ dependencies = [
  "smd-fs",
  "smd-index",
  "smd-ingest",
+ "smd-parse",
  "smd-profiles",
  "smd-rules",
  "tempfile",

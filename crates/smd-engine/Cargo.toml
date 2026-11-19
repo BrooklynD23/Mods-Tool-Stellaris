@@ -14,6 +14,7 @@ smd-fs = { workspace = true }
 smd-profiles = { workspace = true }
 smd-ingest = { workspace = true }
 smd-index = { workspace = true }
+smd-parse = { workspace = true }
 smd-rules = { workspace = true }
 
 [dev-dependencies]

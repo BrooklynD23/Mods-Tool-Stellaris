@@ -7,7 +7,8 @@
 //! # What exists so far
 //!
 //! [`scan`]: ingest discovery and the order chain, a walk of every source that is not
-//! `Inactive`, the index, the registered rules run sequentially, each finding's
+//! `Inactive`, a parse of every file the profile classes as script (cached in memory for
+//! the scan), the index with its definition layer, the registered rules run sequentially, each finding's
 //! [`Certainty`](smd_core::Certainty) computed here as the meet of what its participants
 //! support and what the rule supplied, and the result as text ([`ScanOutput`]).
 //!
@@ -22,6 +23,7 @@ mod certainty;
 mod hash_pass;
 mod locate;
 mod output;
+mod parse_pass;
 mod request;
 mod rows;
 mod scan;

@@ -12,8 +12,9 @@ use smd_index::{FileRecord, SourceInput};
 use smd_ingest::{ContentState, Inventory, ModRecord};
 use smd_profiles::Profile;
 
-use crate::hash_pass::hash_contended;
+use crate::hash_pass::{Walking, hash_contended};
 use crate::output::ScanDiagnostic;
+use crate::parse_pass::{ParseCtx, Parsed, parse_source};
 use crate::request::{Progress, ScanError, ScanRequest};
 use crate::rows;
 
@@ -22,6 +23,8 @@ pub(crate) struct Walked {
     pub inputs: Vec<SourceInput>,
     pub completeness: ScanCompleteness,
     pub diagnostics: Vec<ScanDiagnostic>,
+    /// Every parsed script file's facts.
+    pub parsed: Vec<Parsed>,
 }
 
 /// Add `part` into `total`: counts add, incomplete sources concatenate.
@@ -54,6 +57,7 @@ pub(crate) fn walk_sources(
         inputs: Vec::new(),
         completeness: ScanCompleteness::default(),
         diagnostics: Vec::new(),
+        parsed: Vec::new(),
     };
     let todo: Vec<(&ModRecord, &std::path::Path, bool)> = inv
         .records
@@ -91,10 +95,28 @@ pub(crate) fn walk_sources(
     let benign = |p: &str| profile.is_benign(p);
     let cancelled = || req.cancel.is_cancelled();
     hash_contended(&mut parts, &req.limits, &benign, &cancelled).ok_or(ScanError::Cancelled)?;
-    for ((_, outcome), (rec, vanilla)) in parts.into_iter().zip(metas) {
-        finish_one(&mut w, rec, outcome, (profile, vanilla));
-    }
+    parse_and_finish(&mut w, parts, metas, (profile, req))?;
     Ok(w)
+}
+
+/// Parse each walked source's script files, then fold it into `w`, in `SourceId` order.
+fn parse_and_finish(
+    w: &mut Walked,
+    parts: Vec<Walking>,
+    metas: Vec<(&ModRecord, bool)>,
+    (profile, req): (&Profile, &ScanRequest),
+) -> Result<(), ScanError> {
+    let cache = smd_parse::ParseCache::new();
+    let cx = ParseCtx { profile, cache: &cache, req };
+    for ((handle, mut outcome), (rec, vanilla)) in parts.into_iter().zip(metas) {
+        let sp = parse_source(&cx, &handle, &mut outcome, (rec.source, &rec.key))?;
+        w.completeness.partial = w.completeness.partial.saturating_add(sp.partial);
+        w.completeness.domains.extend(sp.domains);
+        w.diagnostics.extend(sp.diagnostics);
+        w.parsed.extend(sp.parsed);
+        finish_one(w, rec, outcome, (profile, vanilla));
+    }
+    Ok(())
 }
 
 fn unopened(w: &mut Walked, key: &ModKey, e: &std::io::Error) {

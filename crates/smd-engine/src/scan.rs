@@ -6,7 +6,7 @@
 use std::collections::BTreeSet;
 
 use smd_core::{DiagSeverity, ModKey, ResolvedFinding, ResolvedLocations, ScanCompleteness};
-use smd_index::{IndexBuilder, OverlayRules, ReplacePathScope, ScanIndex};
+use smd_index::{IndexBuilder, OverlayRules, PathClass, ReplacePathScope, ScanIndex, SymbolRules};
 use smd_ingest::{
     DiscoveryOptions, Inventory, KEY_INSTALL, KEY_USER_DIR, OrderChain, SourceOptions,
     check_game_version, inventory, workshop_key,
@@ -16,6 +16,7 @@ use smd_rules::{Rule, RuleCtx, run_all};
 
 use crate::certainty::certainty_of;
 use crate::output::{ScanDiagnostic, ScanOutput};
+use crate::parse_pass::Parsed;
 use crate::request::{ScanError, ScanRequest};
 use crate::rows;
 use crate::walk::{absorb, walk_sources};
@@ -43,9 +44,11 @@ pub fn scan(req: &ScanRequest) -> Result<ScanOutput, ScanError> {
     absorb(&mut completeness, walked.completeness);
     completeness.discovery_incomplete |= req.locations_incomplete;
     completeness.game_version_unverified = !gv.diagnostics.is_empty();
-    let index = build_index(&inv, &profile, walked.inputs);
+    completeness.domains.sort();
+    completeness.domains.dedup();
     let incomplete: BTreeSet<ModKey> =
         completeness.content_incomplete.iter().map(|(k, _, _)| k.clone()).collect();
+    let index = build_index(&inv, &profile, (walked.inputs, walked.parsed), &incomplete);
     let findings = run_rules(&index, req, (&incomplete, &completeness), &mut diags)?;
     diags.sort_by(|a, b| (&a.location, &a.code, &a.detail).cmp(&(&b.location, &b.code, &b.detail)));
     Ok(ScanOutput {
@@ -90,10 +93,20 @@ fn from_profile(profile: &Profile, opts: &SourceOptions) -> (OrderChain, Vec<Sca
     (chain, diags.iter().map(rows::from_ingest).collect())
 }
 
+fn symbol_rules(profile: &Profile) -> SymbolRules {
+    let shared = profile.clone();
+    let classify = move |path: &str| {
+        let c = shared.dir_class(path);
+        PathClass { domain: c.domain, merge: c.merge, order: c.order }
+    };
+    SymbolRules::new(classify, profile.key_readings(), profile.domain_names().to_vec())
+}
+
 fn build_index(
     inv: &Inventory,
     profile: &Profile,
-    inputs: Vec<smd_index::SourceInput>,
+    (inputs, parsed): (Vec<smd_index::SourceInput>, Vec<Parsed>),
+    incomplete: &BTreeSet<ModKey>,
 ) -> ScanIndex {
     let scope = match profile.replace_path_scope() {
         smd_profiles::ReplacePathScope::VanillaOnly => ReplacePathScope::VanillaOnly,
@@ -106,6 +119,13 @@ fn build_index(
     for input in inputs {
         builder.add_source(input);
     }
+    builder.symbol_rules(symbol_rules(profile));
+    for p in parsed {
+        builder.add_facts(p.source, &p.path, p.facts);
+    }
+    builder.content_incomplete(
+        inv.records.iter().filter(|r| incomplete.contains(&r.key)).map(|r| r.source),
+    );
     builder.build()
 }
 
