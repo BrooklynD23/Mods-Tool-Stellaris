@@ -130,6 +130,11 @@ in_file_duplicate = "unknown"       # first | last
 [syntax]
 script       = "clausewitz"
 localisation = "pdx_locyml"
+# The `l_<name>:` header names a localisation file's language. A header naming anything
+# else is a diagnostic and its keys are not extracted (the file is Partial). Order is the
+# LangId assignment; append only.
+languages = ["english", "braz_por", "french", "german", "polish", "russian", "spanish",
+             "simp_chinese", "japanese", "korean"]
 descriptor   = "clausewitz_kv"
 
 # CORROBORATED (CWTools operator enum + Irony): exactly these eight, no others.

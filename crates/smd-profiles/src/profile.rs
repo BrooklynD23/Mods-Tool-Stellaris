@@ -167,6 +167,7 @@ pub struct Profile {
     version: VersionSpec,
     readings: KeyReadings,
     domains: Vec<Box<str>>,
+    languages: std::sync::Arc<[Box<str>]>,
     hash: [u8; 16],
 }
 
@@ -197,6 +198,7 @@ fn content_hash(text: &str) -> [u8; 16] {
 fn typed_dirs(
     raw: Vec<RawDir>,
     default_order: Option<smd_core::FileOrder>,
+    languages: &std::sync::Arc<[Box<str>]>,
 ) -> Result<(Vec<Dir>, Vec<Box<str>>), ProfileError> {
     let mut domains: Vec<Box<str>> =
         raw.iter().filter_map(|d| d.extract.domain()).map(Into::into).collect();
@@ -209,7 +211,7 @@ fn typed_dirs(
             Ok(Dir {
                 glob: d.glob.to_lowercase().into(),
                 same_path: same_path.transpose()?,
-                class: d.extract.typed(&domains, default_order)?,
+                class: d.extract.typed(&domains, default_order, languages)?,
             })
         })
         .collect::<Result<Vec<_>, ProfileError>>()?;
@@ -230,11 +232,13 @@ impl Profile {
             strict::dir(&d.rest)?;
         }
         let (readings, default_order) = raw.load_order.readings.typed()?;
-        let (dirs, domains) = typed_dirs(raw.dir, default_order)?;
+        let languages = crate::dirclass::languages(&raw.syntax)?;
+        let (dirs, domains) = typed_dirs(raw.dir, default_order, &languages)?;
         strict::no_tied_overlap(dirs.iter().map(|d| &*d.glob))?;
         Ok(Profile {
             readings,
             domains,
+            languages,
             hash: content_hash(text),
             id: raw.game.id.unwrap_or_default().into(),
             steam_id: raw.game.steam_id,
@@ -332,6 +336,12 @@ impl Profile {
     #[must_use]
     pub fn domain_names(&self) -> &[Box<str>] {
         &self.domains
+    }
+
+    /// `[syntax] languages`: `LangId(i)` names `languages()[i]`.
+    #[must_use]
+    pub fn languages(&self) -> std::sync::Arc<[Box<str>]> {
+        std::sync::Arc::clone(&self.languages)
     }
 
     /// The Stage D parameters of `[load_order]`.

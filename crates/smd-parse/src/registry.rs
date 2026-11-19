@@ -1,8 +1,7 @@
 //! The parser registry (doc 06 § Parser registry), dispatched by [`FileKind`].
 //!
 //! Explicit and sorted rather than `inventory`-collected, like the rule registry: a new
-//! syntax (localisation, `locyml`) is one module implementing [`FileParser`] plus one line
-//! in [`PARSERS`].
+//! syntax is one module implementing [`FileParser`] plus one line in [`PARSERS`].
 
 use smd_core::{FileKind, ParseCompleteness, RawDiagnostic, RawFact, UnparsedReason};
 use smd_profiles::DirClass;
@@ -68,7 +67,7 @@ pub trait FileParser: Sync {
 }
 
 /// Every registered parser.
-pub static PARSERS: &[&dyn FileParser] = &[&crate::ClausewitzScriptParser];
+pub static PARSERS: &[&dyn FileParser] = &[&crate::ClausewitzScriptParser, &crate::LocYmlParser];
 
 /// The parser for a kind, if any accepts it.
 #[must_use]

@@ -1,6 +1,8 @@
 //! Per-path extraction classification: what a parser and the key resolver need from a
 //! `[[dir]]` entry (doc 06 § From events to facts, doc 10 § Keys, by resolution stage).
 
+use std::sync::Arc;
+
 use serde::Deserialize;
 use smd_core::{DomainId, ExtractionClass, FileKind, FileOrder, MergeMode};
 
@@ -15,6 +17,7 @@ pub(crate) struct RawExtract {
     extractor: Option<String>,
     parser: Option<String>,
     order: Option<String>,
+    tier: Option<u8>,
     #[serde(default)]
     additive_children: Vec<String>,
 }
@@ -50,6 +53,12 @@ pub struct DirClass {
     pub order: Option<FileOrder>,
     /// Children that accumulate (`merge_by_key_additive_body` only).
     pub additive_children: Box<[Box<str>]>,
+    /// Stage D tier: compared before the filename key; higher wins (`localisation/replace/`
+    /// style entries, H3). 0 when unset.
+    pub tier: u8,
+    /// `[syntax] languages`: a localisation header `l_<name>:` is `LangId(i)` for
+    /// `languages[i]`. Set on localisation classes only; empty elsewhere.
+    pub languages: Arc<[Box<str>]>,
 }
 
 impl DirClass {
@@ -120,6 +129,7 @@ impl RawExtract {
         &self,
         domains: &[Box<str>],
         default_order: Option<FileOrder>,
+        languages: &Arc<[Box<str>]>,
     ) -> Result<DirClass, ProfileError> {
         let (kind, parser) = dispatch(self.parser.as_deref())?;
         let extractor = extractor(self.extractor.as_deref(), kind)?;
@@ -153,8 +163,32 @@ impl RawExtract {
             merge,
             order,
             additive_children: additive,
+            tier: self.tier.unwrap_or(0),
+            languages: if kind == FileKind::Localisation {
+                Arc::clone(languages)
+            } else {
+                Arc::default()
+            },
         })
     }
+}
+
+/// `[syntax] languages`: a list of at most 256 distinct names; absent is empty.
+pub(crate) fn languages(syntax: &crate::strict::Rest) -> Result<Arc<[Box<str>]>, ProfileError> {
+    let Some(v) = syntax.get("languages") else { return Ok(Arc::default()) };
+    let list = v.as_array().ok_or_else(|| bad("languages", &v.to_string()))?;
+    let mut out: Vec<Box<str>> = Vec::with_capacity(list.len());
+    for item in list {
+        let name = item.as_str().ok_or_else(|| bad("languages", &item.to_string()))?;
+        if out.iter().any(|n| **n == *name) {
+            return Err(bad("languages", name));
+        }
+        out.push(name.into());
+    }
+    if out.len() > 256 {
+        return Err(bad("languages", "more than 256 entries"));
+    }
+    Ok(out.into())
 }
 
 /// What the filename axis compares (`[load_order] filename_key`).

@@ -53,6 +53,12 @@ pub fn token_text<'a>(bytes: &'a [u8], t: &Token, enc: Encoding) -> Cow<'a, str>
     let raw = &bytes[s.min(e)..e];
     match enc {
         Encoding::Utf8 => String::from_utf8_lossy(raw),
-        Encoding::Windows1252 => Cow::Owned(raw.iter().map(|&b| cp1252(b)).collect()),
+        Encoding::Windows1252 => Cow::Owned(decode_1252(raw)),
     }
+}
+
+/// Decode bytes as Windows-1252.
+#[must_use]
+pub fn decode_1252(raw: &[u8]) -> String {
+    raw.iter().map(|&b| cp1252(b)).collect()
 }

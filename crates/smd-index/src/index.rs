@@ -7,13 +7,14 @@
 use std::sync::Arc;
 
 use smd_core::{
-    Diagnostic, DomainId, PathId, PlaysetProvenance, Resolution, SamePath, SourceId, SourceTable,
-    SymbolId,
+    Diagnostic, DomainId, LangId, PathId, PlaysetProvenance, Resolution, SamePath, SourceId,
+    SourceTable, SymbolId,
 };
 
 use crate::defs::{DefinitionTable, PathClass};
 use crate::derived::Derived;
 use crate::interner::Interner;
+use crate::loc::LocTable;
 use crate::meta::PlaysetMeta;
 use crate::overlay::OverlayTable;
 use crate::overlay_rules::ReplacePathScope;
@@ -39,6 +40,8 @@ pub struct ScanIndex {
     pub(crate) readings: smd_profiles::KeyReadings,
     pub(crate) domains: Arc<[Box<str>]>,
     pub(crate) content_incomplete: Arc<[SourceId]>,
+    pub(crate) loc: Arc<LocTable>,
+    pub(crate) languages: Arc<[Box<str>]>,
 }
 
 impl ScanIndex {
@@ -139,6 +142,18 @@ impl ScanIndex {
     #[must_use]
     pub fn defs(&self) -> &DefinitionTable {
         &self.defs
+    }
+
+    /// The localisation layer.
+    #[must_use]
+    pub fn loc(&self) -> &LocTable {
+        &self.loc
+    }
+
+    /// A language's name; empty for an id the profile never declared.
+    #[must_use]
+    pub fn lang_name(&self, l: LangId) -> &str {
+        self.languages.get(usize::from(l.0)).map_or("", |n| n)
     }
 
     /// The key-layer classification of `p`; the default (unclassified) for an unknown id.

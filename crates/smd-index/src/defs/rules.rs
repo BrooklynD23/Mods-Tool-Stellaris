@@ -20,6 +20,9 @@ pub struct PathClass {
     pub merge: MergeMode,
     /// Filename direction (Stage D); `None` = unknown, enumerated.
     pub order: Option<FileOrder>,
+    /// Stage D tier, compared before the filename key; higher wins. Read by the
+    /// localisation resolver (H3); the definition resolver does not compare it yet.
+    pub tier: u8,
 }
 
 type Classifier = dyn Fn(&str) -> PathClass + Send + Sync;
@@ -30,6 +33,7 @@ pub struct SymbolRules {
     classify: Arc<Classifier>,
     pub(crate) readings: KeyReadings,
     pub(crate) domains: Arc<[Box<str>]>,
+    pub(crate) languages: Arc<[Box<str>]>,
 }
 
 impl std::fmt::Debug for SymbolRules {
@@ -55,7 +59,18 @@ impl SymbolRules {
         readings: KeyReadings,
         domains: Vec<Box<str>>,
     ) -> SymbolRules {
-        SymbolRules { classify: Arc::new(classify), readings, domains: domains.into() }
+        SymbolRules {
+            classify: Arc::new(classify),
+            readings,
+            domains: domains.into(),
+            languages: Arc::default(),
+        }
+    }
+
+    /// Name the localisation languages: `languages[i]` names `LangId(i)`.
+    #[must_use]
+    pub fn with_languages(self, languages: Arc<[Box<str>]>) -> SymbolRules {
+        SymbolRules { languages, ..self }
     }
 
     /// The class of a normalised path.

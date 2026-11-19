@@ -86,6 +86,14 @@ impl ScanIndex {
                 };
                 (name.into(), vec![text(&domain), text(name)])
             }
+            Subject::LocKey { lang, key } => {
+                let name = self.symbols.get(key.0);
+                let lang = match self.lang_name(*lang) {
+                    "" => lang.0.to_string(),
+                    l => l.to_owned(),
+                };
+                (name.into(), vec![text(&lang), text(name)])
+            }
             other => (
                 format!("{} ({other:?})", Diagnostic::UNHANDLED).into(),
                 SmallVec::<[SubjectPart; 1]>::new().into_vec(),
