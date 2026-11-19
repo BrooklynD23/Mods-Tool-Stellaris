@@ -8,7 +8,9 @@
 //!
 //! A minimal typed reader, [`Profile`], for exactly what Stage A needs: the
 //! `[load_order]` keys `same_filename_replaces_whole_file`, `replace_path_scope` and
-//! `sources`, each `[[dir]]`'s `glob` and optional `same_path`, `[benign]` and `[asset_archives]`, plus `[game]`, `[locations]` and
+//! `sources`, each `[[dir]]`'s `glob`, optional `same_path`, and its extraction keys (`domain`, `merge`,
+//! `level`, `parser`, `extractor`, `order`, `additive_children` — [`DirClass`]), the
+//! Stage D `[load_order]` readings ([`KeyReadings`]), `[benign]` and `[asset_archives]`, plus `[game]`, `[locations]` and
 //! `[stores]` (which reject unknown keys). Every other key is ignored. Strict, stage-keyed loading with unknown-key rejection (REVIEW-2026-10
 //! H6) replaces this reader; until then a mistyped key this reader does not model is
 //! silently dropped. The shipped profile is embedded with the `profile-stellaris` feature
@@ -16,6 +18,7 @@
 
 #![forbid(unsafe_code)]
 
+mod dirclass;
 mod glob;
 mod locations;
 mod profile;
@@ -23,6 +26,7 @@ mod profile;
 mod tests;
 mod version;
 
+pub use dirclass::{DirClass, FilenameKey, KeyReadings};
 pub use locations::{Locations, Stores, expand};
 pub use profile::{Profile, ProfileError, ReplacePathScope};
 pub use version::{VersionSpec, parse_game_version, parse_pattern};
