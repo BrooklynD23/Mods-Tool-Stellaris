@@ -12,8 +12,15 @@
 //! [`OverlayTable`], and derives [`Derived`]. [`ScanIndex::resolve_path`] is Stage A;
 //! [`ScanIndex::resolve_finding`] turns a finding into text.
 //!
-//! Not yet: the definition, localisation and event tables, `Precedence::compare`
-//! (Stages C and D), `PathClassTable`, `reorder`, and the parse cache.
+//! The definition layer (doc 07 § Stage C, § Stage D, § Deleted symbols, M2):
+//! [`IndexBuilder::add_facts`] interns each file's `RawFact`s into a [`DefinitionTable`];
+//! [`ScanIndex::resolve_symbol`] resolves one key through Stages C and D under every
+//! reading of the unknown Stage D parameters, and [`ScanIndex::no_live_site`] lists the
+//! keys `core.symbol_deleted` examines. Per-path classification arrives as
+//! [`SymbolRules`].
+//!
+//! Not yet: the localisation and event tables, `tier`, a separate merge scope (the domain
+//! is the scope), the `winning` bitset, `reorder`, and the on-disk cache.
 //!
 //! The crate names no game and no directory: per-path `same_path` behaviour and the
 //! `replace_path_scope` reading arrive as [`OverlayRules`].
@@ -21,6 +28,7 @@
 #![forbid(unsafe_code)]
 
 mod build;
+mod defs;
 mod derived;
 pub mod fixture;
 mod index;
@@ -35,8 +43,9 @@ mod stage_a;
 mod tests;
 
 pub use build::{FileRecord, IndexBuilder, SourceInput};
+pub use defs::{DefSite, DefinitionTable, IncompleteFile, PathClass, SymbolRules, SymbolVerdict};
 pub use derived::{BitSet, Derived};
-pub use fixture::{FileShape, PlaysetBuilder};
+pub use fixture::{FIXTURE_DOMAIN, FileShape, PlaysetBuilder};
 pub use index::ScanIndex;
 pub use interner::{Interner, InternerBuilder};
 pub use overlay::{Contribution, OverlayTable};

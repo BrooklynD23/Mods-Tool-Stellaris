@@ -80,7 +80,11 @@ impl ScanIndex {
             }
             Subject::Symbol(k) => {
                 let name = self.symbols.get(k.symbol.0);
-                (name.into(), vec![text(&k.domain.0.to_string()), text(name)])
+                let domain = match self.domain_name(k.domain) {
+                    "" => k.domain.0.to_string(),
+                    d => d.to_owned(),
+                };
+                (name.into(), vec![text(&domain), text(name)])
             }
             other => (
                 format!("{} ({other:?})", Diagnostic::UNHANDLED).into(),

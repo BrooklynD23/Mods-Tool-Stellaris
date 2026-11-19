@@ -6,8 +6,12 @@
 
 use std::sync::Arc;
 
-use smd_core::{Diagnostic, PathId, PlaysetProvenance, Resolution, SamePath, SourceTable};
+use smd_core::{
+    Diagnostic, DomainId, PathId, PlaysetProvenance, Resolution, SamePath, SourceId, SourceTable,
+    SymbolId,
+};
 
+use crate::defs::{DefinitionTable, PathClass};
 use crate::derived::Derived;
 use crate::interner::Interner;
 use crate::overlay::OverlayTable;
@@ -28,6 +32,11 @@ pub struct ScanIndex {
     pub(crate) scope: ReplacePathScope,
     pub(crate) derived: Derived,
     pub(crate) diags: Arc<Vec<Diagnostic>>,
+    pub(crate) defs: Arc<DefinitionTable>,
+    pub(crate) classes: Arc<[PathClass]>,
+    pub(crate) readings: smd_profiles::KeyReadings,
+    pub(crate) domains: Arc<[Box<str>]>,
+    pub(crate) content_incomplete: Arc<[SourceId]>,
 }
 
 impl ScanIndex {
@@ -109,6 +118,42 @@ impl ScanIndex {
             decls: &self.decls,
             scope: self.scope,
         })
+    }
+
+    /// The definition layer.
+    #[must_use]
+    pub fn defs(&self) -> &DefinitionTable {
+        &self.defs
+    }
+
+    /// The key-layer classification of `p`; the default (unclassified) for an unknown id.
+    #[must_use]
+    pub fn class_of(&self, p: PathId) -> PathClass {
+        self.classes.get(p.0 as usize).copied().unwrap_or_default()
+    }
+
+    /// A domain's name; empty for an id the profile never declared.
+    #[must_use]
+    pub fn domain_name(&self, d: DomainId) -> &str {
+        self.domains.get(usize::from(d.0)).map_or("", |n| n)
+    }
+
+    /// A domain's name as an interned symbol, for evidence.
+    #[must_use]
+    pub fn domain_symbol(&self, d: DomainId) -> Option<SymbolId> {
+        self.symbols.find(self.domain_name(d)).map(SymbolId)
+    }
+
+    /// The text of an interned symbol; empty for an id from another scan.
+    #[must_use]
+    pub fn symbol_text(&self, s: SymbolId) -> &str {
+        self.symbols.get(s.0)
+    }
+
+    /// Sources marked content-incomplete, ascending by index.
+    #[must_use]
+    pub fn content_incomplete(&self) -> &[SourceId] {
+        &self.content_incomplete
     }
 
     /// Stage A only (doc 07): complete on its own.

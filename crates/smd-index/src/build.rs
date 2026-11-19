@@ -4,10 +4,12 @@ use std::sync::Arc;
 
 use smallvec::SmallVec;
 use smd_core::{
-    Blob, Diagnostic, ParseCompleteness, PathId, PlaysetProvenance, SourceId, SourceTable, SymbolId,
+    Blob, Diagnostic, ParseCompleteness, PathId, PlaysetProvenance, RawFact, SourceId, SourceTable,
+    SymbolId,
 };
 use smd_fs::{NormPath, WalkRecord};
 
+use crate::defs::{self, BuildCtx, FactBatch, SymbolRules};
 use crate::derived::{BitSet, Derived};
 use crate::index::ScanIndex;
 use crate::interner::InternerBuilder;
@@ -60,6 +62,9 @@ pub struct IndexBuilder {
     rules: OverlayRules,
     inputs: Vec<SourceInput>,
     diags: Vec<Diagnostic>,
+    symbol_rules: SymbolRules,
+    facts: Vec<FactBatch>,
+    content_incomplete: Vec<SourceId>,
 }
 
 type Row<'a> = (u32, u32, &'a str, Option<Blob>, &'a FileRecord);
@@ -72,7 +77,41 @@ impl IndexBuilder {
         provenance: PlaysetProvenance,
         rules: OverlayRules,
     ) -> IndexBuilder {
-        IndexBuilder { sources, provenance, rules, inputs: Vec::new(), diags: Vec::new() }
+        IndexBuilder {
+            sources,
+            provenance,
+            rules,
+            inputs: Vec::new(),
+            diags: Vec::new(),
+            symbol_rules: SymbolRules::default(),
+            facts: Vec::new(),
+            content_incomplete: Vec::new(),
+        }
+    }
+
+    /// The Stage C/D classification. Without it no key-level outcome is stated.
+    pub fn symbol_rules(&mut self, rules: SymbolRules) -> &mut Self {
+        self.symbol_rules = rules;
+        self
+    }
+
+    /// One file's parse facts. The file must also be among `source`'s records, or its facts
+    /// have no contribution to hang on and are dropped.
+    pub fn add_facts(
+        &mut self,
+        source: SourceId,
+        path: &NormPath,
+        facts: Vec<RawFact>,
+    ) -> &mut Self {
+        self.facts.push(FactBatch { source, path: path.as_str().into(), facts });
+        self
+    }
+
+    /// Sources whose content was not fully listed or read (doc 06): a definition could be
+    /// anywhere in them, so no `Deleted` stands while one is not `Inactive`.
+    pub fn content_incomplete(&mut self, sources: impl IntoIterator<Item = SourceId>) -> &mut Self {
+        self.content_incomplete.extend(sources);
+        self
     }
 
     /// Add one source's walk. Call order does not affect the result.
@@ -102,6 +141,7 @@ impl IndexBuilder {
                 pb.insert(&prefix);
             }
         }
+        defs::intern(&mut sb, &self.facts, &self.symbol_rules.domains);
         let (paths, symbols) = (Arc::new(pb.freeze()), Arc::new(sb.freeze()));
         let mut rows: Vec<Row<'_>> = Vec::new();
         for i in &self.inputs {
@@ -115,7 +155,20 @@ impl IndexBuilder {
         let same_path: Arc<[_]> =
             paths.iter().map(|(_, t)| self.rules.same_path_of(t)).collect::<Vec<_>>().into();
         let decls = declarations(&self.inputs);
+        let classes: Arc<[_]> =
+            paths.iter().map(|(_, t)| self.symbol_rules.class_of(t)).collect::<Vec<_>>().into();
+        let cx =
+            BuildCtx { paths: &paths, symbols: &symbols, overlay: &overlay, classes: &classes };
+        let defs = Arc::new(defs::build(&self.facts, &cx));
+        let mut content_incomplete = self.content_incomplete;
+        content_incomplete.sort_by_key(|s| s.index());
+        content_incomplete.dedup();
         let mut index = ScanIndex {
+            defs,
+            classes,
+            readings: self.symbol_rules.readings,
+            domains: self.symbol_rules.domains.clone(),
+            content_incomplete: content_incomplete.into(),
             sources: self.sources,
             provenance: self.provenance,
             paths,
