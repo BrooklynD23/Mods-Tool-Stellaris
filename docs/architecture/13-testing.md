@@ -321,7 +321,7 @@ without one does not publish.
 ## Lint guarantees: live versus gated
 
 The design documents describe more `xtask lint` gates than exist. On this branch
-`xtask/src/lint.rs` runs **five**, and clippy holds two more by delegation. Every other
+`xtask/src/lint.rs` runs **six**, and clippy holds two more by delegation. Every other
 gate a document describes is scheduled here with an id and a milestone, and a document
 citing one points at this table (H35). **A gate not marked live is a promise, not a
 protection** — the same distinction `12` draws for budgets.
@@ -335,7 +335,7 @@ protection** — the same distinction `12` draws for budgets.
 | Broken relative link in `docs/**/*.md` | REVIEW-2026-08 (cross-confirmed findings) | **Live** — `doc-link` | — |
 | `[profile.release]` `panic = "unwind"` and the clippy delegation | ADR-0001, `04`, `08` | **Live** — `profile-audit` | — |
 | A `Rule` impl with no `cases()` | ADR-0002 §7 | Compiler, not lint — `cases` has no default (§ "Rule testing") | lands with the `Rule` trait · M1 |
-| `_ => {}` / `_ => None` over a shared enum | ADR-0002 §3, §7 | Not built | H36 · M1 |
+| `_ => {}` / `_ => None` over a shared enum | ADR-0002 §3, §7 | **Live** — `shared-enum-wildcard` (text-level: recognises the enum by `Enum::` in the arm patterns) | — |
 | Struct literal of a shared `smd-core` struct outside `smd-core` | ADR-0002 §3, §7 | Not built | H36 · M1 |
 | Every rule id ↔ every shipped `explain/*.toml`, both directions | ADR-0002 §7 | Not built | H36 · M1 |
 | Every `{placeholder}` is a declared evidence key or in `smd_core::DERIVED_PLACEHOLDERS` | ADR-0002 §7, `08`, `09` | Not built (the derived set exists in `smd-core`; nothing reads it) | H36 · M1 |
