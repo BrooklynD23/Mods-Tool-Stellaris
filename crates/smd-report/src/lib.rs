@@ -32,6 +32,7 @@ mod json;
 mod locate;
 mod markdown;
 mod model;
+mod qualifier;
 mod redact;
 mod table;
 mod view;
