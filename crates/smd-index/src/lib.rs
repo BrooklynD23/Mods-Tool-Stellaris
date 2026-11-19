@@ -19,8 +19,14 @@
 //! keys `core.symbol_deleted` examines. Per-path classification arrives as
 //! [`SymbolRules`].
 //!
-//! Not yet: the localisation and event tables, `tier`, a separate merge scope (the domain
-//! is the scope), the `winning` bitset, `reorder`, and the on-disk cache.
+//! M3: [`ScanIndex::events`], [`ScanIndex::namespaces`] and [`ScanIndex::defines`] hold
+//! the `EventId`, `Namespace` and `DefineKey` facts; [`ScanIndex::resolve_event`] and
+//! [`ScanIndex::resolve_define`] run the same Stages C/D. Stage D compares `tier` first and
+//! reports the axis that decided as the `Mechanism` (H19). [`ScanIndex::replace_hits`] is
+//! the declaration-side view of `replace_path` drops.
+//!
+//! Not yet: the localisation table, a separate merge scope (the domain is the scope), the
+//! `winning` bitset, `reorder`, and the on-disk cache.
 //!
 //! The crate names no game and no directory: per-path `same_path` behaviour and the
 //! `replace_path_scope` reading arrive as [`OverlayRules`].

@@ -319,3 +319,46 @@ TODO, in order:
    `filename_key` disagreement, additive-body residuals, cache H10 fixture (same bytes
    under two domains → two entries).
 5. Determinism sweep and cancel-under-load stress (M2 exit 3).
+
+## M3 (scaffolded, untested)
+
+Branch `m3/resolution`. Builds green on Linux and the Windows type-check; the only checks
+are the five mandatory `RuleCase`s per new rule and one parser smoke assertion. Testing
+was deferred by the owner, so nothing below is evidence for the M3 exit (the hand-verified
+30-mod playset).
+
+What exists:
+
+| Piece | Where |
+| --- | --- |
+| `tier` read from `[[dir]]` and compared first in Stage D | `smd-profiles/src/dirclass.rs`, `smd-index/src/defs/stage_d.rs` |
+| H19: `Decider` → `Mechanism` (`replace_tier` / `in_file_order` / `filename_order` / `load_order`), agreed across readings, else `undetermined` | `stage_d.rs::decided_by`; new `Mechanism::InFileOrder` in `smd-core` |
+| `resolve_sites`: Stages C/D over any key group; `resolve_symbol` is a wrapper | `smd-index/src/defs/resolve.rs` |
+| `EventKey`, `KeyTable<K>`; events, namespaces, defines tables; `resolve_event`, `resolve_define` | `smd-index/src/keyed.rs` |
+| `define` extractor: `DefineKey { group, key }` for `common/defines`, `unchecked_defines` | `smd-parse/src/extract/mod.rs`, `profiles/stellaris.toml` |
+| `ReplaceHit`, `replace_decls`, `replace_hits` | `smd-index/src/shadow.rs` |
+| `pdx.event_id_dup`, `pdx.namespace_share`, `pdx.defines_overlap`, `pdx.replace_path_shadow` | `smd-rules/src/rules/` |
+| `[base]` rows and `en.toml` entries for those four plus `core.symbol_collision` / `core.symbol_deleted`; reorder advice only under `mechanism.load_order`, `{winner_path}` named under `filename_order` | `policy/` |
+
+Deliberate limits:
+
+1. The merge scope is still the domain (no `MergeScopeId`); `localisation/replace` as a
+   tier needs it, which belongs with `LocTable`.
+2. No `winning` bitset and no `reorder`: winners are computed on demand per key group.
+3. Event sites carry no body digest; a per-site hash keeps `Agreement` at `differs`.
+4. Define keys are one interned `group.key` symbol (`ponytail:` in `keyed.rs`).
+5. Rules leave `requires()` empty: the profile declares no feature tags, and the engine
+   skips any rule that requires one.
+6. Defines no longer produce `Definition`s, so `core.symbol_collision` no longer reports
+   define clashes; `pdx.defines_overlap` does.
+7. When a winner beat its losers on different axes, the mechanism reported is the
+   greatest in `rank > filename > in-file > tier`, because only `rank` is user-changeable.
+
+TODO, in order:
+
+1. The M3 exit playset (FIOS `common/traits`, differently-named files, one mod defining a
+   key twice) and its probe comparison.
+2. Resolver tests: tier, H19 decider per axis and under disagreeing readings,
+   `resolve_event` with named ordinals, `replace_hits` under each scope reading.
+3. Explanation-variant selection tests for the H19 entries; the H19 lint (doc 09).
+4. `MergeScopeId`, `winning`, `reorder` (doc 07 § Reordering).

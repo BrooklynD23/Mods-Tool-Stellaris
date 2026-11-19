@@ -4,6 +4,19 @@ The index is the immutable, queryable model of "what the game will actually see"
 built once per scan, then shared by `&` with every rule and every UI query. It contains
 no judgement — no severities, no risk, no opinions. Those come later.
 
+**Status (M3, scaffolded, untested).** Built: Stages A–D; the full precedence tuple
+(`tier`, the filename key in the directory's FIOS/LIOS direction, `rank`, the in-file
+ordinal) under every reading of the unknown `[load_order]` parameters; `replace_path`
+fates at file level, with dropped files' definitions out of every key group (Stage B) and
+a declaration-side view (`ScanIndex::replace_hits`); `DefinitionTable`, and an
+`EventKey` / namespace / define `KeyTable` each, the event and define groups resolving
+through the same Stages C and D (`resolve_event`, `resolve_define`). Each stated winner
+carries the axis that decided as its `Mechanism` (`replace_tier`, `filename_order`,
+`in_file_order`, `load_order`; H19), agreed across every reading or `undetermined`. Not
+built: a `MergeScopeId` separate from the domain, the `winning` bitset, `reorder`,
+`LocTable` (another branch), the reverse indices, and the on-disk cache. Nothing here is
+evidence for the M3 exit; see `docs/HANDOFF.md` § M3.
+
 ## Structures
 
 ```rust
