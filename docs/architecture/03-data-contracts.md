@@ -692,7 +692,11 @@ diagnostics is still a successful scan.
    declared in order, and a snapshot test pins the assignment — rkyv and postcard encode
    a variant by position, not by name, so an inserted variant does not fail to decode: it
    decodes every fact already in the cache as the wrong kind.
-2. Adding a variant to any other `#[non_exhaustive]` enum is allowed; none are serialised.
+2. Adding a variant to any other `#[non_exhaustive]` enum is allowed. Some of them derive
+   serde behind `smd-core`'s `serde` feature for the parse cache (`files.rs`, `facts.rs`,
+   `diagnostic.rs`, `ids.rs`, `capability.rs`, `sources.rs`). No crate enables that
+   feature yet; when the cache lands (M2), a positional format makes those enums subject
+   to rule 1 too, unless `CONTRACT_VERSION` is bumped on every added variant.
 3. Adding a struct field is allowed only if it has a `Default`.
 4. `Capabilities` (§ `08`) is a `u32`, of which seven bits are used. A bitflags set that
    must never be narrowed costs nothing to declare wide now and a contract bump later.

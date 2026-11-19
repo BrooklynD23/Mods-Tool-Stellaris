@@ -555,6 +555,55 @@ is scored **low on its own** — a mod one patch behind usually still works, and
 that shouts about every out-of-date `supported_version` gets ignored. It is scored
 higher only in combination with other findings for the same mod.
 
+## Diagnostic codes
+
+Every code ingest, the filesystem boundary and the scan pipeline emit. The constants live
+in `smd-ingest/src/codes.rs`, `smd-fs/src/record.rs` (`codes`) and `smd-engine/src/walk.rs`.
+
+| Code | Emitted when |
+| --- | --- |
+| `ingest.descriptor_invalid` | A descriptor is over a cap; the mod is inventoried under its directory name, content unread |
+| `ingest.descriptor_syntax` | A descriptor is malformed below the caps; fields read before the fault are kept |
+| `ingest.descriptor_unreadable` | A descriptor file or directory could not be read at all |
+| `ingest.root_refused` | `path=` or `archive=` resolved to a root, the home directory, or an ancestor of a root |
+| `ingest.mod_path_missing` | `path=` names a directory that does not exist |
+| `ingest.duplicate_mod_key` | Two mods derived the same `ModKey`; the later one was re-keyed |
+| `ingest.mod_unregistered` | `mod/<dir>/descriptor.mod` with no launcher `*.mod` pointing at it |
+| `ingest.launcher_db_not_consulted` | The launcher DB was not read during discovery, so mods only it registers were not seen |
+| `ingest.playset_mod_unmatched` | An order source named a mod discovery did not find; other mods become `Unknown`, not `Inactive` |
+| `ingest.order_source_failed` | An order source failed and the chain moved on |
+| `ingest.no_order_source` | No order source answered |
+| `ingest.unknown_order_source` | The profile names an order source this build does not have |
+| `ingest.activation_disagreement` | The launcher DB and `dlc_load.json` enable different sets |
+| `ingest.dlc_load_invalid` | `dlc_load.json` is over a cap or not shaped as expected |
+| `ingest.launcher_snapshot_unverified` | The launcher snapshot could not be verified; the chain fell through |
+| `ingest.launcher_schema_unknown` | A missing or retyped launcher column |
+| `ingest.launcher_multiple_active` | More than one active, non-removed playset |
+| `ingest.launcher_no_active_playset` | No active, non-removed playset |
+| `ingest.launcher_changing` | The launcher kept committing during the read; the order may be seconds stale |
+| `ingest.location_missing` | A given location (install, user dir, workshop root, `mod/`) is absent |
+| `ingest.discovery_incomplete` | Discovery skipped or could not list something; sets `ScanCompleteness::discovery_incomplete` |
+| `ingest.game_version_unverified` | The game version is unreadable or outside the profile's verified range |
+| `ingest.archive_refused` | A malformed archive, refused whole (§ Archives). Not emitted yet: archives are inventory-only until H23 |
+| `fs.link_skipped` | A link inside a root was not followed; a directory link makes the source content-incomplete |
+| `fs.special_skipped` | A FIFO, socket or device was not opened |
+| `fs.escaped_root` | A handle resolved outside the root or onto another filesystem |
+| `fs.identity_collision` | Two entries of one source share an identity key |
+| `fs.unrepresentable_name` | A name is not valid Unicode and took a lossy key |
+| `fs.limit_exceeded` | A tree or file-size bound tripped |
+| `fs.unreadable` | A file or directory could not be opened or read |
+| `fs.changed_during_scan` | A file's size or mtime changed across the read |
+| `fs.cloud_placeholder` | An offline cloud placeholder was listed, not read (Windows) |
+| `scan.asset_archive_unread` | A vanilla archive `[asset_archives]` declares asset-only is over the cap; not read, scan stays complete |
+
+The `locate.*` codes belong to `smd locate` (§ Discovery).
+
+`PlaysetEntry.enabled` stays a `bool` rather than an `Activation`: its trust is carried
+once, scan-wide, by `Playset::activation`, and `smd-ingest` maps the pair to
+`SourceMeta::activation` (`Fallback` activation is `Unknown` whatever the flag says; an
+entry the join could not place makes absent mods `Unknown`, not `Inactive`). A per-entry
+`Activation` would duplicate that confidence and invite the two to disagree.
+
 ## Gates (REVIEW-2026-10)
 
 | Gate | Closes when | Milestone |
