@@ -1,5 +1,14 @@
 # 06 — Parsing layer
 
+> **Status (M2, scaffolded, untested):** `crates/smd-parse` implements the iterative
+> script parser, the `FileParser` registry, the `depth_key` / `pdx_event` extractors,
+> `AdditiveSplit`, body hashing, and the full layer-2 cache key with an in-memory cache.
+> Not built: `smd-locyml` (a `locyml` module), the SQLite store and layer 1, fuzzing, the
+> golden corpus. Two deviations from the text below: the parser returns a `ParseOutput`
+> value instead of pushing into a `FactSink`, and the registry is an explicit list
+> (`PARSERS`) rather than `inventory`, matching the rule registry. See
+> `docs/HANDOFF.md` § M2.
+
 ## Design stance
 
 The parser is **not** a general Clausewitz interpreter. It is a fact extractor. It needs
