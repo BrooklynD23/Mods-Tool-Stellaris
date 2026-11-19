@@ -12,6 +12,8 @@ smd locate prints where the game, its user directory and every workshop director
 are on this machine, how each was found, and every mod found there.
 
 options for both:
+  --game <id>              the game profile to use (default: the build's default
+                           profile; an unknown id prints the shipped ones)
   --game-dir <path>        the installed game directory
   --user-dir <path>        the user data directory
   --workshop-dir <path>    a workshop content directory (repeatable)
@@ -61,6 +63,8 @@ pub struct Common {
     pub format: Format,
     /// `--no-redact` turns this off.
     pub redact: bool,
+    /// `--game`: a shipped profile id; `None` is the default profile.
+    pub game: Option<String>,
 }
 
 /// The arguments of `smd scan`.
@@ -114,6 +118,7 @@ fn shared(flag: &str, it: &mut Args<'_>, c: &mut Common) -> Result<bool, String>
         "--workshop-dir" => c.workshop_dirs.push(value(it, flag)?.into()),
         "--format" => c.format = format(&value(it, flag)?)?,
         "--no-redact" => c.redact = false,
+        "--game" => c.game = Some(value(it, flag)?),
         _ => return Ok(false),
     }
     Ok(true)
@@ -160,6 +165,7 @@ fn new_common() -> Common {
         workshop_dirs: Vec::new(),
         format: Format::Table,
         redact: true,
+        game: None,
     }
 }
 

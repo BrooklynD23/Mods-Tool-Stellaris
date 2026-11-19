@@ -55,6 +55,8 @@ pub struct ScanRequest {
     /// workshop under a Steam install). Absence of a mod is then not "not installed", so
     /// the scan is marked discovery-incomplete.
     pub locations_incomplete: bool,
+    /// The shipped profile id to scan with; `None` is the build's default profile.
+    pub game: Option<String>,
 }
 
 impl ScanRequest {
@@ -71,6 +73,7 @@ impl ScanRequest {
             home: None,
             progress: None,
             locations_incomplete: false,
+            game: None,
         }
     }
 }

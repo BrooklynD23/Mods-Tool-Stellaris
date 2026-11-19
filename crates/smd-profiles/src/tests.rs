@@ -7,6 +7,15 @@ fn shipped() -> Profile {
 }
 
 #[test]
+fn every_shipped_profile_reads_and_an_unknown_id_is_refused() {
+    for id in crate::shipped_ids() {
+        let p = Profile::shipped(Some(id)).expect("shipped profile reads");
+        assert_eq!(p.id(), id);
+    }
+    assert!(Profile::shipped(Some("no-such-game")).is_err());
+}
+
+#[test]
 fn profile_classifies_same_path() {
     let p = shipped();
     assert_eq!(p.classify("common/traits/00_traits.txt"), SamePath::Replace);

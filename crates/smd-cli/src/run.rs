@@ -89,7 +89,11 @@ fn locate_output(c: &Common) -> Result<LocateOutput, ScanError> {
         user_dir: c.user_dir.clone(),
         workshop_dirs: c.workshop_dirs.clone(),
     };
-    match smd_api::execute(Command::Locate(LocateRequest { overrides, home: None }))? {
+    match smd_api::execute(Command::Locate(LocateRequest {
+        overrides,
+        home: None,
+        game: c.game.clone(),
+    }))? {
         Outcome::Locate(o) => Ok(*o),
         Outcome::Scan(_) => Err(ScanError::Unsupported("a scan outcome for a locate command")),
     }
@@ -217,6 +221,7 @@ fn scan(a: &ScanArgs, env: &Env, out: &mut dyn Write, err: &mut dyn Write) -> i3
     let mut req = ScanRequest::new(game, user);
     req.workshop_dirs = workshops;
     req.locations_incomplete = gap;
+    req.game.clone_from(&a.common.game);
     if a.progress || std::io::stderr().is_terminal() {
         // Straight to the process stderr: the callback must be `Send + Sync`, `err` is not.
         req.progress = Some(ProgressFn(Arc::new(|p| {

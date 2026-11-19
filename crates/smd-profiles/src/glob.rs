@@ -5,7 +5,7 @@
 //! that is exactly `**` matches zero or more whole segments.
 
 /// Whether `path` matches `pattern`, segment by segment.
-pub(crate) fn matches(pattern: &str, path: &str) -> bool {
+pub fn matches(pattern: &str, path: &str) -> bool {
     let pat: Vec<&str> = pattern.split('/').collect();
     let segs: Vec<&str> = path.split('/').collect();
     match_segments(&pat, &segs)
