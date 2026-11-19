@@ -2,11 +2,14 @@
 
 use std::cell::Cell;
 use std::fs;
+#[cfg(unix)]
 use std::os::unix::fs::symlink;
 use std::path::Path;
 use std::rc::Rc;
 
-use smd_core::{ContentIncompleteReason, ParseCompleteness, UnparsedReason};
+#[cfg(unix)]
+use smd_core::ContentIncompleteReason;
+use smd_core::{ParseCompleteness, UnparsedReason};
 
 use super::BEFORE_READ;
 use crate::{ReadOnlyRoot, WalkLimits, WalkOutcome};
@@ -118,6 +121,7 @@ fn hash_count_equals_contended_count() {
 }
 
 #[test]
+#[cfg(unix)]
 fn a_file_swapped_for_a_link_before_hashing_is_refused() {
     let outside = tempfile::tempdir().unwrap();
     put(outside.path(), "s.txt", b"secret");
