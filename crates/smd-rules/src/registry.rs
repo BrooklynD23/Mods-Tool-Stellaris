@@ -2,8 +2,8 @@
 
 use crate::Rule;
 use crate::rules::{
-    DepMissing, DepOrder, FileOverwrite, MetaDescriptorMismatch, MetaVersionDrift, SymbolCollision,
-    SymbolDeleted,
+    DefinesOverlap, DepMissing, DepOrder, EventIdDup, FileOverwrite, MetaDescriptorMismatch,
+    MetaVersionDrift, NamespaceShare, ReplacePathShadow, SymbolCollision, SymbolDeleted,
 };
 
 static FILE_OVERWRITE: FileOverwrite = FileOverwrite;
@@ -13,6 +13,10 @@ static DEP_MISSING: DepMissing = DepMissing;
 static DEP_ORDER: DepOrder = DepOrder;
 static META_DESCRIPTOR_MISMATCH: MetaDescriptorMismatch = MetaDescriptorMismatch;
 static META_VERSION_DRIFT: MetaVersionDrift = MetaVersionDrift;
+static EVENT_ID_DUP: EventIdDup = EventIdDup;
+static NAMESPACE_SHARE: NamespaceShare = NamespaceShare;
+static DEFINES_OVERLAP: DefinesOverlap = DefinesOverlap;
+static REPLACE_PATH_SHADOW: ReplacePathShadow = ReplacePathShadow;
 
 /// Every shipped rule, sorted by id.
 #[must_use]
@@ -23,6 +27,10 @@ pub fn registry() -> Vec<&'static dyn Rule> {
         &DEP_ORDER,
         &META_DESCRIPTOR_MISMATCH,
         &META_VERSION_DRIFT,
+        &EVENT_ID_DUP,
+        &NAMESPACE_SHARE,
+        &DEFINES_OVERLAP,
+        &REPLACE_PATH_SHADOW,
     ]);
     v.sort_by_key(|r| r.id());
     v

@@ -127,10 +127,17 @@ pub fn run_case(rule: &dyn Rule, case: &RuleCase) -> Result<(), String> {
             fail(format!("expected none, got {}", findings.len()))
         };
     };
-    // A path subject's text is its path; a symbol subject's is the symbol name.
+    // A path subject's text is its path; a symbol subject's is the symbol name; an
+    // event's `ns.ordinal`; a declaration's `mod key: prefix`.
     let Some((f, resolved)) =
         findings.iter().map(|f| (f, index.resolve_finding(f))).find(|(f, r)| {
-            matches!(f.subject, Subject::Path(_) | Subject::Symbol(_)) && &*r.subject_text == path
+            matches!(
+                f.subject,
+                Subject::Path(_)
+                    | Subject::Symbol(_)
+                    | Subject::Event { .. }
+                    | Subject::Directory { .. }
+            ) && &*r.subject_text == path
         })
     else {
         return fail(format!("no finding on {path}"));
