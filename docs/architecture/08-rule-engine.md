@@ -229,6 +229,19 @@ supplies. The result is a symbol referenced by name and defined nowhere the game
 look, which is both structurally unreachable and exactly the class of bug that makes a
 player open the tool. A catalogue made only of contests cannot see it.
 
+**M4 status (scaffolded, untested).** The four descriptor-level rules exist, one file
+each, with no `RuleCase`s yet. They read `SourceMeta::deps` and `ScanIndex::meta()`
+(`PlaysetMeta`: both descriptor copies per source and the parsed game version).
+Dependencies resolve by display name in `smd-ingest`: exact, then trimmed and
+case-insensitive; one match is `Resolved`, several are `Missing` with every match as a
+candidate (ambiguous — `dep.missing` stays silent), none is `Missing` with no candidates.
+Unknown activation (`dep.missing` → `activation_unknown`) or order (`dep.order` →
+`unknown`) adds a gap and lowers certainty; an unreadable game version, an unset field, or
+an inner `descriptor.mod` that is absent or did not parse cleanly produces no finding.
+`meta.descriptor_mismatch` compares only fields both copies set. Explanations are in
+`policy/explain/en.toml`, which nothing loads until `smd-policy` (M5). The rules declare no
+`requires()` because the engine skips any rule that does until profiles declare features.
+
 Post-v1, each still one file: `meta.patch_candidate` (M9; informational only, suppresses
 and discounts nothing — H13), `pdx.on_action_overlap`,
 `pdx.scripted_effect_signature_change`, `meta.workshop_delisted`,
