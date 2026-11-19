@@ -16,6 +16,8 @@
 //!
 //! M1 prints no severity and no score: findings are mechanism, participants, and outcome,
 //! in the order the caller gives them. The caller sorts with `smd-core`'s text sort.
+//! A scored report (`ReportModel::scores` not empty, `smd scan --score`) adds a score,
+//! band, finding id and explanation per finding; an unscored one is byte-identical to M1.
 //!
 //! # Safety and privacy
 //!
@@ -39,7 +41,9 @@ mod view;
 pub use json::Json;
 pub use locate::{LocateCandidate, LocateMod, LocateReport, render_locate};
 pub use markdown::Markdown;
-pub use model::{Caps, DiagnosticRow, InventoryRow, RenderOptions, ReportHeader, ReportModel};
+pub use model::{
+    Caps, DiagnosticRow, FindingScore, InventoryRow, RenderOptions, ReportHeader, ReportModel,
+};
 pub use redact::RedactionContext;
 pub use table::Table;
 

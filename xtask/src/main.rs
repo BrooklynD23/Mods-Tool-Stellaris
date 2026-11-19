@@ -14,6 +14,12 @@ fn main() -> ExitCode {
     let mut args = std::env::args().skip(1);
     match args.next().as_deref() {
         Some("lint") => lint::run(),
+        // Stubs: both need the labelled ground-truth set, which does not exist yet. They
+        // fail rather than pass, so nothing mistakes a stub for a calibration run.
+        Some("calibrate" | "ground-truth") => {
+            eprintln!("needs labelled ground truth (M5), see 13-testing.md");
+            ExitCode::FAILURE
+        }
         Some(other) => {
             eprintln!("xtask: unknown task `{other}`");
             usage();
@@ -30,5 +36,7 @@ fn usage() {
     eprintln!("usage: cargo xtask <task>");
     eprintln!();
     eprintln!("tasks:");
-    eprintln!("  lint    structural gates: size, layers, game names, doc links, profile");
+    eprintln!("  lint          structural gates: size, layers, game names, doc links, profile");
+    eprintln!("  calibrate     (stub) score the labelled corpus; needs ground truth (M5)");
+    eprintln!("  ground-truth  (stub) diff the ground-truth manifest; needs ground truth (M5)");
 }

@@ -4,7 +4,7 @@ use std::fmt::Write as _;
 
 use crate::escape::terminal::{BOLD, YELLOW, styled, text};
 use crate::model::{RenderOptions, ReportModel};
-use crate::view::{DiagView, FindingView, HeaderView, ParticipantView, View};
+use crate::view::{DiagView, FindingView, HeaderView, ParticipantView, PolicyView, View};
 use crate::{Renderer, build};
 
 /// Plain-text output for a terminal. Colour only when [`RenderOptions::color`] is set.
@@ -154,8 +154,20 @@ fn findings(out: &mut String, v: &View, color: bool) {
     }
 }
 
+fn policy(out: &mut String, p: &PolicyView) {
+    let mark = if p.suppressed { "  [suppressed]" } else { "" };
+    let _ = writeln!(out, "    {} (score {})  id {}{mark}", p.severity, p.score, text(&p.id));
+    let lines = [&p.title, &p.body, &p.why, &p.action];
+    for t in lines.into_iter().flatten().chain(&p.qualifiers) {
+        let _ = writeln!(out, "    {}", text(t));
+    }
+}
+
 fn finding(out: &mut String, n: usize, f: &FindingView) {
     let _ = writeln!(out, "[{n}] {}  {}", text(&f.rule), text(&f.subject));
+    if let Some(p) = &f.policy {
+        policy(out, p);
+    }
     let c = &f.certainty;
     let _ = writeln!(
         out,

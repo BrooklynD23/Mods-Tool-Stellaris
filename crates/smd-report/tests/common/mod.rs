@@ -105,6 +105,7 @@ pub fn model(
         },
         findings,
         diagnostics: Vec::new(),
+        scores: Vec::new(),
     }
 }
 

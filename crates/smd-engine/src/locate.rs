@@ -7,7 +7,8 @@ use smd_core::{ResolvedLocations, SourceRole, VersionComponent, VersionPattern};
 use smd_fs::{HostEnv, SystemEnv};
 use smd_ingest::{
     ContentState, DiscoveredMod, DiscoveryOptions, IngestDiagnostic, KEY_INSTALL, KEY_USER_DIR,
-    Located, Overrides, Store, check_game_version, codes, discover, workshop_key,
+    KEY_VANILLA_CONTENT, Located, Overrides, Store, check_game_version, codes, discover,
+    workshop_key,
 };
 use smd_profiles::Profile;
 
@@ -22,6 +23,8 @@ pub struct LocateRequest {
     pub overrides: Overrides,
     /// The home directory descriptors may not swallow. `None` reads `HOME` / `USERPROFILE`.
     pub home: Option<PathBuf>,
+    /// The shipped profile id; `None` is the build's default profile.
+    pub game: Option<String>,
 }
 
 /// One mod found under the located directories.
@@ -119,11 +122,14 @@ fn location_gap(l: &Located) -> Option<&'static str> {
 /// # Errors
 /// [`ScanError::Profile`] when the shipped profile does not read.
 pub fn locate_with(req: &LocateRequest, env: &dyn HostEnv) -> Result<LocateOutput, ScanError> {
-    let profile = Profile::shipped_default().map_err(ScanError::Profile)?;
+    let profile = Profile::shipped(req.game.as_deref()).map_err(ScanError::Profile)?;
     let located = smd_ingest::locate(&profile, &req.overrides, env);
     let mut loc = ResolvedLocations::new();
     if let Some(p) = &located.game_dir {
         loc.insert(KEY_INSTALL, p.clone());
+        if let Some(sub) = &profile.locations().content_subdir {
+            loc.insert(KEY_VANILLA_CONTENT, p.join(sub));
+        }
     }
     if let Some(p) = &located.user_dir {
         loc.insert(KEY_USER_DIR, p.clone());

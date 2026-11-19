@@ -55,6 +55,13 @@ pub struct ScanRequest {
     /// workshop under a Steam install). Absence of a mod is then not "not installed", so
     /// the scan is marked discovery-incomplete.
     pub locations_incomplete: bool,
+    /// The shipped profile id to scan with; `None` is the build's default profile.
+    pub game: Option<String>,
+    /// Score, band, explain and apply suppressions (M5). Off by default: unscored output
+    /// is unchanged from M1, which prints no severity (owner decision).
+    pub score: bool,
+    /// The suppressions file for a scored scan; `None` is the OS config-dir default.
+    pub suppressions: Option<PathBuf>,
 }
 
 impl ScanRequest {
@@ -71,6 +78,9 @@ impl ScanRequest {
             home: None,
             progress: None,
             locations_incomplete: false,
+            game: None,
+            score: false,
+            suppressions: None,
         }
     }
 }
@@ -93,6 +103,8 @@ pub enum ScanError {
     Profile(ProfileError),
     /// The cancellation token fired.
     Cancelled,
+    /// Policy data or the suppressions file could not be used.
+    Policy(String),
 }
 
 impl std::fmt::Display for ScanError {
@@ -104,6 +116,7 @@ impl std::fmt::Display for ScanError {
             ScanError::Unsupported(what) => write!(f, "not supported yet: {what}"),
             ScanError::Profile(e) => write!(f, "{e}"),
             ScanError::Cancelled => f.write_str("the scan was cancelled"),
+            ScanError::Policy(e) => write!(f, "{e}"),
         }
     }
 }

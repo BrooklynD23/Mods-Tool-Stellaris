@@ -6,12 +6,17 @@ use std::path::PathBuf;
 pub const USAGE: &str = "\
 usage: smd scan [options]
        smd locate [options]
+       smd suppress <finding-id> [--note <text>]
 
 smd scan reports same-path conflicts between the installed mods.
 smd locate prints where the game, its user directory and every workshop directory
 are on this machine, how each was found, and every mod found there.
+smd suppress adds a finding id (printed by `smd scan --score`) to the suppressions file
+in the OS config directory. A suppressed finding is still printed, marked.
 
 options for both:
+  --game <id>              the game profile to use (default: the build's default
+                           profile; an unknown id prints the shipped ones)
   --game-dir <path>        the installed game directory
   --user-dir <path>        the user data directory
   --workshop-dir <path>    a workshop content directory (repeatable)
@@ -22,6 +27,8 @@ options for both:
 options for scan only:
   --max-participants <n>   participants printed per finding (default: 10)
   --max-findings <n>       findings printed in total (default: 200)
+  --score                  score each finding (UNCALIBRATED, M5): print a band, score,
+                           finding id and explanation, and apply suppressions
   --progress               print `[n/N] <mod>` to stderr per mod walked (on by default
                            when stderr is a terminal)
 
@@ -61,6 +68,8 @@ pub struct Common {
     pub format: Format,
     /// `--no-redact` turns this off.
     pub redact: bool,
+    /// `--game`: a shipped profile id; `None` is the default profile.
+    pub game: Option<String>,
 }
 
 /// The arguments of `smd scan`.
@@ -74,6 +83,8 @@ pub struct ScanArgs {
     pub max_findings: Option<usize>,
     /// `--progress`.
     pub progress: bool,
+    /// `--score`: off by default, so unscored output is unchanged.
+    pub score: bool,
 }
 
 /// What the command line asked for.
@@ -83,6 +94,13 @@ pub enum Parsed {
     Scan(ScanArgs),
     /// `smd locate ...`.
     Locate(Common),
+    /// `smd suppress <id> [--note <text>]`.
+    Suppress {
+        /// The finding id.
+        id: String,
+        /// `--note`.
+        note: Option<String>,
+    },
     /// `--help`.
     Help,
 }
@@ -114,6 +132,7 @@ fn shared(flag: &str, it: &mut Args<'_>, c: &mut Common) -> Result<bool, String>
         "--workshop-dir" => c.workshop_dirs.push(value(it, flag)?.into()),
         "--format" => c.format = format(&value(it, flag)?)?,
         "--no-redact" => c.redact = false,
+        "--game" => c.game = Some(value(it, flag)?),
         _ => return Ok(false),
     }
     Ok(true)
@@ -125,6 +144,7 @@ fn scan(mut it: Args<'_>) -> Result<Parsed, String> {
         max_participants: None,
         max_findings: None,
         progress: false,
+        score: false,
     };
     while let Some(flag) = it.next() {
         if shared(flag, &mut it, &mut a.common)? {
@@ -135,6 +155,7 @@ fn scan(mut it: Args<'_>) -> Result<Parsed, String> {
             "--max-participants" => a.max_participants = Some(count(&value(&mut it, flag)?, flag)?),
             "--max-findings" => a.max_findings = Some(count(&value(&mut it, flag)?, flag)?),
             "--progress" => a.progress = true,
+            "--score" => a.score = true,
             other => return Err(format!("unknown argument `{other}`")),
         }
     }
@@ -153,6 +174,20 @@ fn locate(mut it: Args<'_>) -> Result<Parsed, String> {
     Ok(Parsed::Locate(c))
 }
 
+fn suppress(mut it: Args<'_>) -> Result<Parsed, String> {
+    let (mut id, mut note) = (None, None);
+    while let Some(arg) = it.next() {
+        match arg.as_str() {
+            "-h" | "--help" => return Ok(Parsed::Help),
+            "--note" => note = Some(value(&mut it, arg)?),
+            other if id.is_none() && !other.starts_with('-') => id = Some(other.to_owned()),
+            other => return Err(format!("unknown argument `{other}`")),
+        }
+    }
+    let id = id.ok_or_else(|| "smd suppress needs a finding id".to_owned())?;
+    Ok(Parsed::Suppress { id, note })
+}
+
 fn new_common() -> Common {
     Common {
         game_dir: None,
@@ -160,6 +195,7 @@ fn new_common() -> Common {
         workshop_dirs: Vec::new(),
         format: Format::Table,
         redact: true,
+        game: None,
     }
 }
 
@@ -174,6 +210,7 @@ pub fn parse(argv: &[String]) -> Result<Parsed, String> {
         Some("-h" | "--help") => Ok(Parsed::Help),
         Some("scan") => scan(it),
         Some("locate") => locate(it),
+        Some("suppress") => suppress(it),
         Some(other) => Err(format!("unknown command `{other}`")),
         None => Err("a command is required".to_owned()),
     }

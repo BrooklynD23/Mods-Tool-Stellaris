@@ -21,7 +21,7 @@ stellaris-mod-doctor/
 │   ├── (smd-parse/)            # planned (M2): lexers, parser registry, fact emission
 │   ├── smd-index/              # overlay, symbol table, resolver, cache
 │   ├── smd-rules/              # rule engine + one file per rule
-│   ├── (smd-policy/)           # planned (M5): scoring, severity bands, explanation catalogue
+│   ├── smd-policy/             # (M5) scoring, severity bands, explanation catalogue
 │   ├── smd-report/             # renderers: json, markdown, html, table
 │   ├── smd-engine/             # orchestration: the pipeline + job supervisor
 │   ├── smd-api/                # stable command/query surface + TS type export
@@ -67,7 +67,7 @@ separation, at the boundary that costs nothing.
 | `smd-parse` *(planned, M2)* | Lexers for PDX script and localisation, `FileParser` registry, dispatch by `FileKind`, fact emission | Know about traits, civics, or any game concept; store anything |
 | `smd-index` | Overlay table, symbol table, reverse indices, resolver, interners, on-disk cache | Interpret meaning or assign risk |
 | `smd-rules` | `Rule` trait, engine, one rule per file, per-rule `evidence()` and `cases()` | Format output, hardcode a score, or name a game |
-| `smd-policy` *(planned, M5)* | Id resolution into `ResolvedFinding`, weights, bands, explanation strings, suppressions | Detect anything |
+| `smd-policy` | Id resolution into `ResolvedFinding`, weights, bands, explanation strings, suppressions | Detect anything |
 | `smd-report` | `Renderer` trait + impls over `ResolvedFinding` | Compute findings; depend on anything but `smd-core` |
 | `smd-engine` | Stage wiring, the thread pool, channels, cancellation, progress, error collection | Contain domain rules |
 | `smd-api` | `Command`/`Query`/`Event` enums, serde + TS export | Be imported by anything below it |

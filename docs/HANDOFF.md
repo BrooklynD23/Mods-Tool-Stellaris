@@ -88,6 +88,32 @@ hashes only paths shipped by two or more sources (`smd-engine/src/hash_pass.rs`,
 no longer makes that source incomplete, and raises no diagnostic. Item 5 below (24
 oversize files) should shrink accordingly; re-run the 71-mod scan natively to confirm.
 
+## M5 policy, M8 second game, RE workflow (`m5/policy-m8-re`)
+
+- **`smd-policy`** is back (layer 4, deps `smd-core` + `smd-profiles` for its glob). It
+  reads `policy/weights.toml` and `policy/explain/en.toml` (embedded; `Policy::from_dir`
+  reads the same layout). Missing `[caps]` rows or `[certainty.*]` qualifiers are load
+  errors. Every weight is UNCALIBRATED.
+- **Scoring is opt-in:** `smd scan --score`. Without it, output is byte-identical to M1
+  (the report goldens still pass). With it, each finding prints band, score, a 16-hex
+  finding id (blake3 of rule + subject), the explanation and the certainty qualifiers.
+- **Suppressions:** `smd suppress <id> [--note ...]` writes a versioned
+  `suppressions.toml` under `%APPDATA%\StellarisModDoctor\` or
+  `$XDG_CONFIG_HOME/stellaris-mod-doctor/`. A suppressed finding is still printed,
+  marked. The directory name is the working product title (doc 14 § Product name is
+  open); it lives in `crates/smd-policy/src/appdir.rs`, the one file with a game-name
+  allowance.
+- **`cargo xtask calibrate` / `ground-truth`** are stubs that fail with "needs labelled
+  ground truth". There is no labelled set yet.
+- **M8:** `profiles/ck3.toml` exists. Every value is UNVERIFIED, there is no VERIFY.md
+  section for it, and it has never been run against a real install. `--game <id>`
+  (default: the first shipped profile) selects it for scan and locate. A new
+  `[locations] content_subdir` key handles vanilla content under `<install>/game/`.
+- **RE:** `.github/workflows/release.yml` builds `smd.exe` and a Linux binary on a `v*`
+  tag, writes `SHA256SUMS`, and drafts a release. It has never been triggered. Signing is
+  a placeholder guarded on a `SIGNING_CERT` secret, blocked on the certificate (H33). The
+  H33 release gate (selftest, goldens, ground-truth diff) is not in it yet.
+
 ## Next steps, in order
 
 Windows-first. Each item names its gate.

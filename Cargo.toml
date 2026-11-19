@@ -19,6 +19,7 @@ smd-engine = { path = "crates/smd-engine" }
 smd-fs = { path = "crates/smd-fs" }
 smd-index = { path = "crates/smd-index" }
 smd-ingest = { path = "crates/smd-ingest" }
+smd-policy = { path = "crates/smd-policy" }
 smd-profiles = { path = "crates/smd-profiles" }
 smd-report = { path = "crates/smd-report" }
 smd-rules = { path = "crates/smd-rules" }

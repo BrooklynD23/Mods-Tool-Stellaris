@@ -10,8 +10,8 @@ use smd_index::{
     IndexBuilder, ModDescriptors, OverlayRules, PlaysetMeta, ReplacePathScope, ScanIndex,
 };
 use smd_ingest::{
-    DiscoveryOptions, Inventory, KEY_INSTALL, KEY_USER_DIR, OrderChain, SourceOptions,
-    check_game_version, inventory, workshop_key,
+    DiscoveryOptions, Inventory, KEY_INSTALL, KEY_USER_DIR, KEY_VANILLA_CONTENT, OrderChain,
+    SourceOptions, check_game_version, inventory, workshop_key,
 };
 use smd_profiles::Profile;
 use smd_rules::{Rule, RuleCtx, run_all};
@@ -29,8 +29,8 @@ use crate::walk::{absorb, walk_sources};
 /// or the cancellation token fires. A scan that ran is always `Ok`, however incomplete;
 /// its completeness says how much.
 pub fn scan(req: &ScanRequest) -> Result<ScanOutput, ScanError> {
-    let profile = Profile::shipped_default().map_err(ScanError::Profile)?;
-    let loc = locations(req)?;
+    let profile = Profile::shipped(req.game.as_deref()).map_err(ScanError::Profile)?;
+    let loc = locations(req, &profile)?;
     let disc = DiscoveryOptions { home: req.home.clone() };
     let opts = SourceOptions { discovery: disc.clone(), ..SourceOptions::default() };
     let (chain, mut diags) = from_profile(&profile, &opts);
@@ -50,6 +50,7 @@ pub fn scan(req: &ScanRequest) -> Result<ScanOutput, ScanError> {
     let incomplete: BTreeSet<ModKey> =
         completeness.content_incomplete.iter().map(|(k, _, _)| k.clone()).collect();
     let findings = run_rules(&index, req, (&incomplete, &completeness), &mut diags)?;
+    let (findings, annotations) = crate::policy::apply(req, findings, &mut diags)?;
     diags.sort_by(|a, b| (&a.location, &a.code, &a.detail).cmp(&(&b.location, &b.code, &b.detail)));
     Ok(ScanOutput {
         provenance: inv.provenance.clone(),
@@ -57,6 +58,7 @@ pub fn scan(req: &ScanRequest) -> Result<ScanOutput, ScanError> {
         inventory: rows::inventory_rows(&inv),
         findings,
         diagnostics: diags,
+        annotations,
     })
 }
 
@@ -64,7 +66,7 @@ fn cancelled(req: &ScanRequest) -> Result<(), ScanError> {
     if req.cancel.is_cancelled() { Err(ScanError::Cancelled) } else { Ok(()) }
 }
 
-fn locations(req: &ScanRequest) -> Result<ResolvedLocations, ScanError> {
+fn locations(req: &ScanRequest, profile: &Profile) -> Result<ResolvedLocations, ScanError> {
     let check = |role: &'static str, path: &std::path::Path| {
         smd_fs::ReadOnlyRoot::open(path).map(|_| ()).map_err(|e| ScanError::RootUnreadable {
             role,
@@ -77,6 +79,9 @@ fn locations(req: &ScanRequest) -> Result<ResolvedLocations, ScanError> {
     let mut loc = ResolvedLocations::new();
     loc.insert(KEY_INSTALL, req.game_dir.clone());
     loc.insert(KEY_USER_DIR, req.user_dir.clone());
+    if let Some(sub) = &profile.locations().content_subdir {
+        loc.insert(KEY_VANILLA_CONTENT, req.game_dir.join(sub));
+    }
     let mut distinct: Vec<&std::path::PathBuf> = Vec::new();
     for ws in &req.workshop_dirs {
         check("workshop", ws)?;

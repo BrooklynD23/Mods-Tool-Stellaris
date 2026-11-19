@@ -24,6 +24,9 @@ pub struct Locations {
     pub install: Option<String>,
     /// The launcher-descriptor subdirectory of the user directory.
     pub mods_subdir: Option<String>,
+    /// Where vanilla content sits under the install directory when it is not the install
+    /// root itself (e.g. `game`). Absent = the install root.
+    pub content_subdir: Option<String>,
     /// Files, relative to a Steam root, that list its libraries.
     #[serde(default)]
     pub steam_library_index: Vec<String>,

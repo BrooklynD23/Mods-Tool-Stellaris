@@ -15,6 +15,7 @@ smd-profiles = { workspace = true }
 smd-ingest = { workspace = true }
 smd-index = { workspace = true }
 smd-rules = { workspace = true }
+smd-policy = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

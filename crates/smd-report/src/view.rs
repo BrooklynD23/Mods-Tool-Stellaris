@@ -87,6 +87,22 @@ pub(crate) struct FindingView {
     /// The explicit "... and N more participants" line, when the cap binds.
     pub participants_more: Option<String>,
     pub facts: Vec<(String, String)>,
+    /// Present only in a scored report, so unscored JSON is unchanged.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub policy: Option<PolicyView>,
+}
+
+#[derive(Serialize, Debug)]
+pub(crate) struct PolicyView {
+    pub id: String,
+    pub score: i32,
+    pub severity: String,
+    pub suppressed: bool,
+    pub title: Option<String>,
+    pub body: Option<String>,
+    pub why: Option<String>,
+    pub action: Option<String>,
+    pub qualifiers: Vec<String>,
 }
 
 #[derive(Serialize, Debug)]

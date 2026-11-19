@@ -28,6 +28,9 @@ pub use origin::ModOrigin;
 
 /// The game install directory.
 pub const KEY_INSTALL: &str = "install";
+/// Where vanilla content is read from, when the profile puts it below the install root
+/// (`[locations] content_subdir`). Absent = [`KEY_INSTALL`].
+pub const KEY_VANILLA_CONTENT: &str = "vanilla_content";
 /// The user data directory, holding `mod/`, `dlc_load.json` and `launcher-v2.sqlite`.
 pub const KEY_USER_DIR: &str = "user_dir";
 /// A workshop content directory (one subdirectory per subscribed mod). A second and later
@@ -146,7 +149,7 @@ fn existing(loc: &ResolvedLocations, key: &str, sink: &mut candidate::Sink) -> O
     sink.diags.push(IngestDiagnostic::warn(codes::LOCATION_MISSING, key, why));
     // The mods live under the user directory and the workshop root; a missing one means
     // they were not looked at. A missing install says nothing about the mods.
-    sink.incomplete |= key != KEY_INSTALL;
+    sink.incomplete |= key != KEY_INSTALL && key != KEY_VANILLA_CONTENT;
     None
 }
 
@@ -183,7 +186,9 @@ pub fn discover_with_launcher(
 ) -> Discovery {
     let mut launcher_read = None;
     let mut sink = candidate::Sink::default();
-    let install = existing(loc, KEY_INSTALL, &mut sink);
+    let vanilla_key =
+        if loc.get(KEY_VANILLA_CONTENT).is_some() { KEY_VANILLA_CONTENT } else { KEY_INSTALL };
+    let install = existing(loc, vanilla_key, &mut sink);
     let user_dir = existing(loc, KEY_USER_DIR, &mut sink);
     let mut workshops: Vec<PathBuf> = Vec::new();
     for (key, _) in loc.iter().filter(|(k, _)| is_workshop_key(k)) {
