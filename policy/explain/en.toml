@@ -28,6 +28,114 @@ discarded whole — including any entries only they contain.\
 why    = "A same-path file is not merged. The later copy replaces the earlier one wholesale."
 action = "Check whether a compatibility patch exists, or change the load order if you prefer {loser_first}'s version."
 
+# --- key-level rules (M2/M3). Advice is keyed to the axis that decided (H19): a reorder
+# is suggested only under `mechanism.load_order`; where the filename axis (FIOS/LIOS)
+# decided, the deciding file is named instead. ------------------------------------------
+
+["core.symbol_collision"]
+title  = "{n} definitions of {domain} “{subject}”"
+body   = "More than one live file defines this object. Which definition the game uses could not be stated."
+action = "Check whether a compatibility patch exists for these mods."
+
+["core.symbol_collision".variant.agreement.all_identical]
+title  = "{n} identical definitions of {domain} “{subject}”"
+body   = "The definitions are identical, so which one wins does not matter."
+action = "No action needed."
+
+["core.symbol_collision".variant.mechanism.load_order]
+title  = "{n} mods define {domain} “{subject}”; {winner}'s definition is used"
+body   = "{winner} loads later, so its definition is the one the game uses. The definitions from {losers} are discarded entirely — not merged."
+why    = "Two definitions of one object are not merged. The winning one replaces the others wholesale."
+action = "Check whether a compatibility patch exists, or change the load order if you prefer {loser_first}'s version."
+
+["core.symbol_collision".variant.mechanism.filename_order]
+title  = "{n} mods define {domain} “{subject}”; the file {winner_path} decides"
+body   = "In this directory file names, not the load order, decide which definition is used: {winner}'s file {winner_path} sorts where it wins. The definitions from {losers} are discarded entirely."
+action = "Reordering the mods will not change the winner here. Check whether a compatibility patch exists; only renaming {winner_path} (or the losing files) would."
+
+["core.symbol_collision".variant.mechanism.in_file_order]
+title  = "{winner} defines {domain} “{subject}” twice in {winner_path}"
+body   = "One file holds more than one definition of this object; its position in the file decides which is used."
+action = "Neither the load order nor file names change this. Report it to the author of {winner}."
+
+["core.symbol_collision".variant.mechanism.replace_tier]
+title  = "{winner}'s replacement of {domain} “{subject}” is used"
+body   = "{winner_path} is in a replacement directory, which is read before any filename or load-order rule. The definitions from {losers} are discarded."
+action = "No reordering changes this; it is how the replacement directory works."
+
+["core.symbol_deleted"]
+title  = "Could not verify that {domain} “{subject}” still exists"
+body   = "Every known definition of this object is in a file that may not reach the game, and the inputs needed to be sure were not all available."
+action = "Check the listed gaps; the finding may be a false alarm."
+
+["core.symbol_deleted".variant.outcome.deleted]
+title  = "{domain} “{subject}” is defined nowhere the game reads"
+body   = "Every file that defined this object was replaced or dropped, so the game no longer sees it."
+why    = "Anything that refers to it by name now refers to nothing."
+action = "Check whether a compatibility patch exists, or disable the mod whose file replaces the definition's file."
+
+["pdx.event_id_dup"]
+title  = "{n} events share the id “{subject}”"
+body   = "More than one live events file uses this event id. Which event the game keeps could not be stated."
+why    = "Two events with one id cannot both exist; whichever is dropped never fires."
+action = "Check whether a compatibility patch exists for these mods."
+
+["pdx.event_id_dup".variant.mechanism.load_order]
+title  = "{n} events share the id “{subject}”; {winner}'s is kept"
+body   = "{winner} loads later, so its event with this id is the one kept. The events from {losers} never fire."
+why    = "Two events with one id cannot both exist."
+action = "Check whether a compatibility patch exists, or change the load order if you prefer {loser_first}'s event."
+
+["pdx.event_id_dup".variant.mechanism.filename_order]
+title  = "{n} events share the id “{subject}”; the file {winner_path} decides"
+body   = "File names, not the load order, decide which event with this id is kept: {winner}'s file {winner_path}. The events from {losers} never fire."
+why    = "Two events with one id cannot both exist."
+action = "Reordering the mods will not change this. Report the clash to the mod authors; one of them must change the id."
+
+["pdx.event_id_dup".variant.mechanism.in_file_order]
+title  = "{winner} uses the event id “{subject}” twice in {winner_path}"
+body   = "One file holds two events with this id; only one is kept."
+action = "Report it to the author of {winner}."
+
+["pdx.namespace_share"]
+title  = "{sources} unrelated mods declare the event namespace “{subject}”"
+body   = "These mods use one event namespace without depending on each other. No event id clashes yet, but any future one would."
+why    = "A shared namespace is how two mods end up with the same event id after an update."
+action = "No action needed now. If events start misbehaving, check these mods first."
+
+["pdx.defines_overlap"]
+title  = "{n} values for the define “{subject}”"
+body   = "More than one live defines file sets this key. Which value the game uses could not be stated."
+action = "Check whether a compatibility patch exists for these mods."
+
+["pdx.defines_overlap".variant.agreement.all_identical]
+title  = "{n} identical values for the define “{subject}”"
+body   = "Every file sets the same value, so which one wins does not matter."
+action = "No action needed."
+
+["pdx.defines_overlap".variant.mechanism.load_order]
+title  = "{n} mods set the define “{subject}”; {winner}'s value is used"
+body   = "{winner} loads later, so its value is the one the game uses. The values from {losers} are ignored."
+why    = "A define is read everywhere; a changed value changes every system that reads it."
+action = "Check whether a compatibility patch exists, or change the load order if you prefer {loser_first}'s value."
+
+["pdx.defines_overlap".variant.mechanism.filename_order]
+title  = "{n} mods set the define “{subject}”; the file {winner_path} decides"
+body   = "File names, not the load order, decide which value is used: {winner}'s file {winner_path}. The values from {losers} are ignored."
+why    = "A define is read everywhere; a changed value changes every system that reads it."
+action = "Reordering the mods will not change this. Check whether a compatibility patch exists."
+
+["pdx.defines_overlap".variant.mechanism.in_file_order]
+title  = "{winner} sets the define “{subject}” twice in {winner_path}"
+body   = "One file sets this key more than once; its position in the file decides which value is used."
+action = "Report it to the author of {winner}."
+
+["pdx.replace_path_shadow"]
+title  = "{subject}: replace_path drops {files} file(s) from other mods"
+body   = "This mod declares replace_path for a directory, and files other mods ship there are, or may be, discarded whole."
+why    = "replace_path is usually meant to clear the base game's files; dropping another mod's files is usually a surprise."
+action = "Check whether the declaring mod is meant to be used together with the others listed."
+
 # --- certainty qualifiers: one row per non-best value of every axis (required) ---------
 
 [certainty.completeness.partial]

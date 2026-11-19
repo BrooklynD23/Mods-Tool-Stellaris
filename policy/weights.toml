@@ -6,11 +6,20 @@
 # `smd scan` shows none unless `--score` is passed.
 #
 # Every registered rule has a [base] row and every row names a registered rule. Rows for
-# rules that are not registered yet (core.symbol_collision, pdx.*) land
-# with the rule, not before: an id that resolves to nothing is a row nobody can test.
+# rules that are not registered yet land with the rule, not before: an id that resolves
+# to nothing is a row nobody can test.
 
 [base]
 "core.file_overwrite" = 45
+# M2/M3 key-level rules: uncalibrated guesses. symbol_deleted sits above symbol_collision
+# (doc 08: a symbol the game cannot see is worse than one resolved the wrong way);
+# event_id_dup carries the highest base weight in the catalogue (doc 07).
+"core.symbol_collision" = 45
+"core.symbol_deleted" = 60
+"pdx.event_id_dup" = 75
+"pdx.defines_overlap" = 50
+"pdx.replace_path_shadow" = 40
+"pdx.namespace_share" = 20
 # M4 descriptor-level rules: uncalibrated guesses like every other number here.
 "dep.missing" = 60
 "dep.order" = 40
