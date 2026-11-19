@@ -1,0 +1,55 @@
+# policy/explain/en.toml — the English explanation catalogue (doc 09 § Explanations).
+#
+# Keyed by rule id. A rule entry may carry a default (title/body/why/action) and
+# `variant.<evidence key>.<tag>` entries; variants are tried in evidence-key order
+# (alphabetical) and the first whose tag matches the finding wins, else the default.
+# Placeholders: the rule's declared evidence keys, plus the derived set in smd-core
+# (`{n}`, `{subject}`, `{winner}`, `{losers}`, `{loser_first}`).
+#
+# Language discipline (doc 09): never "broken", "will crash", "incompatible".
+
+["core.file_overwrite"]
+title  = "{n} sources ship the same file “{subject}”"
+body   = "More than one source contains this exact path. Which copy the game uses could not be stated."
+action = "Options: check for a compatibility patch, or disable one of the mods."
+
+["core.file_overwrite".variant.agreement.all_identical]
+title  = "{n} sources ship an identical “{subject}”"
+body   = "The copies are byte-identical, so which one wins does not matter."
+why    = "One mod has almost certainly vendored a copy of the other's file."
+action = "No action needed."
+
+["core.file_overwrite".variant.mechanism.same_path]
+title  = "{n} sources ship “{subject}”; {winner}'s copy replaces the others"
+body   = """
+{winner}'s copy of this file is the one the game reads. The copies from {losers} are \
+discarded whole — including any entries only they contain.\
+"""
+why    = "A same-path file is not merged. The later copy replaces the earlier one wholesale."
+action = "Check whether a compatibility patch exists, or change the load order if you prefer {loser_first}'s version."
+
+# --- certainty qualifiers: one row per non-best value of every axis (required) ---------
+
+[certainty.completeness.partial]
+text = "A file involved was only partly read; the copies may differ in ways not seen."
+
+[certainty.completeness.unparsed]
+text = "A file involved could not be read; this finding may be incomplete."
+
+[certainty.activation.inferred]
+text = "Which mods are enabled was inferred, not read from the launcher."
+
+[certainty.activation.conditional]
+text = "Would collide only if all these mods are enabled; the launcher could not say."
+
+[certainty.order.inferred]
+text = "Load order was inferred from a secondary source."
+
+[certainty.order.fallback]
+text = "Load order unknown: which mod wins is not stated."
+
+[certainty.semantics.assumed]
+text = "How the game merges this directory is assumed from prior art, not verified."
+
+[certainty.semantics.unmodelled]
+text = "How the game merges this directory is not modelled."

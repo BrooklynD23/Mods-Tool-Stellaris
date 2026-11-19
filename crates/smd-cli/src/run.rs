@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use smd_api::{
     Command, LocateOutput, LocateRequest, Outcome, Overrides, ProgressFn, ScanError, ScanRequest,
+    SuppressRequest,
 };
 use smd_core::DiagSeverity;
 use smd_report::{
@@ -44,9 +45,33 @@ pub fn run(argv: &[String], env: &Env, out: &mut dyn Write, err: &mut dyn Write)
         }
         Ok(Parsed::Scan(a)) => scan(&a, env, out, err),
         Ok(Parsed::Locate(c)) => locate(&c, env, out, err),
+        Ok(Parsed::Suppress { id, note }) => suppress(id, note, out, err),
         Err(msg) => {
             let _ = writeln!(err, "smd: {msg}\n\n{USAGE}");
             USAGE_ERROR
+        }
+    }
+}
+
+fn suppress(id: String, note: Option<String>, out: &mut dyn Write, err: &mut dyn Write) -> i32 {
+    let req = SuppressRequest { id: id.clone(), note, path: None };
+    match smd_api::execute(Command::Suppress(req)) {
+        Ok(Outcome::Suppressed(path)) => {
+            let text = format!(
+                "suppressed {id} in {}
+",
+                path.display()
+            );
+            emit(out, err, &text, false)
+        }
+        Ok(_) => FAILED,
+        Err(e) => {
+            let _ = writeln!(err, "smd: {e}");
+            if matches!(e, ScanError::Policy(ref m) if m.contains("not a finding id")) {
+                USAGE_ERROR
+            } else {
+                FAILED
+            }
         }
     }
 }
@@ -95,7 +120,7 @@ fn locate_output(c: &Common) -> Result<LocateOutput, ScanError> {
         game: c.game.clone(),
     }))? {
         Outcome::Locate(o) => Ok(*o),
-        Outcome::Scan(_) => Err(ScanError::Unsupported("a scan outcome for a locate command")),
+        _ => Err(ScanError::Unsupported("another outcome for a locate command")),
     }
 }
 
@@ -222,6 +247,7 @@ fn scan(a: &ScanArgs, env: &Env, out: &mut dyn Write, err: &mut dyn Write) -> i3
     req.workshop_dirs = workshops;
     req.locations_incomplete = gap;
     req.game.clone_from(&a.common.game);
+    req.score = a.score;
     if a.progress || std::io::stderr().is_terminal() {
         // Straight to the process stderr: the callback must be `Send + Sync`, `err` is not.
         req.progress = Some(ProgressFn(Arc::new(|p| {
@@ -230,8 +256,8 @@ fn scan(a: &ScanArgs, env: &Env, out: &mut dyn Write, err: &mut dyn Write) -> i3
         })));
     }
     let outcome = match smd_api::execute(Command::Scan(req)) {
-        Ok(Outcome::Scan(o)) => o,
-        Ok(Outcome::Locate(_)) => return FAILED,
+        Ok(Outcome::Scan(o)) => *o,
+        Ok(_) => return FAILED,
         Err(e) => return fail(&a.common, env, err, "smd.scan_failed", &e),
     };
     let had_error = outcome.diagnostics.iter().any(|d| d.level == DiagSeverity::Error);

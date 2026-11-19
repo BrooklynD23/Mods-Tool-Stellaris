@@ -5,7 +5,7 @@ use std::fmt::Write as _;
 
 use crate::escape::markdown::{code_span, name, tag, text};
 use crate::model::{RenderOptions, ReportModel};
-use crate::view::{DiagView, FindingView, HeaderView, View};
+use crate::view::{DiagView, FindingView, HeaderView, PolicyView, View};
 use crate::{Renderer, build};
 
 /// GitHub-flavoured Markdown. Data is escaped text; no link or HTML is ever generated.
@@ -121,8 +121,20 @@ fn findings(out: &mut String, v: &View) {
     }
 }
 
+fn policy(out: &mut String, p: &PolicyView) {
+    let mark = if p.suppressed { " (suppressed)" } else { "" };
+    let _ = writeln!(out, "- {} (score {}), id {}{mark}", p.severity, p.score, code_span(&p.id));
+    let lines = [&p.title, &p.body, &p.why, &p.action];
+    for t in lines.into_iter().flatten().chain(&p.qualifiers) {
+        let _ = writeln!(out, "- {}", text(t));
+    }
+}
+
 fn finding(out: &mut String, n: usize, f: &FindingView) {
     let _ = writeln!(out, "\n### {n}. {} {}\n", code_span(&f.rule), code_span(&f.subject));
+    if let Some(p) = &f.policy {
+        policy(out, p);
+    }
     let c = &f.certainty;
     let _ = writeln!(
         out,

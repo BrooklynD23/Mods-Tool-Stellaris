@@ -1,9 +1,9 @@
 //! `ScanOutcome` to `ReportModel`: field-for-field, no logic.
 
-use smd_api::{LocateOutput, LocatedMod, ModRow, ScanDiagnostic, ScanOutcome};
+use smd_api::{Annotation, LocateOutput, LocatedMod, ModRow, ScanDiagnostic, ScanOutcome};
 use smd_report::{
-    DiagnosticRow, InventoryRow, LocateCandidate, LocateMod, LocateReport, ReportHeader,
-    ReportModel,
+    DiagnosticRow, FindingScore, InventoryRow, LocateCandidate, LocateMod, LocateReport,
+    ReportHeader, ReportModel,
 };
 
 fn inventory(m: ModRow) -> InventoryRow {
@@ -24,6 +24,19 @@ fn diagnostic(d: ScanDiagnostic) -> DiagnosticRow {
     DiagnosticRow { code: d.code, level: d.level, location: d.location, detail: d.detail }
 }
 
+fn score(a: Annotation) -> FindingScore {
+    let e = a.explanation;
+    FindingScore {
+        id: a.id,
+        title: e.as_ref().map(|e| e.title.clone()),
+        body: e.as_ref().and_then(|e| e.body.clone()),
+        why: e.as_ref().and_then(|e| e.why.clone()),
+        action: e.as_ref().and_then(|e| e.action.clone()),
+        qualifiers: e.map(|e| e.qualifiers).unwrap_or_default(),
+        suppressed: a.suppressed,
+    }
+}
+
 /// The renderer input for a finished scan. The findings are already in `smd-core`'s text
 /// sort order and are passed through untouched.
 #[must_use]
@@ -36,6 +49,7 @@ pub fn report_model(o: ScanOutcome) -> ReportModel {
         },
         findings: o.findings,
         diagnostics: o.diagnostics.into_iter().map(diagnostic).collect(),
+        scores: o.annotations.into_iter().map(score).collect(),
     }
 }
 

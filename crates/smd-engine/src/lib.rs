@@ -22,6 +22,7 @@ mod certainty;
 mod hash_pass;
 mod locate;
 mod output;
+mod policy;
 mod request;
 mod rows;
 mod scan;
@@ -31,8 +32,10 @@ mod walk;
 
 pub use locate::{LocateOutput, LocateRequest, LocatedMod, locate, locate_with};
 pub use output::{ModRow, ScanDiagnostic, ScanOutput};
+pub use policy::suppress;
 pub use request::{Progress, ProgressFn, ScanError, ScanRequest};
 pub use scan::scan;
 pub use smd_fs::WalkLimits;
 pub use smd_ingest::{Candidate, Located, Overrides, Store};
+pub use smd_policy::{Annotation, Explanation};
 pub use smd_rules::CancellationToken;

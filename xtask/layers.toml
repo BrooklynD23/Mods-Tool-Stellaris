@@ -54,6 +54,12 @@ deps = ["smd-core", "smd-fs", "smd-profiles"]
 layer = 4
 deps = ["smd-core", "smd-profiles", "smd-index"]
 
+# Valuation. Reads findings already resolved to text, so it needs no model crate; it
+# borrows the profile glob matcher for `path_glob` modifiers.
+[crates.smd-policy]
+layer = 4
+deps = ["smd-core", "smd-profiles"]
+
 [crates.smd-engine]
 layer = 5
 deps = [
@@ -63,6 +69,7 @@ deps = [
     "smd-ingest",
     "smd-index",
     "smd-rules",
+    "smd-policy",
 ]
 
 [crates.smd-api]

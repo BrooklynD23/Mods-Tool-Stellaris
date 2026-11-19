@@ -134,6 +134,11 @@ impl Redactor<'_> {
                 self.string(k);
                 self.string(val);
             }
+            if let Some(p) = &mut f.policy {
+                let texts = [&mut p.title, &mut p.body, &mut p.why, &mut p.action];
+                texts.into_iter().flatten().for_each(|t| self.string(t));
+                p.qualifiers.iter_mut().for_each(|q| self.string(q));
+            }
         }
         self.diagnostics(&mut v.diagnostics);
     }

@@ -47,6 +47,7 @@ pub fn scan(req: &ScanRequest) -> Result<ScanOutput, ScanError> {
     let incomplete: BTreeSet<ModKey> =
         completeness.content_incomplete.iter().map(|(k, _, _)| k.clone()).collect();
     let findings = run_rules(&index, req, (&incomplete, &completeness), &mut diags)?;
+    let (findings, annotations) = crate::policy::apply(req, findings, &mut diags)?;
     diags.sort_by(|a, b| (&a.location, &a.code, &a.detail).cmp(&(&b.location, &b.code, &b.detail)));
     Ok(ScanOutput {
         provenance: inv.provenance.clone(),
@@ -54,6 +55,7 @@ pub fn scan(req: &ScanRequest) -> Result<ScanOutput, ScanError> {
         inventory: rows::inventory_rows(&inv),
         findings,
         diagnostics: diags,
+        annotations,
     })
 }
 

@@ -354,6 +354,7 @@ dependencies = [
  "smd-fs",
  "smd-index",
  "smd-ingest",
+ "smd-policy",
  "smd-profiles",
  "smd-rules",
  "tempfile",
@@ -393,6 +394,18 @@ dependencies = [
  "smd-fs",
  "smd-profiles",
  "tempfile",
+]
+
+[[package]]
+name = "smd-policy"
+version = "0.0.0"
+dependencies = [
+ "blake3",
+ "serde",
+ "smd-core",
+ "smd-profiles",
+ "tempfile",
+ "toml",
 ]
 
 [[package]]

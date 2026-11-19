@@ -1,0 +1,66 @@
+# policy/weights.toml — valuation as data (docs/architecture/09-policy-and-scoring.md).
+#
+# UNCALIBRATED. Every number below is an informed guess. Calibration against labelled
+# ground truth is M5's exit (`cargo xtask calibrate`, not built: it needs the labelled
+# set of doc 13). Until then a score is a guess printed in a number, which is why
+# `smd scan` shows none unless `--score` is passed.
+#
+# Every registered rule has a [base] row and every row names a registered rule. Rows for
+# rules that are not registered yet (core.symbol_collision, pdx.*, dep.*, meta.*) land
+# with the rule, not before: an id that resolves to nothing is a row nobody can test.
+
+[base]
+"core.file_overwrite" = 45
+
+# --- phase 1: per finding --------------------------------------------------------
+# All conditions in one `when` must hold. A negative `add` applies only when the
+# finding's completeness is `complete` (doc 09 H18: uncertainty never proves a problem
+# away).
+
+[[modifier]]
+when = { evidence = "agreement", eq = "all_identical" }
+add  = -50
+why  = "byte-identical files cannot disagree"
+
+[[modifier]]
+when = { evidence = "mechanism", eq = "same_path" }
+add  = 25
+why  = "whole-file replacement discards every unrelated entry too"
+
+[[modifier]]
+when = { path_glob = "common/defines/**" }
+add  = 20
+why  = "a define is read everywhere"
+
+[[modifier]]
+when = { path_glob = ["gfx/**", "**/*.dds", "**/*.png"] }
+add  = -35
+why  = "art overwrites are cosmetic and usually intentional"
+
+[[modifier]]
+when = { participants_gte = 4 }
+add  = 10
+why  = "a pile-up is harder for a user to reason about"
+
+# --- phase 2: reads the finding set ------------------------------------------------
+# (No phase-2 modifier yet: the only doc-09 example reads meta.version_drift, which is
+# not registered. The mechanism is built; `same_mod_findings_gte` is its condition.)
+
+[bands]
+info     = 0
+low      = 20
+medium   = 40
+high     = 65
+critical = 90
+
+# Every non-best value of every certainty axis has a row; a missing row is a load error.
+# A user may lower a cap, never remove one.
+[caps]
+completeness.partial    = "medium"
+completeness.unparsed   = "medium"
+activation.inferred     = "high"
+activation.conditional  = "low"
+order.inferred          = "high"
+order.fallback          = "medium"
+semantics.assumed       = "high"
+semantics.unmodelled    = "medium"

@@ -54,4 +54,6 @@ pub struct ScanOutput {
     pub findings: Vec<ResolvedFinding>,
     /// Sorted by location, code, detail.
     pub diagnostics: Vec<ScanDiagnostic>,
+    /// Empty unless the request asked to score; then `annotations[i]` is `findings[i]`'s.
+    pub annotations: Vec<smd_policy::Annotation>,
 }
