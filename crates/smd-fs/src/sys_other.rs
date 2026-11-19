@@ -1,16 +1,22 @@
 //! Non-Unix backend (Windows): std only. Entries are classified by
 //! [`crate::winattrs::kind_of`] (no-follow metadata, std's name-surrogate test) before
-//! being opened, and re-checked on the handle. Compiled on Windows but not
-//! exercised by the Linux-only test run (the classifier is).
+//! being opened, and re-checked on the handle. Compiled on Windows; the walk tests that
+//! do not need symlinks, FIFOs or Unix permissions run on it too (unverified until a
+//! Windows runner executes them).
 //!
-//! NOT FUNCTIONALLY COMPLETE (H22 stays open for Windows): it works from paths, so the
-//! TOCTOU window between components is open, and there is no final-path-under-root check
-//! (`fs.escaped_root`). Do not ship a Windows build before those are implemented.
+//! Each opened directory and file is checked to resolve under the root (canonicalised
+//! final path; a miss sets `foreign`, which the walk reports as `fs.escaped_root`).
+//!
+//! ponytail: the final-path check canonicalises the *path* again rather than asking the
+//! open handle (`GetFinalPathNameByHandleW` needs `unsafe`, which the crate forbids), so a
+//! swap between the open and the check is still a race. Closing it needs a reviewed
+//! `windows-sys` exception; until then the TOCTOU window between components stays open.
 
 use std::ffi::OsStr;
 use std::fs::{File, Metadata, OpenOptions};
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::UNIX_EPOCH;
 
 use super::{Entry, Kind, Listed, OpenErr, OpenedDir, OpenedFile, Stamp};
@@ -18,9 +24,17 @@ use crate::winattrs::{Facts, kind_of};
 
 const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x10;
 
-/// A directory, by path. TOCTOU between components is not closed on this backend.
+/// A directory, by path, plus the canonical root it descends from. TOCTOU between
+/// components is not closed on this backend.
 pub(crate) struct Dir {
     path: PathBuf,
+    root: Arc<Path>,
+}
+
+/// The final path of `p` is not under `root`: a reparse point the attribute check missed,
+/// or a swap since the listing. An unresolvable path counts as outside.
+fn escapes(root: &Path, p: &Path) -> bool {
+    !std::fs::canonicalize(p).is_ok_and(|real| real.starts_with(root))
 }
 
 #[cfg(windows)]
@@ -52,7 +66,7 @@ fn stamp_of(m: &Metadata) -> Stamp {
 
 pub(super) fn open_root(path: &Path) -> io::Result<Dir> {
     if std::fs::metadata(path)?.is_dir() {
-        Ok(Dir { path: path.to_path_buf() })
+        Ok(Dir { path: path.to_path_buf(), root: Arc::from(path) })
     } else {
         Err(io::Error::new(io::ErrorKind::NotADirectory, "root is not a directory"))
     }
@@ -78,7 +92,10 @@ pub(super) fn open_dir(dir: &Dir, name: &OsStr) -> Result<OpenedDir, OpenErr> {
     match kind_of(facts(&m)) {
         Kind::Link => Err(OpenErr::Link),
         Kind::Offline => Err(OpenErr::Offline),
-        Kind::Dir => Ok(OpenedDir { dir: Dir { path: p }, foreign: false }),
+        Kind::Dir => {
+            let foreign = escapes(&dir.root, &p);
+            Ok(OpenedDir { dir: Dir { path: p, root: Arc::clone(&dir.root) }, foreign })
+        }
         _ => Err(OpenErr::Io(io::Error::new(io::ErrorKind::NotADirectory, "not a directory"))),
     }
 }
@@ -107,7 +124,7 @@ pub(super) fn open_file(dir: &Dir, name: &OsStr) -> Result<OpenedFile, OpenErr> 
     }
     Ok(OpenedFile {
         regular: m.is_file() && attrs(&m) & FILE_ATTRIBUTE_DIRECTORY == 0,
-        foreign: false,
+        foreign: escapes(&dir.root, &p),
         stamp: stamp_of(&m),
         file,
     })

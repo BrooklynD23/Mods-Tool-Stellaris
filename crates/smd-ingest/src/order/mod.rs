@@ -20,7 +20,7 @@ pub(crate) mod json_caps;
 pub mod launcher_v2;
 
 pub use directory_scan::DirectoryScan;
-pub use dlc_load::DlcLoadJson;
+pub use dlc_load::{DlcLoadJson, parse_enabled as parse_dlc_load_json};
 pub use launcher_v2::{LauncherV2Options, LauncherV2Sqlite};
 
 /// What one source attempt produced: a playset or a reason, plus named diagnostics.

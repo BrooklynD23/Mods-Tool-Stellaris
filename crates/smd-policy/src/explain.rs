@@ -78,10 +78,12 @@ pub(crate) fn catalogue(text: &str) -> Result<Catalogue, PolicyError> {
 }
 
 fn tag_of<'a>(f: &'a ResolvedFinding, key: &str) -> Option<&'a str> {
-    f.facts.iter().find(|(k, _)| *k == key).and_then(|(_, v)| match v {
-        ResolvedEvidence::Tag(t) => Some(*t),
-        _ => None,
-    })
+    // Only a `Tag` selects a variant; any other value, including one added to the
+    // (non-exhaustive) enum later, falls back to the rule's default text by design.
+    f.facts
+        .iter()
+        .find(|(k, _)| *k == key)
+        .and_then(|(_, v)| if let ResolvedEvidence::Tag(t) = v { Some(*t) } else { None })
 }
 
 impl Catalogue {

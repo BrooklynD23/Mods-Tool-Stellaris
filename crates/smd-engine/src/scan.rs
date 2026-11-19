@@ -46,9 +46,9 @@ pub fn scan(req: &ScanRequest) -> Result<ScanOutput, ScanError> {
     completeness.discovery_incomplete |= req.locations_incomplete;
     completeness.game_version_unverified = !gv.diagnostics.is_empty();
     let gv = gv.raw.as_deref().and_then(smd_profiles::parse_game_version);
-    let index = build_index(&inv, &profile, walked.inputs, gv);
     let incomplete: BTreeSet<ModKey> =
         completeness.content_incomplete.iter().map(|(k, _, _)| k.clone()).collect();
+    let index = build_index(&inv, &profile, walked.inputs, gv, &incomplete);
     let findings = run_rules(&index, req, (&incomplete, &completeness), &mut diags)?;
     let (findings, annotations) = crate::policy::apply(req, findings, &mut diags)?;
     diags.sort_by(|a, b| (&a.location, &a.code, &a.detail).cmp(&(&b.location, &b.code, &b.detail)));
@@ -103,6 +103,7 @@ fn build_index(
     profile: &Profile,
     inputs: Vec<smd_index::SourceInput>,
     game_version: Option<smd_core::GameVersion>,
+    incomplete: &BTreeSet<ModKey>,
 ) -> ScanIndex {
     let scope = match profile.replace_path_scope() {
         smd_profiles::ReplacePathScope::VanillaOnly => ReplacePathScope::VanillaOnly,
@@ -116,6 +117,9 @@ fn build_index(
         builder.add_source(input);
     }
     builder.set_meta(meta_of(inv, game_version));
+    for rec in inv.records.iter().filter(|r| incomplete.contains(&r.key)) {
+        builder.mark_content_incomplete(rec.source);
+    }
     builder.build()
 }
 

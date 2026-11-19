@@ -24,6 +24,21 @@ fn replace_path_vanilla_stated() {
     assert_eq!(ix.derived().shadowed().len(), 1);
 }
 
+/// H50: a refused directory link in any live source leaves room for an unseen copy, so the
+/// drop stays stated but the path is not `Deleted`.
+#[test]
+fn h50_content_incomplete_source_blocks_deleted() {
+    let mut b = PlaysetBuilder::new();
+    let a = b.add_mod("A", &[2, 0], Activation::Active);
+    b.file(SourceId::VANILLA, F, "v").file(a, "other.txt", "o").replace_path(a, "common/x");
+    b.content_incomplete(a);
+    let ix = b.build();
+    let v = ix.path_verdict(pid(&ix, F));
+    assert_eq!(v.resolution.outcome, Outcome::Unknown);
+    assert_eq!(v.resolution.gaps.as_slice(), &[ResolutionGap::ParseIncomplete]);
+    assert_eq!(v.shadows.len(), 1);
+}
+
 fn earlier_mod(scope: ReplacePathScope, declarer_rank: &[u32]) -> (crate::ScanIndex, SourceId) {
     let mut b = PlaysetBuilder::new();
     let early = b.add_mod("Early", &[2, 0], Activation::Active);

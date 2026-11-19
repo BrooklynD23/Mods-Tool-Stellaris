@@ -141,6 +141,9 @@ fn finding(out: &mut String, n: usize, f: &FindingView) {
         "- certainty: completeness={} activation={} order={} semantics={}",
         c.completeness, c.activation, c.order, c.semantics
     );
+    for q in &f.qualifiers {
+        let _ = writeln!(out, "- note: {}", text(q));
+    }
     if !f.gaps.is_empty() {
         let _ = writeln!(
             out,

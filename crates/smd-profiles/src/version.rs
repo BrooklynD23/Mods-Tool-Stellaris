@@ -64,7 +64,10 @@ impl VersionSpec {
             match p.matches(v) {
                 Match::Yes => return Match::Yes,
                 Match::No => verdict = Match::No,
-                _ => {}
+                Match::Unknown => {}
+                // A future answer makes no claim either way, so the verdict stands; loud in
+                // debug builds so the new variant gets handled (ADR-0002 § 3).
+                other => debug_assert!(false, "unhandled Match::{other:?}"),
             }
         }
         verdict

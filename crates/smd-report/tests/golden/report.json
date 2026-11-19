@@ -81,6 +81,12 @@
         "order": "fallback",
         "semantics": "unmodelled"
       },
+      "qualifiers": [
+        "Some files involved could not be read; what they hold is unknown.",
+        "Would collide only if both mods are enabled; the launcher could not be read.",
+        "Load order unknown: which mod wins is not stated.",
+        "The game behaviour here is not modelled; treat this as a lead, not a verdict."
+      ],
       "gaps": [
         "order_unknown"
       ],
@@ -126,6 +132,12 @@
         "order": "fallback",
         "semantics": "unmodelled"
       },
+      "qualifiers": [
+        "Some files involved were only partly read; this finding may be incomplete.",
+        "Would collide only if both mods are enabled; the launcher could not be read.",
+        "Load order unknown: which mod wins is not stated.",
+        "The game behaviour here is not modelled; treat this as a lead, not a verdict."
+      ],
       "gaps": [
         "order_unknown"
       ],
@@ -180,6 +192,12 @@
         "order": "fallback",
         "semantics": "unmodelled"
       },
+      "qualifiers": [
+        "Some files involved could not be read; what they hold is unknown.",
+        "Would collide only if both mods are enabled; the launcher could not be read.",
+        "Load order unknown: which mod wins is not stated.",
+        "The game behaviour here is not modelled; treat this as a lead, not a verdict."
+      ],
       "gaps": [
         "order_unknown"
       ],

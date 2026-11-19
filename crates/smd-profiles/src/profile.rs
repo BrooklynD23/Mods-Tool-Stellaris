@@ -5,6 +5,7 @@ use smd_core::{SamePath, SourceSpec};
 
 use crate::glob;
 use crate::locations::{Locations, Stores};
+use crate::strict::{self, Rest};
 use crate::version::{RawVersion, VersionSpec};
 
 /// What a `replace_path` drops, as the profile states it. Mirrors the resolver's own enum
@@ -32,6 +33,20 @@ pub enum ProfileError {
         /// The value found.
         found: String,
     },
+    /// A key the loader does not recognise (doc 10: a load error, not a warning).
+    UnknownKey {
+        /// The table, without brackets.
+        table: &'static str,
+        /// The key found.
+        key: String,
+    },
+    /// Two `[[dir]]` globs tie on specificity and match a common path.
+    OverlappingGlobs {
+        /// The earlier glob.
+        first: String,
+        /// The later glob.
+        second: String,
+    },
 }
 
 impl std::fmt::Display for ProfileError {
@@ -41,6 +56,13 @@ impl std::fmt::Display for ProfileError {
             ProfileError::Value { key, found } => {
                 write!(f, "profile key `{key}` has the unknown value `{found}`")
             }
+            ProfileError::UnknownKey { table, key } => {
+                write!(f, "profile table `[{table}]` has the unknown key `{key}`")
+            }
+            ProfileError::OverlappingGlobs { first, second } => write!(
+                f,
+                "profile `[[dir]]` globs `{first}` and `{second}` overlap with equal specificity"
+            ),
         }
     }
 }
@@ -48,6 +70,7 @@ impl std::fmt::Display for ProfileError {
 impl std::error::Error for ProfileError {}
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Raw {
     #[serde(default)]
     game: RawGame,
@@ -57,6 +80,8 @@ struct Raw {
     stores: Stores,
     #[serde(default)]
     load_order: RawLoadOrder,
+    #[serde(default)]
+    syntax: Rest,
     #[serde(default)]
     dir: Vec<RawDir>,
     #[serde(default)]
@@ -84,21 +109,27 @@ struct RawLoadOrder {
     #[serde(default)]
     same_filename_replaces_whole_file: bool,
     replace_path_scope: Option<String>,
+    #[serde(flatten)]
+    rest: Rest,
 }
 
 #[derive(Deserialize)]
 struct RawDir {
     glob: String,
     same_path: Option<String>,
+    #[serde(flatten)]
+    rest: Rest,
 }
 
 #[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 struct RawBenign {
     #[serde(default)]
     paths: Vec<String>,
 }
 
 #[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 struct RawAssetArchives {
     #[serde(default)]
     paths: Vec<String>,
@@ -112,9 +143,9 @@ struct Dir {
 
 /// The parts of a game profile that Stage A reads.
 ///
-/// `[game]`, `[locations]`, `[stores]` and `[version]` reject unknown keys. Every other key is ignored
-/// for now: strict rejection everywhere (REVIEW-2026-10 H6) belongs to the stage-keyed
-/// loader that replaces this reader.
+/// Every table rejects unknown keys, and tied overlapping `[[dir]]` globs are a load error
+/// (REVIEW-2026-10 H6, [`crate::strict`]). Keys owned by later stages are recognised but
+/// not yet typed here.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Profile {
     id: Box<str>,
@@ -157,14 +188,18 @@ impl Profile {
     pub fn from_toml(text: &str) -> Result<Profile, ProfileError> {
         let raw: Raw = toml::from_str(text).map_err(|e| ProfileError::Syntax(e.to_string()))?;
         raw.locations.check()?;
+        strict::load_order(&raw.load_order.rest)?;
+        strict::syntax(&raw.syntax)?;
         let dirs = raw
             .dir
             .into_iter()
             .map(|d| {
+                strict::dir(&d.rest)?;
                 let same_path = d.same_path.as_deref().map(|v| same_path("same_path", v));
                 Ok(Dir { glob: d.glob.to_lowercase().into(), same_path: same_path.transpose()? })
             })
             .collect::<Result<Vec<_>, ProfileError>>()?;
+        strict::no_tied_overlap(dirs.iter().map(|d| &*d.glob))?;
         Ok(Profile {
             id: raw.game.id.unwrap_or_default().into(),
             steam_id: raw.game.steam_id,
@@ -229,13 +264,11 @@ impl Profile {
 
     /// The `same_path` behaviour of a normalised path.
     ///
-    /// The most specific matching `[[dir]]` (longest literal prefix, then declaration
-    /// order) decides; its own `same_path` wins, else the `[load_order]` default. A path
-    /// under no `[[dir]]` takes that same default (doc 07 § Resolution model): `Replace`
-    /// when `same_filename_replaces_whole_file`, else `Unknown`.
-    ///
-    /// Doc 10 also has the loader reject two entries that tie on specificity while
-    /// overlapping; that check is deferred to H6, so a tie falls to declaration order.
+    /// The most specific matching `[[dir]]` (longest literal prefix) decides; the loader
+    /// already rejected ties, so declaration order never does. Its own `same_path` wins,
+    /// else the `[load_order]` default. A path under no `[[dir]]` takes that same default
+    /// (doc 07 § Resolution model): `Replace` when `same_filename_replaces_whole_file`,
+    /// else `Unknown`.
     #[must_use]
     pub fn classify(&self, path: &str) -> SamePath {
         let best = self.dirs.iter().filter(|d| glob::matches(&d.glob, path)).fold(

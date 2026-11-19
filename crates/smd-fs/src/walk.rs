@@ -17,7 +17,6 @@ mod collide;
 mod lazy;
 mod read;
 #[cfg(test)]
-#[cfg_attr(not(unix), allow(unused_imports))] // the race tests that use it are unix-only
 use read::BEFORE_READ;
 
 pub(crate) use lazy::{hash_pending, open_under};
@@ -205,9 +204,9 @@ impl Walker {
     }
 }
 
-#[cfg(all(test, unix))]
+#[cfg(test)]
 mod tests;
-#[cfg(all(test, unix))]
+#[cfg(test)]
 mod tests_boundary;
-#[cfg(all(test, unix))]
+#[cfg(test)]
 mod tests_lazy;

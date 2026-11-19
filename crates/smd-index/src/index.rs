@@ -27,6 +27,8 @@ pub struct ScanIndex {
     pub(crate) same_path: Arc<[SamePath]>,
     pub(crate) decls: Arc<[ReplaceDecl]>,
     pub(crate) scope: ReplacePathScope,
+    /// Sources whose walk was content-incomplete, ascending by index.
+    pub(crate) incomplete: Arc<[smd_core::SourceId]>,
     pub(crate) derived: Derived,
     pub(crate) diags: Arc<Vec<Diagnostic>>,
     pub(crate) meta: Arc<PlaysetMeta>,
@@ -122,6 +124,7 @@ impl ScanIndex {
             same_path: self.same_path_of(p),
             decls: &self.decls,
             scope: self.scope,
+            incomplete: &self.incomplete,
         })
     }
 

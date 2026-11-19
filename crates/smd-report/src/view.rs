@@ -80,6 +80,8 @@ pub(crate) struct FindingView {
     pub rule: String,
     pub subject: String,
     pub certainty: CertaintyView,
+    /// One sentence per non-best certainty axis (doc 09, "The qualifier"). Never omitted.
+    pub qualifiers: Vec<&'static str>,
     pub gaps: Vec<&'static str>,
     pub participants: Vec<ParticipantView>,
     /// How many participants the per-finding cap left out.

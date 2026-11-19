@@ -70,6 +70,7 @@ pub struct PlaysetBuilder {
     same_path: SamePath,
     scope: ReplacePathScope,
     order: Confidence,
+    incomplete: Vec<SourceId>,
 }
 
 impl Default for PlaysetBuilder {
@@ -88,6 +89,7 @@ impl PlaysetBuilder {
             same_path: SamePath::Replace,
             scope: ReplacePathScope::Unknown,
             order: Confidence::Exact,
+            incomplete: Vec::new(),
         };
         b.push(Self::meta("vanilla", "Vanilla", vec![0], Activation::Active, SourceRole::Vanilla));
         b
@@ -169,6 +171,12 @@ impl PlaysetBuilder {
         self
     }
 
+    /// Mark `s` content-incomplete, as a refused directory link would (H50).
+    pub fn content_incomplete(&mut self, s: SourceId) -> &mut Self {
+        self.incomplete.push(s);
+        self
+    }
+
     /// Set the uniform `same_path` behaviour.
     pub fn same_path(&mut self, sp: SamePath) -> &mut Self {
         self.same_path = sp;
@@ -214,6 +222,9 @@ impl PlaysetBuilder {
                 input.records.reverse();
             }
             b.add_source(input);
+        }
+        for s in &self.incomplete {
+            b.mark_content_incomplete(*s);
         }
         b.build()
     }

@@ -30,6 +30,46 @@ pub(crate) fn specificity(pattern: &str) -> usize {
     pattern.find(['*', '?']).unwrap_or(pattern.len())
 }
 
+/// Whether some path matches both patterns (the [`matches`] dialect on both sides).
+pub(crate) fn overlaps(a: &str, b: &str) -> bool {
+    let (a, b): (Vec<&str>, Vec<&str>) = (a.split('/').collect(), b.split('/').collect());
+    segments_overlap(&a, &b)
+}
+
+fn segments_overlap(a: &[&str], b: &[&str]) -> bool {
+    match (a.split_first(), b.split_first()) {
+        (None, None) => true,
+        (Some((&"**", ra)), _) => {
+            segments_overlap(ra, b) || (!b.is_empty() && segments_overlap(a, &b[1..]))
+        }
+        (_, Some((&"**", rb))) => {
+            segments_overlap(a, rb) || (!a.is_empty() && segments_overlap(&a[1..], b))
+        }
+        (Some((sa, ra)), Some((sb, rb))) => {
+            let (ca, cb): (Vec<char>, Vec<char>) = (sa.chars().collect(), sb.chars().collect());
+            chars_overlap(&ca, &cb) && segments_overlap(ra, rb)
+        }
+        _ => false,
+    }
+}
+
+/// Whether some segment text matches both `*`/`?` patterns.
+fn chars_overlap(a: &[char], b: &[char]) -> bool {
+    match (a.split_first(), b.split_first()) {
+        (None, None) => true,
+        (Some(('*', ra)), _) => {
+            chars_overlap(ra, b) || (!b.is_empty() && chars_overlap(a, &b[1..]))
+        }
+        (_, Some(('*', rb))) => {
+            chars_overlap(a, rb) || (!a.is_empty() && chars_overlap(&a[1..], b))
+        }
+        (Some((ca, ra)), Some((cb, rb))) => {
+            (ca == cb || *ca == '?' || *cb == '?') && chars_overlap(ra, rb)
+        }
+        _ => false,
+    }
+}
+
 fn match_segments(pat: &[&str], segs: &[&str]) -> bool {
     match pat.split_first() {
         None => segs.is_empty(),
@@ -96,6 +136,15 @@ mod tests {
         assert!(matches_basename_or_path("/*.jpg", "a.jpg"));
         assert!(!matches_basename_or_path("/*.jpg", "gfx/a.jpg"));
         assert!(matches_basename_or_path("*.jpg", "gfx/a.jpg"), "bare patterns still float");
+    }
+
+    #[test]
+    fn overlap_is_a_common_matching_path() {
+        assert!(overlaps("gfx/**", "gfx/*.dds"));
+        assert!(overlaps("a/*.txt", "a/x?.*"));
+        assert!(!overlaps("events/**/*.txt", "events/**/*.yml"));
+        assert!(!overlaps("common/a/*.txt", "common/b/*.txt"));
+        assert!(!overlaps("a/*.txt", "a/b/*.txt"), "* stays inside one segment");
     }
 
     #[test]

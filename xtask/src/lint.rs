@@ -1,6 +1,6 @@
 //! `cargo xtask lint` — the structural gates.
 //!
-//! Five gates, each failing the build:
+//! Six gates, each failing the build:
 //!
 //! | Rule | What it fails on |
 //! | --- | --- |
@@ -9,6 +9,7 @@
 //! | `game-name` | a game name in a crate without `game_names_allowed` |
 //! | `doc-link` | a broken relative link in `docs/**/*.md` |
 //! | `profile-audit` | `[profile.release]` or the delegated clippy gates drifting |
+//! | `shared-enum-wildcard` | `_ => {}` / `()` / `None` over a shared `smd-core` enum outside `smd-core` |
 //!
 //! Function length (60 lines) and parameter count (5) are delegated to clippy, whose
 //! thresholds live in `clippy.toml`; `profile-audit` checks that the delegation is still
@@ -16,8 +17,8 @@
 //! that misfires and moves between toolchain releases, so a routine `rustup update` would
 //! turn CI red on code nobody touched.
 //!
-//! These five are the whole list. The design documents describe further gates — shared-enum
-//! wildcards, struct literals, referential integrity across `weights.toml` / `explain/*` /
+//! These six are the whole list. The design documents describe further gates — struct
+//! literals, referential integrity across `weights.toml` / `explain/*` /
 //! `suppress.toml`, the rayon ban, parser priority collisions — and none of them is built
 //! yet. Each is scheduled, with a gate id and a milestone, in the lint ledger in
 //! `docs/architecture/13-testing.md` § "Lint guarantees: live versus gated"
@@ -29,6 +30,7 @@ mod doclinks;
 mod gamenames;
 mod profile;
 mod size;
+mod wildcard;
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -86,6 +88,7 @@ pub fn run() -> ExitCode {
     gate("file-length", size::check(&ctx));
     gate("game-name", gamenames::check(&ctx));
     gate("doc-link", doclinks::check(&ctx));
+    gate("shared-enum-wildcard", wildcard::check(&ctx));
 
     report(&mut violations)
 }

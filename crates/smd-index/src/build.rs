@@ -62,6 +62,7 @@ pub struct IndexBuilder {
     inputs: Vec<SourceInput>,
     diags: Vec<Diagnostic>,
     meta: PlaysetMeta,
+    incomplete: Vec<SourceId>,
 }
 
 type Row<'a> = (u32, u32, &'a str, Option<Blob>, &'a FileRecord);
@@ -81,12 +82,21 @@ impl IndexBuilder {
             inputs: Vec::new(),
             diags: Vec::new(),
             meta: PlaysetMeta::default(),
+            incomplete: Vec::new(),
         }
     }
 
     /// Add one source's walk. Call order does not affect the result.
     pub fn add_source(&mut self, input: SourceInput) -> &mut Self {
         self.inputs.push(input);
+        self
+    }
+
+    /// Mark a source content-incomplete (a refused directory link, a bound, an unopened
+    /// root or an unread archive): files may exist that its records lack, so no path is
+    /// `Deleted` while it is not `Inactive` (H50).
+    pub fn mark_content_incomplete(&mut self, source: SourceId) -> &mut Self {
+        self.incomplete.push(source);
         self
     }
 
@@ -133,6 +143,9 @@ impl IndexBuilder {
         let same_path: Arc<[_]> =
             paths.iter().map(|(_, t)| self.rules.same_path_of(t)).collect::<Vec<_>>().into();
         let decls = declarations(&self.inputs);
+        let mut incomplete = self.incomplete;
+        incomplete.sort_by_key(|s| s.index());
+        incomplete.dedup();
         let mut index = ScanIndex {
             sources: self.sources,
             provenance: self.provenance,
@@ -142,6 +155,7 @@ impl IndexBuilder {
             same_path,
             decls: decls.into(),
             scope: self.rules.scope(),
+            incomplete: incomplete.into(),
             derived: Derived::default(),
             diags: Arc::new(self.diags),
             meta: Arc::new(self.meta),

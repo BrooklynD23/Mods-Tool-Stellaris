@@ -146,15 +146,17 @@ fn policy(f: &ResolvedFinding, s: &FindingScore) -> PolicyView {
 
 fn finding(f: &ResolvedFinding, score: Option<&FindingScore>, opts: &RenderOptions) -> FindingView {
     let shown = f.participants.len().min(opts.caps.max_participants);
+    let certainty = CertaintyView {
+        completeness: f.certainty.completeness.as_tag(),
+        activation: f.certainty.activation.as_tag(),
+        order: f.certainty.order.as_tag(),
+        semantics: f.certainty.semantics.as_tag(),
+    };
     FindingView {
         rule: f.rule.as_str().to_owned(),
         subject: f.subject_text.to_string(),
-        certainty: CertaintyView {
-            completeness: f.certainty.completeness.as_tag(),
-            activation: f.certainty.activation.as_tag(),
-            order: f.certainty.order.as_tag(),
-            semantics: f.certainty.semantics.as_tag(),
-        },
+        qualifiers: crate::qualifier::sentences(&certainty),
+        certainty,
         gaps: f.gaps.iter().map(|g| g.as_tag()).collect(),
         participants: f.participants[..shown].iter().map(participant).collect(),
         participants_hidden: f.participants.len() - shown,
