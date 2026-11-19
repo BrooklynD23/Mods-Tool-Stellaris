@@ -1,4 +1,4 @@
-# Handoff — 2026-10-29
+# Handoff — 2026-10-29 (M1 remainder appended 2026-11-19)
 
 Where the work stopped, what to do next, what was never tested, and what is waiting on
 the owner. Written for the next agent session. The dev environment was shut down
@@ -68,6 +68,32 @@ It completed. The script was saved outside the repo at
 `~/.claude/projects/-mnt-e-Programming-Github-Repo-Mods-Tool-Stellaris/1c7aa16b-b682-40d8-b8f8-b5ad4f4a9572/workflows/scripts/smd-implement-m1-wf_3ff10c10-e2c.js`.
 Reuse its shape for the next wave, with the corrected model routing.
 
+## M1 code remainder (m1/remaining, 2026-11-19)
+
+Owner deferred testing (the device with the game is constrained). Every item below is
+built and type-checked for Linux and Windows, and carries no new test beyond the minimum
+noted.
+
+| Item | What changed | Verified by |
+| --- | --- | --- |
+| H22 (Windows) | `sys_other.rs`: every opened dir and file is canonicalised and must start with the canonical root, else `foreign` → `fs.escaped_root`. Path-based, not handle-based (`GetFinalPathNameByHandleW` needs `unsafe`; `ponytail:` comment). Walk tests now compile on Windows; only symlink, FIFO and Unix-permission cases stay `cfg(unix)` | Windows clippy only; the ported tests have never run on Windows |
+| H50 | `IndexBuilder::mark_content_incomplete`; the engine marks every key in `ScanCompleteness.content_incomplete` (refused dir link, bound, unopened root, unread archive). A `replace_path`-only path is then `Unknown` + `ParseIncomplete`, never `Deleted`, while such a source is not `Inactive` | one Stage A test (`h50_content_incomplete_source_blocks_deleted`) |
+| H6 | Every profile table rejects unknown keys (`ProfileError::UnknownKey`); later-stage keys are listed in `smd-profiles/src/strict.rs`. Tied overlapping `[[dir]]` globs are `ProfileError::OverlappingGlobs` (`glob::overlaps`). Shipped profile unchanged | existing tests; the old "unknown keys ignored" test now asserts rejection |
+| H12 | Per-axis qualifier sentence: `note:` lines (table, md), `qualifiers` array (JSON). Constants in `smd-report/src/qualifier.rs` until the M5 catalogue | goldens re-blessed |
+| Doc drift | doc 05 diagnostic-code table, and why `PlaysetEntry.enabled` stays `bool`; doc 11 Markdown and redaction rules as built; doc 03 rule 2. Exit code 3 was already in doc 04 | `xtask lint` (doc-link) |
+| H36 (part) | `shared-enum-wildcard` xtask gate, live. One hit fixed (`VersionSpec::check`) | it fired on that hit |
+| H24 (part) | `fuzz/` (own workspace): `steam_vdf`, `descriptor`, `dlc_load_json`; `.github/workflows/fuzz.yml` nightly, 60 s each; seam `smd_ingest::parse_dlc_load_json` | `cargo check` on stable; never run |
+
+Not done here:
+- struct-literal ban: existing literals of `SourceMeta`, `PlaysetEntry`, `Site` and
+  others outside `smd-core` need named constructors first;
+- rule ↔ `explain/*` and placeholder lints: no `explain/*.toml` exists until smd-policy
+  (M5);
+- `[[dir]]` golden coverage, `--selftest`/`registry.lock`, the Mermaid diagram,
+  `dir-audit`;
+- precedence goldens for H6;
+- mapped network drives: still need `GetDriveTypeW`, which needs `unsafe`.
+
 ## Cleanup and game-version drift (chore/cleanup-version)
 
 - Deleted the five 12-line stub crates (`smd-gui`, `smd-py`, `smd-policy`, `smd-parse`,
@@ -94,7 +120,8 @@ Windows-first. Each item names its gate.
 
 1. **H22, Windows half of the secure walk.** This is the top priority now that Windows
    is the target. `crates/smd-fs/src/sys_other.rs` is type-checked only:
-   - no final-path check on the opened handle;
+   - ~~no final-path check on the opened handle~~ DONE on `m1/remaining`: a path-based
+     canonicalise-under-root check. The handle-based check still needs `unsafe`;
    - reparse handling is now attribute-based (`smd-fs/src/winattrs.rs`, unit-tested on
      Linux): symlinks and junctions are refused; dedup and hydrated placeholder files
      are regular; offline placeholders are listed, never read, `fs.cloud_placeholder`.
@@ -104,14 +131,16 @@ Windows-first. Each item names its gate.
      `GetDriveTypeW`, which needs `unsafe`, and the crate forbids it. Decide on a
      reviewed exception.
 
-   The `smd-fs` walk tests are `cfg(unix)`, so they don't run on Windows at all. Port
-   them.
-2. **H50, refused directory link vs `Deleted`.** `crates/smd-index/src/stage_a.rs`
+   ~~The `smd-fs` walk tests are `cfg(unix)`~~ DONE on `m1/remaining`: the portable ones
+   now compile on Windows. Run them on a Windows runner to close.
+2. ~~**H50, refused directory link vs `Deleted`.**~~ DONE on `m1/remaining`, with
+   whole-source scope (doc 05: "for any key and any directory"). The original note: `crates/smd-index/src/stage_a.rs`
    never reads `content_incomplete`. So a refused directory link does not stop a
    `Deleted` verdict in its source's scope. That is a definitive negative on
    incomplete evidence, the defect class this whole design exists to prevent. It
    becomes live once M2 adds `core.symbol_deleted`.
-3. **H6, strict profile loader.** `crates/smd-profiles/src/profile.rs` ignores unknown
+3. **H6, strict profile loader.** The loader half is DONE on `m1/remaining`; the
+   precedence goldens are still open. The original note: `crates/smd-profiles/src/profile.rs` ignores unknown
    keys and doesn't reject overlapping globs of equal specificity. Doc 10 says both are
    load errors. Add the precedence goldens.
 4. **Steam library enumeration inside `smd`.** DONE on `feat/locate` (needs Windows
@@ -139,9 +168,8 @@ Windows-first. Each item names its gate.
 6. **Reconcile code with docs.** The integration review listed these drifts:
    - doc 03 rule 2: some enums now derive serde for the parse cache;
    - doc 03 sort key 7 also folds gap tags into the digest;
-   - `PlaysetEntry.enabled` is still a bool, not `Activation`;
-   - new ingest codes (`ingest.location_missing`, `ingest.discovery_incomplete`,
-     `scan.asset_archive_unread`) that doc 05 doesn't fully list;
+   - ~~`PlaysetEntry.enabled` is still a bool~~ kept by design, now explained in doc 05;
+   - ~~new ingest codes doc 05 doesn't list~~ DONE: doc 05 § Diagnostic codes;
    - discovery lists directories with `std::fs::read_dir` rather than through `smd-fs`;
    - ~~discovery-incomplete is recorded under a fake `"(discovery)"` `ModKey`~~ DONE on
      `feat/discovery-sources`: `ScanCompleteness::discovery_incomplete`, lowers certainty;
@@ -150,15 +178,18 @@ Windows-first. Each item names its gate.
      `h-`, `SourceRole::ParadoxMods`, one read per scan (doc 05, "Mod sources and origin").
      Unverified: real launcher `pdxId`/`source` contents (VERIFY V03);
    - per-rule certainty ceilings live in an engine table (`smd-engine/src/certainty.rs`);
-   - CLI exit code 3 is not documented in doc 04;
-   - the Markdown code-span and account-redaction rules aren't written in doc 11.
+   - ~~CLI exit code 3 is not documented in doc 04~~ it already was;
+   - ~~the Markdown code-span and account-redaction rules aren't written in doc 11~~ DONE;
+   - ~~doc 03 rule 2 (serde)~~ DONE. Still open: doc 03 sort key 7 and the gap tags,
+     discovery's `std::fs::read_dir`, and the engine certainty table.
 
    Fix the code or the docs, item by item.
-7. **H12 qualifier sentence.** Reports print per-axis certainty tags but not the
+7. ~~**H12 qualifier sentence.**~~ DONE on `m1/remaining`. Move the sentences into the
+   M5 catalogue's `[certainty.*]`. The original note: Reports print per-axis certainty tags but not the
    per-axis qualifier sentence (doc 09, "The qualifier").
 8. **Lint gates H35–H39.** The ledger lives in `13-testing.md`, and most gates are
    unbuilt:
-   - the shared-enum wildcard ban;
+   - ~~the shared-enum wildcard ban~~ live as `shared-enum-wildcard` (text-level);
    - the struct-literal ban;
    - rule ↔ `explain/*`;
    - placeholders;
@@ -180,8 +211,9 @@ Windows-first. Each item names its gate.
 | `smd scan` natively on Windows against a real playset | Same as above | Scan with the launcher closed and with it open. Compare with the WSL result below |
 | Real-playset scan | Done only over WSL, using a path-translated copy of the launcher files. Took ~10 min because drvfs is slow | Native run. Measure time and memory against `12-performance.md` |
 | H20 path A against a live launcher | Only synthetic WAL fixtures exist, though they now pass on a real Windows runner | Run with the launcher open and then just-reordered (H20/H29 live halves, H48) |
-| `smd-fs` walk tests on Windows | Tests are `cfg(unix)` | Part of next step 1 |
-| Fuzzing (H24) | No nightly fuzz job | Add `cargo-fuzz` targets and a nightly CI job |
+| `smd-fs` walk tests on Windows | The portable ones now compile on Windows but have never run there | Run `cargo test -p smd-fs` on `windows-latest` |
+| H50, H6, H12 (`m1/remaining`) | Owner deferred testing | Only one H50 Stage A test, the existing H6 tests and the re-blessed H12 goldens exist. Add a scan-level H50 case once `core.symbol_deleted` exists |
+| Fuzzing (H24) | Targets and the nightly job exist (`fuzz/`, `fuzz.yml`) but have never run | Trigger `fuzz.yml` with `workflow_dispatch`; add an archive target with H23 |
 | Performance budget | Never measured. The 1.5 s resolve budget leaves 0.1 s warm headroom on paper | M0.5 reference measurement (H32) |
 | Probe mods in game | No Stellaris ≥ 4.5.2 install | See blockers |
 | Windows mapped network drives, OneDrive placeholders, junctions | No test fixture yet | Part of next step 1 |
