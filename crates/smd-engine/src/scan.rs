@@ -106,7 +106,7 @@ fn symbol_rules(profile: &Profile) -> SymbolRules {
     let shared = profile.clone();
     let classify = move |path: &str| {
         let c = shared.dir_class(path);
-        PathClass { domain: c.domain, merge: c.merge, order: c.order }
+        PathClass { domain: c.domain, merge: c.merge, order: c.order, tier: c.tier }
     };
     SymbolRules::new(classify, profile.key_readings(), profile.domain_names().to_vec())
 }

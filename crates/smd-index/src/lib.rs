@@ -33,11 +33,13 @@ mod derived;
 pub mod fixture;
 mod index;
 mod interner;
+mod keyed;
 mod meta;
 mod overlay;
 mod overlay_rules;
 mod replace;
 mod resolve;
+mod shadow;
 mod stage_a;
 
 #[cfg(test)]
@@ -49,8 +51,10 @@ pub use derived::{BitSet, Derived};
 pub use fixture::{FIXTURE_DOMAIN, FileShape, PlaysetBuilder};
 pub use index::ScanIndex;
 pub use interner::{Interner, InternerBuilder};
+pub use keyed::{EventKey, KeyTable};
 pub use meta::{ModDescriptors, PlaysetMeta, pattern_text, version_text};
 pub use overlay::{Contribution, OverlayTable};
 pub use overlay_rules::{OverlayRules, ReplacePathScope};
 pub use replace::{ReplaceDecl, covers, normalise_prefix};
+pub use shadow::ReplaceHit;
 pub use stage_a::PathVerdict;

@@ -17,6 +17,8 @@ use crate::defs::{PathClass, SymbolRules};
 use crate::index::ScanIndex;
 use crate::overlay_rules::{OverlayRules, ReplacePathScope};
 
+mod facts;
+
 /// Content address of `content`, in the form walk records carry.
 #[must_use]
 pub fn blob_of(content: &str) -> Blob {
@@ -103,6 +105,7 @@ impl PlaysetBuilder {
                 domain: Some(DomainId(0)),
                 merge: MergeMode::MergeByKey,
                 order: Some(FileOrder::Lios),
+                tier: 0,
             },
             readings: KeyReadings {
                 filename_key: Some(FilenameKey::Basename),

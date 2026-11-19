@@ -11,12 +11,12 @@ use std::cmp::Ordering;
 
 use smallvec::SmallVec;
 use smd_core::{
-    Activation, Agreement, Contender, Mechanism, MergeMode, Outcome, PathId, Resolution,
+    Activation, Agreement, Contender, DomainId, Mechanism, MergeMode, Outcome, PathId, Resolution,
     ResolutionGap, SourceId, SourceRole, SymbolKey,
 };
 
 use super::DefSite;
-use super::stage_d::{Cand, Decider, PARAM_GAPS, Readings, compare, top};
+use super::stage_d::{Cand, PARAM_GAPS, Readings, compare, decided_by, top};
 use crate::index::ScanIndex;
 
 /// Stage C's answer for one key, with its participants.
@@ -69,21 +69,33 @@ impl ScanIndex {
             .find(|c| c.source == source)
             .map_or("", |c| self.symbols.get(c.raw_name.0));
         let dir = text.rsplit_once('/').map_or("", |(d, _)| d);
-        Cand { source, path, dir, raw, ordinal, vanilla: self.is_vanilla(source) }
+        let tier = self.class_of(path).tier;
+        Cand { source, path, dir, raw, ordinal, vanilla: self.is_vanilla(source), tier }
     }
 
     /// Stages C and D for one key.
     #[must_use]
     pub fn resolve_symbol(&self, key: SymbolKey) -> SymbolVerdict {
+        self.resolve_sites(Some(key.domain), self.defs.sites(key))
+    }
+
+    /// Stages C and D for one key group of any table. `domain` is the merge scope whose
+    /// incomplete files can hide a definition; `None` (an unclassified path) counts every
+    /// incomplete file in the scan.
+    pub(crate) fn resolve_sites(
+        &self,
+        domain: Option<DomainId>,
+        sites: &[DefSite],
+    ) -> SymbolVerdict {
         let (mut live, mut dead) = (SmallVec::new(), SmallVec::new());
-        for d in self.defs.sites(key) {
+        for d in sites {
             if self.activation_of(d.site.source) == Activation::Inactive {
                 continue;
             }
             if self.derived.contends(d.file_slot) { live.push(*d) } else { dead.push(*d) }
         }
         let resolution =
-            if live.is_empty() { self.deleted(key, &dead) } else { self.contest(key, &live) };
+            if live.is_empty() { self.deleted(domain, &dead) } else { self.contest(domain, &live) };
         SymbolVerdict { resolution, live, dead }
     }
 
@@ -101,11 +113,20 @@ impl ScanIndex {
         })
     }
 
-    fn scope_incomplete(&self, key: SymbolKey) -> bool {
-        self.defs.incomplete_in(key.domain).iter().any(|f| self.derived.contends(f.slot))
+    fn scope_incomplete(&self, domain: Option<DomainId>) -> bool {
+        self.scope_files(domain).any(|f| self.derived.contends(f.slot))
     }
 
-    fn deleted(&self, key: SymbolKey, dead: &[DefSite]) -> Resolution {
+    /// The incomplete files of a merge scope; every domain's when the scope is unknown.
+    fn scope_files(
+        &self,
+        domain: Option<DomainId>,
+    ) -> impl Iterator<Item = &super::IncompleteFile> + '_ {
+        let all = domain.is_none();
+        self.defs.incomplete_all().filter(move |(d, _)| all || Some(*d) == domain).map(|(_, f)| f)
+    }
+
+    fn deleted(&self, key: Option<DomainId>, dead: &[DefSite]) -> Resolution {
         let Some(first) = dead.first() else { return unknown(Gaps::new()) };
         let mut gaps: Gaps =
             dead.iter().flat_map(|d| self.derived.path_gaps(d.site.path).iter().copied()).collect();
@@ -125,7 +146,7 @@ impl ScanIndex {
         r
     }
 
-    fn contest(&self, key: SymbolKey, live: &[DefSite]) -> Resolution {
+    fn contest(&self, key: Option<DomainId>, live: &[DefSite]) -> Resolution {
         let class = self.class_of(live[0].site.path);
         let bodies: SmallVec<[[u8; 16]; 2]> = live.iter().map(|d| d.body_hash).collect();
         match class.merge {
@@ -146,7 +167,7 @@ impl ScanIndex {
     /// Invariant A1: no residual on any participant is `ChildDigestsUnavailable`.
     fn additive_body(
         &self,
-        key: SymbolKey,
+        key: Option<DomainId>,
         live: &[DefSite],
         order: Option<smd_core::FileOrder>,
     ) -> Resolution {
@@ -169,7 +190,7 @@ impl ScanIndex {
 
     fn by_precedence(
         &self,
-        key: SymbolKey,
+        key: Option<DomainId>,
         live: &[DefSite],
         order: Option<smd_core::FileOrder>,
         hashes: &[[u8; 16]],
@@ -193,15 +214,7 @@ impl ScanIndex {
         gaps.dedup();
         match winner {
             Some(i) if gaps.is_empty() => {
-                let first = readings.at(all[0]);
-                let by_rank = (0..cands.len()).filter(|&j| j != i).any(|j| {
-                    matches!(
-                        compare(&self.sources, &cands[i], &cands[j], first),
-                        Ok((_, Decider::Rank))
-                    )
-                });
-                let mechanism =
-                    if by_rank { Mechanism::LoadOrder } else { Mechanism::FilenameOrder };
+                let mechanism = decided_by(&self.sources, &cands, i, (&readings, &all));
                 let vanilla: Vec<bool> =
                     live.iter().map(|d| self.is_vanilla(d.site.source)).collect();
                 let mut r =
@@ -222,7 +235,7 @@ impl ScanIndex {
     /// Why a winner that beats every seen contender still cannot be stated.
     fn winner_doubts(
         &self,
-        key: SymbolKey,
+        key: Option<DomainId>,
         w: &DefSite,
         wc: &Cand<'_>,
         (readings, all): (&Readings, &[[usize; 4]]),
@@ -239,12 +252,8 @@ impl ScanIndex {
         if self.activation_of(w.site.source) != Activation::Active {
             gaps.push(ResolutionGap::ActivationUnknown);
         }
-        let beats_phantoms = self
-            .defs
-            .incomplete_in(key.domain)
-            .iter()
-            .filter(|f| self.derived.contends(f.slot))
-            .all(|f| {
+        let beats_phantoms =
+            self.scope_files(key).filter(|f| self.derived.contends(f.slot)).all(|f| {
                 let ph = self.cand(f.source, f.path, None);
                 all.iter().all(|ix| {
                     matches!(

@@ -20,6 +20,8 @@ pub struct PathClass {
     pub merge: MergeMode,
     /// Filename direction (Stage D); `None` = unknown, enumerated.
     pub order: Option<FileOrder>,
+    /// Stage D tier, compared before the filename key; higher wins.
+    pub tier: u8,
 }
 
 type Classifier = dyn Fn(&str) -> PathClass + Send + Sync;
