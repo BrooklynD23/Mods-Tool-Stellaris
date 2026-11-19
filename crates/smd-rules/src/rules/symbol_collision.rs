@@ -3,9 +3,16 @@
 //! "Live" is `Derived::contends`: stated *or possible* survivors of Stage A, so under a
 //! directory scan the collision is still reported, conditionally, without a winner. The
 //! 1 → 0 case (the only definer's file replaced away) is `core.symbol_deleted`'s.
+//!
+//! In a `merge_by_key_additive_body` directory (H4) the resolver compares residuals:
+//! equal is `Coexist`, unequal is `PartiallyMerged` with `residual_lost = true`, and a
+//! participant without an `AdditiveSplit` is `Unknown` + `child_digests_unavailable`.
+//! Doc 08 names no separate v1 rule for additive overlap (`pdx.on_action_overlap` is
+//! post-v1), so this rule carries it.
 
 use smd_core::{
-    Capabilities, EvidenceBag, EvidenceType, EvidenceValue, Finding, RuleId, Subject, SymbolKey,
+    Capabilities, EvidenceBag, EvidenceType, EvidenceValue, Finding, Outcome, RuleId, Subject,
+    SymbolKey,
 };
 use smd_index::{ScanIndex, SymbolVerdict};
 
@@ -39,6 +46,7 @@ impl Rule for SymbolCollision {
             ("domain", EvidenceType::Sym),
             ("mechanism", EvidenceType::Tag("Mechanism")),
             ("merge", EvidenceType::Tag("MergeMode")),
+            ("residual_lost", EvidenceType::Bool),
         ]
     }
 
@@ -73,6 +81,11 @@ impl SymbolCollision {
         facts.push(("mechanism", EvidenceValue::Tag(r.mechanism.as_tag())));
         let merge = index.class_of(v.live[0].site.path).merge;
         facts.push(("merge", EvidenceValue::Tag(merge.as_tag())));
+        if r.outcome == Outcome::PartiallyMerged {
+            // H4 (doc 07 R1): the losers keep their additive children, so they are
+            // Contributors, but their non-additive children do not reach the game.
+            facts.push(("residual_lost", EvidenceValue::Bool(true)));
+        }
         Finding {
             rule: self.id(),
             subject: Subject::Symbol(key),

@@ -11,6 +11,9 @@
 
 [base]
 "core.file_overwrite" = 45
+# M4 localisation: a wrong string is visible but rarely breaks play. Identical values are
+# discounted by the agreement = all_identical modifier below.
+"core.loc_collision" = 20
 # M4 descriptor-level rules: uncalibrated guesses like every other number here.
 "dep.missing" = 60
 "dep.order" = 40

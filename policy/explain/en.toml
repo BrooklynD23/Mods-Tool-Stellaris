@@ -28,6 +28,32 @@ discarded whole — including any entries only they contain.\
 why    = "A same-path file is not merged. The later copy replaces the earlier one wholesale."
 action = "Check whether a compatibility patch exists, or change the load order if you prefer {loser_first}'s version."
 
+["core.loc_collision"]
+title  = "{n} entries for the localisation key “{subject}”"
+body   = "More than one file defines this key in the same language. Which text the game shows could not be stated."
+action = "Options: check for a compatibility patch, or disable one of the mods."
+
+["core.loc_collision".variant.agreement.all_identical]
+title  = "{n} identical entries for the localisation key “{subject}”"
+body   = "Every entry carries the same text, so whichever one wins, the player reads the same words."
+action = "No action needed."
+
+["core.loc_collision".variant.mechanism.replace_tier]
+title  = "{winner}'s replace entry for “{subject}” takes precedence"
+body   = "{winner} defines this key under a replace directory, which is read ahead of every ordinary entry regardless of load order. The text from {losers} is not shown."
+why    = "Replace-directory localisation outranks ordinary localisation before filename or load order is compared."
+action = "If you prefer {loser_first}'s text, a patch must also use a replace directory."
+
+["core.loc_collision".variant.mechanism.filename_order]
+title  = "{winner}'s entry for “{subject}” takes precedence by file name"
+body   = "{winner}'s file sorts ahead of the others in this directory, so its text is shown. The text from {losers} is not."
+action = "Check whether a compatibility patch exists."
+
+["core.loc_collision".variant.mechanism.load_order]
+title  = "{winner}'s entry for “{subject}” takes precedence by load order"
+body   = "{winner} loads later, so its text is shown. The text from {losers} is not."
+action = "Change the load order if you prefer {loser_first}'s text."
+
 # --- certainty qualifiers: one row per non-best value of every axis (required) ---------
 
 [certainty.completeness.partial]
