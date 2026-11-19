@@ -33,5 +33,5 @@ pub use inventory::{Inventory, ModRecord, inventory};
 pub use locate::{Candidate, Located, Overrides, Store, locate};
 pub use order::{
     ChainOutcome, ChainSource, DirectoryScan, DlcLoadJson, LauncherV2Options, LauncherV2Sqlite,
-    OrderChain, SourceAttempt, SourceOptions, source_by_name,
+    OrderChain, SourceAttempt, SourceOptions, parse_dlc_load_json, source_by_name,
 };

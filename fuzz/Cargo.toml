@@ -1,0 +1,43 @@
+# cargo-fuzz targets (H24). Not a workspace member: it needs nightly and libFuzzer, and
+# the stable workspace build must never depend on either (ADR-0001). Run with
+# `cargo +nightly fuzz run <target>` from this directory; CI runs each for 60 s nightly
+# (.github/workflows/fuzz.yml).
+[package]
+name = "smd-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+license = "MIT OR Apache-2.0"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+smd-core = { path = "../crates/smd-core" }
+smd-fs = { path = "../crates/smd-fs" }
+smd-ingest = { path = "../crates/smd-ingest" }
+
+# Its own workspace, so the root workspace neither builds it nor complains about it.
+[workspace]
+
+[[bin]]
+name = "steam_vdf"
+path = "fuzz_targets/steam_vdf.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "descriptor"
+path = "fuzz_targets/descriptor.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "dlc_load_json"
+path = "fuzz_targets/dlc_load_json.rs"
+test = false
+doc = false
+bench = false

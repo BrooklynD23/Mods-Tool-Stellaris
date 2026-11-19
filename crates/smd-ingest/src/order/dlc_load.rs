@@ -75,8 +75,21 @@ fn read_enabled(
         Err(e) if e.kind() == ErrorKind::NotFound => return Err(OrderError::NotPresent),
         Err(e) => return Err(OrderError::Unreadable { detail: e.to_string().into() }),
     };
-    json_caps::check_depth(&bytes).map_err(|why| invalid(diags, why))?;
-    let value: serde_json::Value = serde_json::from_slice(&bytes)
+    parse_enabled(&bytes, diags)
+}
+
+/// The pure half of the `dlc_load.json` read: depth and entry caps, then `enabled_mods`.
+/// Public as a fuzz seam (`fuzz/fuzz_targets/dlc_load_json.rs`); scans go through
+/// [`DlcLoadJson`].
+///
+/// # Errors
+/// Over a cap, not JSON, or without an `enabled_mods` array.
+pub fn parse_enabled(
+    bytes: &[u8],
+    diags: &mut Vec<IngestDiagnostic>,
+) -> Result<Vec<String>, OrderError> {
+    json_caps::check_depth(bytes).map_err(|why| invalid(diags, why))?;
+    let value: serde_json::Value = serde_json::from_slice(bytes)
         .map_err(|e| OrderError::Corrupt { detail: e.to_string().into() })?;
     json_caps::check_entries(&value).map_err(|why| invalid(diags, why))?;
     let Some(list) = value.get("enabled_mods").and_then(|v| v.as_array()) else {
