@@ -10,6 +10,7 @@ use smd_core::{Diagnostic, PathId, PlaysetProvenance, Resolution, SamePath, Sour
 
 use crate::derived::Derived;
 use crate::interner::Interner;
+use crate::meta::PlaysetMeta;
 use crate::overlay::OverlayTable;
 use crate::overlay_rules::ReplacePathScope;
 use crate::replace::ReplaceDecl;
@@ -28,6 +29,7 @@ pub struct ScanIndex {
     pub(crate) scope: ReplacePathScope,
     pub(crate) derived: Derived,
     pub(crate) diags: Arc<Vec<Diagnostic>>,
+    pub(crate) meta: Arc<PlaysetMeta>,
 }
 
 impl ScanIndex {
@@ -59,6 +61,18 @@ impl ScanIndex {
     #[must_use]
     pub fn diagnostics(&self) -> &[Diagnostic] {
         &self.diags
+    }
+
+    /// Descriptors and the game version.
+    #[must_use]
+    pub fn meta(&self) -> &PlaysetMeta {
+        &self.meta
+    }
+
+    /// The id of an interned symbol (descriptor strings are interned at build).
+    #[must_use]
+    pub fn symbol_id(&self, text: &str) -> Option<smd_core::SymbolId> {
+        self.symbols.find(text).map(smd_core::SymbolId)
     }
 
     /// The normalised text of a path; empty for an id from another scan.

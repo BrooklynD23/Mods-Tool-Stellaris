@@ -33,6 +33,9 @@ pub struct ModRecord {
     pub mod_file: Option<Box<str>>,
     /// The descriptor as read.
     pub descriptor: Descriptor,
+    /// The content directory's own `descriptor.mod`, when it is a second copy beside a
+    /// launcher `*.mod` and was read cleanly; `None` is no claim.
+    pub inner_descriptor: Option<Descriptor>,
     /// Descriptor diagnostics, sited at this source.
     pub diagnostics: Vec<Diagnostic>,
     /// The canonical content directory; `Some` only when `content` is `Readable`.
@@ -76,6 +79,7 @@ fn vanilla(install: Option<&PathBuf>) -> (SourceMeta, ModRecord) {
         dir_name: "".into(),
         mod_file: None,
         descriptor: Descriptor::default(),
+        inner_descriptor: None,
         diagnostics: Vec::new(),
         content_root: install.cloned(),
         content: install
@@ -125,6 +129,7 @@ fn row(id: SourceId, m: &DiscoveredMod, playset: &Playset) -> (SourceMeta, ModRe
         dir_name: m.dir_name.clone(),
         mod_file: m.mod_file.clone(),
         descriptor: m.descriptor.clone(),
+        inner_descriptor: meta::inner_descriptor(m, id),
         diagnostics,
         content_root: m.content_root.clone(),
         content: m.content,
@@ -173,6 +178,11 @@ pub fn inventory(
         metas.push(meta);
         records.push(record);
     }
+    let declared: Vec<&[Box<str>]> =
+        records.iter().map(|r| r.descriptor.dependencies.as_slice()).collect();
+    let deps = meta::resolve_deps(&metas, &declared);
+    let metas: Vec<SourceMeta> =
+        metas.into_iter().zip(deps).map(|(m, deps)| SourceMeta { deps, ..m }).collect();
     let provenance = PlaysetProvenance {
         order_source: outcome.order_source,
         order: outcome.playset.order,
@@ -191,6 +201,7 @@ pub fn inventory(
     }
 }
 
+mod meta;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]

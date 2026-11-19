@@ -1,0 +1,48 @@
+# Explanation catalogue, English (doc 09 § Explanations).
+#
+# Keyed by rule id; placeholders are the rule's declared evidence keys or the derived set
+# ({n}, {subject}, {winner}, ...). No severity lives here. Certainty qualifier sentences
+# come from [certainty.*] and are not repeated per rule.
+#
+# Status: data only. No loader reads this file yet (smd-policy, M5), and the placeholder
+# lint is not built (H36). Entries below are for the M4 descriptor-level rules.
+
+["dep.missing".variant.state.not_found]
+title  = "{subject} needs “{dependency}”, which was not found"
+body   = "{subject} declares a dependency on “{dependency}”, and no discovered mod has that name."
+why    = "Dependencies are declared by display name. A renamed, unsubscribed or undiscovered mod looks the same from here."
+action = "Subscribe to or install “{dependency}”, or check whether it was renamed."
+
+["dep.missing".variant.state.not_enabled]
+title  = "{subject} needs “{dependency}”, which is switched off"
+body   = "“{dependency}” is installed but not in the enabled playset."
+why    = "A mod whose dependency is not loaded usually references objects that do not exist."
+action = "Enable “{dependency}” in the launcher."
+
+["dep.missing".variant.state.activation_unknown]
+title  = "{subject} needs “{dependency}”; whether it is enabled is unknown"
+body   = "“{dependency}” is installed, but the enabled set could not be read, so whether it loads is not stated."
+action = "Check in the launcher that “{dependency}” is enabled."
+
+["dep.order".variant.order.after]
+title  = "“{dependency}” loads after {subject}, which needs it"
+body   = "{subject} depends on “{dependency}”, but “{dependency}” is later in the load order."
+why    = "A dependency is expected to load first so the dependent mod's changes apply on top of it."
+action = "Move “{dependency}” above {subject} in the load order."
+
+["dep.order".variant.order.unknown]
+title  = "Whether “{dependency}” loads before {subject} is unknown"
+body   = "{subject} depends on “{dependency}”, but the load order could not be established."
+action = "Check in the launcher that “{dependency}” is above {subject}."
+
+["meta.version_drift"]
+title  = "{subject} declares support for {supported_version}, not {game_version}"
+body   = "The mod's supported_version is {supported_version}; the installed game is {game_version}."
+why    = "An out-of-date mod often still works, but is the usual suspect when combined with other findings."
+action = "Look for an updated version of the mod."
+
+["meta.descriptor_mismatch"]
+title  = "{subject}: launcher and mod disagree on {field}"
+body   = "The launcher's .mod file says {field} = “{launcher}”; the mod's own descriptor.mod says “{inner}”."
+why    = "The launcher's copy goes stale when a mod updates; the launcher copy is the one that decides loading."
+action = "Re-sync the mod in the launcher, or resubscribe."

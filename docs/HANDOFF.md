@@ -184,6 +184,7 @@ Windows-first. Each item names its gate.
 | Fuzzing (H24) | No nightly fuzz job | Add `cargo-fuzz` targets and a nightly CI job |
 | Performance budget | Never measured. The 1.5 s resolve budget leaves 0.1 s warm headroom on paper | M0.5 reference measurement (H32) |
 | Probe mods in game | No Stellaris ≥ 4.5.2 install | See blockers |
+| M4 meta/dep rules scaffolded, untested (`dep.missing`, `dep.order`, `meta.version_drift`, `meta.descriptor_mismatch`, branch `m4/deps-meta`) | Testing deferred by the owner. No `RuleCase`s; the case harness is path-only (`Expectation::Fires { path }`) and `PlaysetBuilder` cannot set deps, descriptors or a game version | Extend the harness to `Subject::Mod`/`ModPair` and the fixture with deps/meta, then one case per `CaseKind` per rule and the `const _` coverage assertion; plus an ingest test for name resolution and the inner `descriptor.mod` read |
 | Windows mapped network drives, OneDrive placeholders, junctions | No test fixture yet | Part of next step 1 |
 
 ## Blockers on the owner
