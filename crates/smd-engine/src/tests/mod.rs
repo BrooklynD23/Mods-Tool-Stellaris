@@ -1,4 +1,5 @@
 mod fixture;
+mod symbols;
 
 use smd_core::{
     Activation, ActivationCertainty, Completeness, Confidence, Role, SemanticCertainty,
@@ -202,12 +203,17 @@ fn dot_files_in_two_mods_are_not_conflicts() {
 fn an_uncontended_oversize_file_is_never_read_and_costs_nothing() {
     let w = World::new();
     w.vanilla("dlc/dlc001_x/dlc001.zip", "0123456789");
-    w.vanilla("common/defines/00_big.txt", "01234567890123456789");
+    // A non-script path: since M2 an oversize *script* file is read for parsing and is
+    // `Unparsed(Oversize)` by design (doc 06), which the second half pins.
+    w.vanilla("gfx/00_big.dds", "01234567890123456789");
     let mut req = w.request();
     req.limits.file_cap = 4;
     let out = scan(&req).expect("scans");
     assert!(is_complete(&out.completeness), "{:?}", out.completeness);
     assert!(!out.diagnostics.iter().any(|d| d.code.starts_with("fs.limit")), "no one compares it");
+    w.vanilla("common/defines/00_big.txt", "01234567890123456789");
+    let out = scan(&req).expect("scans");
+    assert_eq!(out.completeness.unparsed.as_slice(), &[(smd_core::UnparsedReason::Oversize, 1)]);
 }
 
 #[test]

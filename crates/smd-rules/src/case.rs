@@ -52,9 +52,9 @@ pub enum WinnerExpect {
 pub enum Expectation {
     /// No finding at all.
     None,
-    /// A finding on the path, with this winner and (if given) carrying this gap.
+    /// A finding on the subject, with this winner and (if given) carrying this gap.
     Fires {
-        /// Normalised path text of the subject.
+        /// The subject's text: a normalised path, or a symbol name.
         path: &'static str,
         /// The winner assertion.
         winner: WinnerExpect,
@@ -127,13 +127,14 @@ pub fn run_case(rule: &dyn Rule, case: &RuleCase) -> Result<(), String> {
             fail(format!("expected none, got {}", findings.len()))
         };
     };
-    let Some(f) = findings
-        .iter()
-        .find(|f| matches!(f.subject, Subject::Path(p) if index.path_text(p) == path))
+    // A path subject's text is its path; a symbol subject's is the symbol name.
+    let Some((f, resolved)) =
+        findings.iter().map(|f| (f, index.resolve_finding(f))).find(|(f, r)| {
+            matches!(f.subject, Subject::Path(_) | Subject::Symbol(_)) && &*r.subject_text == path
+        })
     else {
         return fail(format!("no finding on {path}"));
     };
-    let resolved = index.resolve_finding(f);
     let winners: Vec<&str> = resolved
         .participants
         .iter()

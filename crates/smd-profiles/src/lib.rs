@@ -8,7 +8,9 @@
 //!
 //! A minimal typed reader, [`Profile`], for exactly what Stage A needs: the
 //! `[load_order]` keys `same_filename_replaces_whole_file`, `replace_path_scope` and
-//! `sources`, each `[[dir]]`'s `glob` and optional `same_path`, `[benign]` and `[asset_archives]`, plus `[game]`, `[locations]` and
+//! `sources`, each `[[dir]]`'s `glob`, optional `same_path`, and its extraction keys (`domain`, `merge`,
+//! `level`, `parser`, `extractor`, `order`, `additive_children` — [`DirClass`]), the
+//! Stage D `[load_order]` readings ([`KeyReadings`]), `[benign]` and `[asset_archives]`, plus `[game]`, `[locations]` and
 //! `[stores]`. Every table rejects unknown keys, and `[[dir]]` globs that tie on
 //! specificity while overlapping are a load error (REVIEW-2026-10 H6). Keys owned by later
 //! stages are recognised by name but not yet typed. The shipped profile is embedded with the `profile-stellaris` feature
@@ -16,6 +18,7 @@
 
 #![forbid(unsafe_code)]
 
+mod dirclass;
 mod glob;
 mod locations;
 mod profile;
@@ -24,6 +27,7 @@ mod strict;
 mod tests;
 mod version;
 
+pub use dirclass::{DirClass, FilenameKey, KeyReadings};
 /// Glob matching over normalised (lowercase, `/`-separated) paths, as profiles use it.
 pub use glob::matches as glob_matches;
 pub use locations::{Locations, Stores, expand};

@@ -354,6 +354,7 @@ dependencies = [
  "smd-fs",
  "smd-index",
  "smd-ingest",
+ "smd-parse",
  "smd-policy",
  "smd-profiles",
  "smd-rules",
@@ -394,6 +395,15 @@ dependencies = [
  "smd-fs",
  "smd-profiles",
  "tempfile",
+]
+
+[[package]]
+name = "smd-parse"
+version = "0.0.0"
+dependencies = [
+ "smd-core",
+ "smd-fs",
+ "smd-profiles",
 ]
 
 [[package]]

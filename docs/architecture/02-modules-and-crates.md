@@ -18,7 +18,7 @@ stellaris-mod-doctor/
 │   ├── smd-fs/                 # paths, Steam discovery, VFS, hashing
 │   ├── smd-profiles/           # GameProfile trait + TOML loader + shipped profiles
 │   ├── smd-ingest/             # mod discovery, descriptors, load-order sources
-│   ├── (smd-parse/)            # planned (M2): lexers, parser registry, fact emission
+│   ├── smd-parse/              # lexers, parser registry, fact emission (re-added at M2)
 │   ├── smd-index/              # overlay, symbol table, resolver, cache
 │   ├── smd-rules/              # rule engine + one file per rule
 │   ├── smd-policy/             # (M5) scoring, severity bands, explanation catalogue
@@ -38,7 +38,8 @@ stellaris-mod-doctor/
 Parenthesised crates are **planned, not yet crates**: the five 12-line stubs
 (`smd-parse`, `smd-policy`, `smd-testkit`, `smd-gui`, `smd-py`) were deleted because
 nothing depended on them and they only guarded layer positions that `layers.toml`
-records on arrival. Ten crates exist today (plus `xtask`). The design below is the
+records on arrival. Eleven crates exist today (plus `xtask`); `smd-parse` was re-added at
+M2. The design below is the
 target: each planned crate is re-added, with its `layers.toml` entry, at the milestone
 named in `15-roadmap.md`. Fifteen crates at full build-out; fourteen in a default build,
 since `smd-py` is feature-gated out.
@@ -64,7 +65,7 @@ separation, at the boundary that costs nothing.
 | `smd-fs` | OS path resolution, `libraryfolders.vdf`, path normalisation, `blake3` hashing | Know what Stellaris is |
 | `smd-profiles` | `GameProfile` trait, TOML schema, `stellaris.toml`, `SourceSpec` names + config, per-profile `FeatureTag` declarations | Contain analysis logic; name or construct a load-order *implementation* |
 | `smd-ingest` | `.mod`/`descriptor.mod` parsing, workshop scan, the name→impl registry of `LoadOrderSource`s | Parse mod *content* |
-| `smd-parse` *(planned, M2)* | Lexers for PDX script and localisation, `FileParser` registry, dispatch by `FileKind`, fact emission | Know about traits, civics, or any game concept; store anything |
+| `smd-parse` | Lexers for PDX script and localisation, `FileParser` registry, dispatch by `FileKind`, fact emission | Know about traits, civics, or any game concept; store anything |
 | `smd-index` | Overlay table, symbol table, reverse indices, resolver, interners, on-disk cache | Interpret meaning or assign risk |
 | `smd-rules` | `Rule` trait, engine, one rule per file, per-rule `evidence()` and `cases()` | Format output, hardcode a score, or name a game |
 | `smd-policy` | Id resolution into `ResolvedFinding`, weights, bands, explanation strings, suppressions | Detect anything |

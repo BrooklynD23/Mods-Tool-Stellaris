@@ -3,6 +3,7 @@
 use serde::Deserialize;
 use smd_core::{SamePath, SourceSpec};
 
+use crate::dirclass::{DirClass, KeyReadings, RawExtract, RawReadings};
 use crate::glob;
 use crate::locations::{Locations, Stores};
 use crate::strict::{self, Rest};
@@ -110,6 +111,8 @@ struct RawLoadOrder {
     same_filename_replaces_whole_file: bool,
     replace_path_scope: Option<String>,
     #[serde(flatten)]
+    readings: RawReadings,
+    #[serde(flatten)]
     rest: Rest,
 }
 
@@ -117,6 +120,8 @@ struct RawLoadOrder {
 struct RawDir {
     glob: String,
     same_path: Option<String>,
+    #[serde(flatten)]
+    extract: RawExtract,
     #[serde(flatten)]
     rest: Rest,
 }
@@ -139,6 +144,7 @@ struct RawAssetArchives {
 struct Dir {
     glob: Box<str>,
     same_path: Option<SamePath>,
+    class: DirClass,
 }
 
 /// The parts of a game profile that Stage A reads.
@@ -159,6 +165,9 @@ pub struct Profile {
     benign: Vec<Box<str>>,
     asset_archives: Vec<Box<str>>,
     version: VersionSpec,
+    readings: KeyReadings,
+    domains: Vec<Box<str>>,
+    hash: [u8; 16],
 }
 
 fn same_path(key: &'static str, v: &str) -> Result<SamePath, ProfileError> {
@@ -180,6 +189,33 @@ fn scope(v: Option<&str>) -> Result<ReplacePathScope, ProfileError> {
     }
 }
 
+fn content_hash(text: &str) -> [u8; 16] {
+    smd_fs::hash_reader(text.as_bytes(), text.len() as u64).map_or([0; 16], |(b, _)| b.hash)
+}
+
+/// Type every `[[dir]]`, assigning domain ids in ascending name order.
+fn typed_dirs(
+    raw: Vec<RawDir>,
+    default_order: Option<smd_core::FileOrder>,
+) -> Result<(Vec<Dir>, Vec<Box<str>>), ProfileError> {
+    let mut domains: Vec<Box<str>> =
+        raw.iter().filter_map(|d| d.extract.domain()).map(Into::into).collect();
+    domains.sort();
+    domains.dedup();
+    let dirs = raw
+        .into_iter()
+        .map(|d| {
+            let same_path = d.same_path.as_deref().map(|v| same_path("same_path", v));
+            Ok(Dir {
+                glob: d.glob.to_lowercase().into(),
+                same_path: same_path.transpose()?,
+                class: d.extract.typed(&domains, default_order)?,
+            })
+        })
+        .collect::<Result<Vec<_>, ProfileError>>()?;
+    Ok((dirs, domains))
+}
+
 impl Profile {
     /// Read a profile from TOML text.
     ///
@@ -190,17 +226,16 @@ impl Profile {
         raw.locations.check()?;
         strict::load_order(&raw.load_order.rest)?;
         strict::syntax(&raw.syntax)?;
-        let dirs = raw
-            .dir
-            .into_iter()
-            .map(|d| {
-                strict::dir(&d.rest)?;
-                let same_path = d.same_path.as_deref().map(|v| same_path("same_path", v));
-                Ok(Dir { glob: d.glob.to_lowercase().into(), same_path: same_path.transpose()? })
-            })
-            .collect::<Result<Vec<_>, ProfileError>>()?;
+        for d in &raw.dir {
+            strict::dir(&d.rest)?;
+        }
+        let (readings, default_order) = raw.load_order.readings.typed()?;
+        let (dirs, domains) = typed_dirs(raw.dir, default_order)?;
         strict::no_tied_overlap(dirs.iter().map(|d| &*d.glob))?;
         Ok(Profile {
+            readings,
+            domains,
+            hash: content_hash(text),
             id: raw.game.id.unwrap_or_default().into(),
             steam_id: raw.game.steam_id,
             locations: raw.locations,
@@ -271,16 +306,44 @@ impl Profile {
     /// else `Unknown`.
     #[must_use]
     pub fn classify(&self, path: &str) -> SamePath {
-        let best = self.dirs.iter().filter(|d| glob::matches(&d.glob, path)).fold(
-            None::<&Dir>,
-            |best, d| match best {
-                Some(b) if glob::specificity(&b.glob) >= glob::specificity(&d.glob) => Some(b),
-                _ => Some(d),
-            },
-        );
         let default =
             if self.same_filename_replaces { SamePath::Replace } else { SamePath::Unknown };
-        best.and_then(|d| d.same_path).unwrap_or(default)
+        self.best_dir(path).and_then(|d| d.same_path).unwrap_or(default)
+    }
+
+    /// The most specific matching `[[dir]]`, as [`classify`](Profile::classify) picks it.
+    fn best_dir(&self, path: &str) -> Option<&Dir> {
+        self.dirs.iter().filter(|d| glob::matches(&d.glob, path)).fold(None::<&Dir>, |best, d| {
+            match best {
+                Some(b) if glob::specificity(&b.glob) >= glob::specificity(&d.glob) => Some(b),
+                _ => Some(d),
+            }
+        })
+    }
+
+    /// The extraction and key-layer classification of a normalised path: the most specific
+    /// matching `[[dir]]`'s, or [`DirClass::default`] under none.
+    #[must_use]
+    pub fn dir_class(&self, path: &str) -> DirClass {
+        self.best_dir(path).map(|d| d.class.clone()).unwrap_or_default()
+    }
+
+    /// Every declared domain name, ascending; a `DomainId` is a position in this list.
+    #[must_use]
+    pub fn domain_names(&self) -> &[Box<str>] {
+        &self.domains
+    }
+
+    /// The Stage D parameters of `[load_order]`.
+    #[must_use]
+    pub fn key_readings(&self) -> KeyReadings {
+        self.readings
+    }
+
+    /// blake3 of the profile text, truncated: the `profile_hash` cache-key term (doc 06).
+    #[must_use]
+    pub fn content_hash(&self) -> [u8; 16] {
+        self.hash
     }
 
     /// Whether `[benign] paths` lists this path: never worth reporting.

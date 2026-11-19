@@ -52,10 +52,17 @@ fn values_come_from_the_text_not_from_the_code() {
 fn unknown_values_and_unknown_keys_are_rejected() {
     let bad = "[load_order]\nreplace_path_scope = \"sideways\"\n";
     assert!(matches!(Profile::from_toml(bad), Err(ProfileError::Value { .. })));
-    let extra = "[load_order]\nsome_future_key = 1\n[[dir]]\nglob = \"a/**\"\nmerge = \"x\"\n";
+    // H6: an unknown key anywhere is a load error, not silently dropped.
+    let extra = "[load_order]\nsome_future_key = 1\n[[dir]]\nglob = \"a/**\"\n";
     assert!(matches!(Profile::from_toml(extra), Err(ProfileError::UnknownKey { .. })));
-    let known = "[[dir]]\nglob = \"a/**\"\nmerge = \"x\"\nmerge_confidence = \"corroborated\"\n";
+    let dir_extra = "[[dir]]\nglob = \"a/**\"\nfuture = \"x\"\n";
+    assert!(matches!(Profile::from_toml(dir_extra), Err(ProfileError::UnknownKey { .. })));
+    let known =
+        "[[dir]]\nglob = \"a/**\"\nmerge = \"unknown\"\nmerge_confidence = \"corroborated\"\n";
     assert!(Profile::from_toml(known).is_ok(), "later-stage keys are recognised");
+    // `merge` became a modelled key in M2: an unknown value is now rejected.
+    let merge = "[[dir]]\nglob = \"a/**\"\nmerge = \"x\"\n";
+    assert!(matches!(Profile::from_toml(merge), Err(ProfileError::Value { .. })));
     let tied = "[[dir]]\nglob = \"a/**\"\n[[dir]]\nglob = \"a/*.txt\"\n";
     assert!(matches!(Profile::from_toml(tied), Err(ProfileError::OverlappingGlobs { .. })));
 }
@@ -123,4 +130,22 @@ fn unknown_keys_in_touched_tables_are_load_errors() {
         assert!(Profile::from_toml(bad).is_err(), "{bad}");
     }
     assert!(Profile::from_toml("[locations.user_dir]\nwindows = \"x\"\n").is_ok());
+}
+
+#[test]
+fn dir_classes_come_from_the_shipped_profile() {
+    use smd_core::{FileKind, FileOrder, MergeMode};
+    let p = shipped();
+    let t = p.dir_class("common/traits/00_traits.txt");
+    assert_eq!((t.kind, t.extractor, t.level), (FileKind::Script, "depth_key", 0));
+    assert_eq!(
+        (t.merge, t.order, t.domain_name.as_deref()),
+        (MergeMode::MergeByKey, Some(FileOrder::Fios), Some("trait"))
+    );
+    assert_eq!(p.dir_class("common/defines/00_defines.txt").level, 1);
+    assert_eq!(p.dir_class("events/a.txt").extractor, "pdx_event");
+    assert_eq!(p.dir_class("gfx/a.dds").kind, FileKind::Asset);
+    assert_eq!(p.dir_class("nowhere/a.txt").kind, FileKind::Unknown);
+    let d = t.domain.unwrap();
+    assert_eq!(&*p.domain_names()[usize::from(d.0)], "trait");
 }

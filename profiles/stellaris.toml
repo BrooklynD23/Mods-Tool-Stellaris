@@ -627,11 +627,16 @@ same_path = "unknown"       # VERIFY V39.
 glob   = "interface/**/*.gui"
 domain = "gui"
 merge  = "unknown"          # No source addresses .gui merge semantics.
+# Hash only until a named extractor exists: a .gui definition is named by its `name = `
+# field, not by a block key, so `depth_key` would report every file's `guiTypes` wrapper
+# as one symbol colliding across every mod (M2).
+parser = "none"
 
 [[dir]]
 glob   = "interface/**/*.gfx"
 domain = "gui_sprite"
 merge  = "unknown"
+parser = "none"             # As for .gui: `spriteTypes` wraps every file's definitions.
 
 [[dir]]
 glob   = "gfx/**"
@@ -692,6 +697,7 @@ encoding = "utf8_bom"       # SINGLE SOURCE (Irony): BOM is REQUIRED here specif
 glob   = "common/inline_scripts/**/*.txt"
 domain = "inline_script"
 merge  = "unknown"
+parser = "none"             # The file itself is the definition; Stage A covers it.
 # Textually substituted at parse time, so a collision here propagates into every call
 # site. Treated by Irony as a first-class Stellaris mechanism.
 

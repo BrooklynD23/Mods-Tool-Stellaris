@@ -7,7 +7,8 @@ use std::collections::BTreeSet;
 
 use smd_core::{DiagSeverity, ModKey, ResolvedFinding, ResolvedLocations, ScanCompleteness};
 use smd_index::{
-    IndexBuilder, ModDescriptors, OverlayRules, PlaysetMeta, ReplacePathScope, ScanIndex,
+    IndexBuilder, ModDescriptors, OverlayRules, PathClass, PlaysetMeta, ReplacePathScope,
+    ScanIndex, SymbolRules,
 };
 use smd_ingest::{
     DiscoveryOptions, Inventory, KEY_INSTALL, KEY_USER_DIR, KEY_VANILLA_CONTENT, OrderChain,
@@ -18,6 +19,7 @@ use smd_rules::{Rule, RuleCtx, run_all};
 
 use crate::certainty::certainty_of;
 use crate::output::{ScanDiagnostic, ScanOutput};
+use crate::parse_pass::Parsed;
 use crate::request::{ScanError, ScanRequest};
 use crate::rows;
 use crate::walk::{absorb, walk_sources};
@@ -46,9 +48,11 @@ pub fn scan(req: &ScanRequest) -> Result<ScanOutput, ScanError> {
     completeness.discovery_incomplete |= req.locations_incomplete;
     completeness.game_version_unverified = !gv.diagnostics.is_empty();
     let gv = gv.raw.as_deref().and_then(smd_profiles::parse_game_version);
+    completeness.domains.sort();
+    completeness.domains.dedup();
     let incomplete: BTreeSet<ModKey> =
         completeness.content_incomplete.iter().map(|(k, _, _)| k.clone()).collect();
-    let index = build_index(&inv, &profile, walked.inputs, gv, &incomplete);
+    let index = build_index(&inv, &profile, (walked.inputs, walked.parsed), gv, &incomplete);
     let findings = run_rules(&index, req, (&incomplete, &completeness), &mut diags)?;
     let (findings, annotations) = crate::policy::apply(req, findings, &mut diags)?;
     diags.sort_by(|a, b| (&a.location, &a.code, &a.detail).cmp(&(&b.location, &b.code, &b.detail)));
@@ -98,10 +102,19 @@ fn from_profile(profile: &Profile, opts: &SourceOptions) -> (OrderChain, Vec<Sca
     (chain, diags.iter().map(rows::from_ingest).collect())
 }
 
+fn symbol_rules(profile: &Profile) -> SymbolRules {
+    let shared = profile.clone();
+    let classify = move |path: &str| {
+        let c = shared.dir_class(path);
+        PathClass { domain: c.domain, merge: c.merge, order: c.order }
+    };
+    SymbolRules::new(classify, profile.key_readings(), profile.domain_names().to_vec())
+}
+
 fn build_index(
     inv: &Inventory,
     profile: &Profile,
-    inputs: Vec<smd_index::SourceInput>,
+    (inputs, parsed): (Vec<smd_index::SourceInput>, Vec<Parsed>),
     game_version: Option<smd_core::GameVersion>,
     incomplete: &BTreeSet<ModKey>,
 ) -> ScanIndex {
@@ -117,9 +130,13 @@ fn build_index(
         builder.add_source(input);
     }
     builder.set_meta(meta_of(inv, game_version));
-    for rec in inv.records.iter().filter(|r| incomplete.contains(&r.key)) {
-        builder.mark_content_incomplete(rec.source);
+    builder.symbol_rules(symbol_rules(profile));
+    for p in parsed {
+        builder.add_facts(p.source, &p.path, p.facts);
     }
+    builder.content_incomplete(
+        inv.records.iter().filter(|r| incomplete.contains(&r.key)).map(|r| r.source),
+    );
     builder.build()
 }
 

@@ -275,3 +275,47 @@ Windows-first. Each item names its gate.
 - Profile [version] source_dir is honoured (read first, other is fallback).
 - Unreadable/out-of-range game version sets ScanCompleteness::game_version_unverified: semantics capped at Unmodelled, header prints it, scan_complete false.
 - Hash pass sorts by path and reuses the parent directory chain.
+
+## M2 (scaffolded, untested)
+
+Branch `m2/parser`. Builds green on Linux and the Windows type-check; only smoke checks
+exist. Testing was deferred by the owner, so nothing below is evidence for the M2 exit.
+
+What exists:
+
+| Piece | Where |
+| --- | --- |
+| `smd-parse` (layer 3): iterative push parser, depth cap 256, EOF/brace recovery, BOM + Windows-1252, 32-per-file diagnostic cap | `crates/smd-parse/src/{lexer,script,text}.rs` |
+| `FileParser` registry by `FileKind`; `parse_file`; `ParseOutput` (= `CachedParse`) | `crates/smd-parse/src/registry.rs` |
+| Extractors from the profile `DirClass`: `depth_key` (+ `AdditiveSplit` when `additive_children` is set), `pdx_event` | `crates/smd-parse/src/extract/` |
+| Parse-cache key (all six terms) and an in-memory `ParseCache` | `crates/smd-parse/src/cache.rs` |
+| Profile reads `domain`, `merge`, `level`, `parser`, `extractor`, `order`, `additive_children`, and the Stage D `[load_order]` readings | `crates/smd-profiles/src/dirclass.rs` |
+| `DefinitionTable`, `resolve_symbol` (Stages C/D, every unknown reading enumerated), `no_live_site` | `crates/smd-index/src/defs/` |
+| `core.symbol_collision`, `core.symbol_deleted`, five cases each | `crates/smd-rules/src/rules/` |
+| Engine parses script files after the walk | `crates/smd-engine/src/parse_pass.rs` |
+
+Deliberate limits (each marked `ponytail:` in code where it cuts a corner):
+
+1. The merge scope is the domain; `scope` and `tier` are not read yet.
+2. `@`-variables are not definitions, so `common/scripted_variables` yields no
+   definitions until a variables extractor exists.
+3. `.gui`, `.gfx` and `common/inline_scripts` are `parser = "none"` in the shipped
+   profile: no extractor models their definitions yet.
+4. `pdx_event` emits `Namespace`/`EventId` facts but the index has no `EventTable`; the
+   facts are dropped at the index. `DefineKey` is not emitted (defines are `Definition`s
+   named `Group.KEY`).
+5. The cache lives for one scan, in memory, behind one mutex. No SQLite store.
+6. A `Deleted` is blocked by any non-`Inactive` content-incomplete source, which closes
+   the `Deleted` half of H50 from the definition layer. Stage A's own use of
+   `content_incomplete` (`stage_a.rs`) is still the H50 owner's.
+
+TODO, in order:
+
+1. **H30 golden extraction corpus** — synthetic files for every `[[dir]]` shape with
+   checked-in expected facts. Out of scope for this pass.
+2. Fuzz target for `smd_parse::script::parse` (10k-deep nesting, arbitrary bytes).
+3. `locyml` module + one line in `smd_parse::PARSERS`; `LocTable` in the index.
+4. Rule-case and resolver tests beyond the mandatory five cases: FIOS vs LIOS, enumerated
+   `filename_key` disagreement, additive-body residuals, cache H10 fixture (same bytes
+   under two domains → two entries).
+5. Determinism sweep and cancel-under-load stress (M2 exit 3).

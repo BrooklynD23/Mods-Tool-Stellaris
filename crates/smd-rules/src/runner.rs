@@ -71,11 +71,17 @@ pub fn check_finding(rule: &dyn Rule, index: &ScanIndex, f: &Finding) -> Result<
     if f.participants.is_empty() {
         return Err(format!("{} emitted a finding with no site", rule.id()));
     }
-    if let Subject::Path(p) = f.subject {
-        let shadowed = f.participants.iter().any(|x| x.role == Role::Shadowed);
-        if shadowed && !index.resolve_path(p).outcome.permits_shadowed_participants() {
-            return Err(format!("{} broke R1: a Shadowed participant without a winner", rule.id()));
-        }
+    let shadowed = f.participants.iter().any(|x| x.role == Role::Shadowed);
+    let outcome = match f.subject {
+        _ if !shadowed => None,
+        Subject::Path(p) => Some(index.resolve_path(p).outcome),
+        Subject::Symbol(k) => Some(index.resolve_symbol(k).resolution.outcome),
+        // R1 can only be checked where the index resolves a winner; a Shadowed participant
+        // on any other subject is a rule bug, reported rather than skipped.
+        _ => return Err(format!("{} has a Shadowed participant R1 cannot check", rule.id())),
+    };
+    if outcome.is_some_and(|o| !o.permits_shadowed_participants()) {
+        return Err(format!("{} broke R1: a Shadowed participant without a winner", rule.id()));
     }
     for (key, value) in &f.facts {
         match rule.evidence().iter().find(|(k, _)| k == key) {

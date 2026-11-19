@@ -50,6 +50,12 @@ deps = ["smd-core", "smd-fs", "smd-profiles"]
 layer = 3
 deps = ["smd-core", "smd-fs", "smd-profiles"]
 
+# Parsing is one crate with a module per syntax (doc 02): lexing is the hot path, and a
+# crate boundary there costs a virtual call per token across crates nothing inlines.
+[crates.smd-parse]
+layer = 3
+deps = ["smd-core", "smd-fs", "smd-profiles"]
+
 [crates.smd-rules]
 layer = 4
 deps = ["smd-core", "smd-profiles", "smd-index"]
@@ -68,6 +74,7 @@ deps = [
     "smd-profiles",
     "smd-ingest",
     "smd-index",
+    "smd-parse",
     "smd-rules",
     "smd-policy",
 ]
