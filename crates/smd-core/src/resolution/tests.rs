@@ -28,6 +28,7 @@ fn mechanism_and_merge_tags() {
         Mechanism::SamePath,
         Mechanism::ReplaceTier,
         Mechanism::FilenameOrder,
+        Mechanism::InFileOrder,
         Mechanism::LoadOrder,
         Mechanism::DirectoryMerge,
         Mechanism::Undetermined,
@@ -42,6 +43,7 @@ fn mechanism_and_merge_tags() {
             "same_path",
             "replace_tier",
             "filename_order",
+            "in_file_order",
             "load_order",
             "directory_merge",
             "undetermined"

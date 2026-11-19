@@ -19,6 +19,7 @@
 //! | `extractor` | Emits |
 //! | --- | --- |
 //! | `depth_key` | `Definition` per key at `level`, plus `AdditiveSplit` where the class names `additive_children` |
+//! | `define` | `DefineKey { group, key }` per key at `level` (the `depth_key` walk) |
 //! | `pdx_event` | `Namespace`, `EventId` |
 //! | `none` | nothing (syntax diagnostics only) |
 //!

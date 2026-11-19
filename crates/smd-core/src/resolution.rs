@@ -134,6 +134,9 @@ pub enum Mechanism {
     ReplaceTier,
     /// Stage D: the filename key decided.
     FilenameOrder,
+    /// Stage D: the position inside one file decided (one source, one file, two
+    /// definitions). Neither load order nor file names can change it (H19).
+    InFileOrder,
     /// Stage D: load order (`rank`) decided.
     LoadOrder,
     /// Stage C combined the participants without a winner.
@@ -152,6 +155,7 @@ impl Mechanism {
             Mechanism::SamePath => "same_path",
             Mechanism::ReplaceTier => "replace_tier",
             Mechanism::FilenameOrder => "filename_order",
+            Mechanism::InFileOrder => "in_file_order",
             Mechanism::LoadOrder => "load_order",
             Mechanism::DirectoryMerge => "directory_merge",
             Mechanism::Undetermined => "undetermined",

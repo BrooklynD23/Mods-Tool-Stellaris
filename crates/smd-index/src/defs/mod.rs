@@ -86,6 +86,11 @@ impl DefinitionTable {
     pub fn incomplete_in(&self, domain: DomainId) -> &[IncompleteFile] {
         self.incomplete.get(&domain).map_or(&[], Vec::as_slice)
     }
+
+    /// Every domain's incomplete files, ascending by domain.
+    pub fn incomplete_all(&self) -> impl Iterator<Item = (DomainId, &IncompleteFile)> + '_ {
+        self.incomplete.iter().flat_map(|(d, v)| v.iter().map(move |f| (*d, f)))
+    }
 }
 
 /// One file's facts, as the pipeline hands them over.
@@ -152,11 +157,10 @@ fn add_batch(
                     d.residual_hash = Some(*residual_hash);
                 }
             }
-            // `LocKey` belongs to `LocTable` (crate::loc). The rest are owned by tables that
-            // are not built yet (EventTable, defines, references, M3); none is a definition.
-            FactPayload::LocKey { .. }
-            | FactPayload::Reference { .. }
-            | FactPayload::Namespace { .. }
+            // `LocKey` belongs to `LocTable` (crate::loc); references have no table yet.
+            FactPayload::LocKey { .. } | FactPayload::Reference { .. } => {}
+            // Owned by the event, namespace and define tables (`keyed.rs`, M3).
+            FactPayload::Namespace { .. }
             | FactPayload::EventId { .. }
             | FactPayload::DefineKey { .. } => {}
             // `FactPayload` is non-exhaustive: a variant added later must be routed here

@@ -72,11 +72,26 @@ pub fn check_finding(rule: &dyn Rule, index: &ScanIndex, f: &Finding) -> Result<
         return Err(format!("{} emitted a finding with no site", rule.id()));
     }
     let shadowed = f.participants.iter().any(|x| x.role == Role::Shadowed);
-    let outcome = match f.subject {
+    let outcome = match &f.subject {
         _ if !shadowed => None,
-        Subject::Path(p) => Some(index.resolve_path(p).outcome),
-        Subject::Symbol(k) => Some(index.resolve_symbol(k).resolution.outcome),
-        Subject::LocKey { lang, key } => Some(index.resolve_loc(lang, key).resolution.outcome),
+        Subject::Path(p) => Some(index.resolve_path(*p).outcome),
+        // A define key is a `SymbolKey` too; the defines table holds it, not `defs`.
+        Subject::Symbol(k) if !index.defines().sites(k).is_empty() => {
+            Some(index.resolve_define(*k).resolution.outcome)
+        }
+        Subject::Symbol(k) => Some(index.resolve_symbol(*k).resolution.outcome),
+        Subject::LocKey { lang, key } => Some(index.resolve_loc(*lang, *key).resolution.outcome),
+        Subject::Event { namespace, ordinal } => {
+            let k = smd_index::EventKey { namespace: *namespace, ordinal: ordinal.clone() };
+            Some(index.resolve_event(&k).resolution.outcome)
+        }
+        // A declaration has no winner: each Shadowed file answers for its own path.
+        Subject::Directory { .. } => f
+            .participants
+            .iter()
+            .filter(|x| x.role == Role::Shadowed)
+            .map(|x| index.resolve_path(x.site.path).outcome)
+            .find(|o| !o.permits_shadowed_participants()),
         // R1 can only be checked where the index resolves a winner; a Shadowed participant
         // on any other subject is a rule bug, reported rather than skipped.
         _ => return Err(format!("{} has a Shadowed participant R1 cannot check", rule.id())),

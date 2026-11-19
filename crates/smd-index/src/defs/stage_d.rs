@@ -1,14 +1,15 @@
 //! Stage D — the precedence tuple, under every reading of the unknown parameters
 //! (doc 07 § Stage D, § Activation, unknown parameters, and incompleteness, rule 2).
 //!
-//! Order of comparison: in-file ordinal (same file), vanilla-lowest (when vanilla is not
-//! on the filename axis), the filename key in the directory's direction, then `rank`.
-//! `tier` is 0 for every script path and is not compared yet.
+//! Order of comparison: in-file ordinal (same file), `tier` (higher wins), vanilla-lowest
+//! (when vanilla is not on the filename axis), the filename key in the directory's
+//! direction, then `rank`. Same file implies same tier, file key and rank, so checking the
+//! ordinal first is the doc's "ordinal last" order.
 
 use std::cmp::Ordering;
 
 use smallvec::SmallVec;
-use smd_core::{FileOrder, PathId, ResolutionGap, SourceId, SourceTable};
+use smd_core::{FileOrder, Mechanism, PathId, ResolutionGap, SourceId, SourceTable};
 use smd_profiles::{FilenameKey, KeyReadings};
 
 /// One assignment of every Stage D parameter.
@@ -103,13 +104,59 @@ pub(crate) struct Cand<'a> {
     pub raw: &'a str,
     pub ordinal: Option<u32>,
     pub vanilla: bool,
+    /// The path class's Stage D tier.
+    pub tier: u8,
 }
 
-/// Which component decided a comparison.
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+/// Which component decided a comparison. Declared in advice priority: when a winner beat
+/// several losers on different axes, the greatest is reported, because `Rank` is the one
+/// axis a user can change from the launcher (H19).
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub(crate) enum Decider {
+    /// The path-class tier (`replace_tier`).
+    Tier,
+    /// Position inside one file.
+    InFile,
+    /// The filename key in the directory's direction (FIOS/LIOS).
     Filename,
+    /// Load order, including vanilla-lowest.
     Rank,
+}
+
+impl Decider {
+    /// The `Mechanism` a decision on this axis is reported as.
+    pub(crate) fn mechanism(self) -> Mechanism {
+        match self {
+            Decider::Tier => Mechanism::ReplaceTier,
+            Decider::InFile => Mechanism::InFileOrder,
+            Decider::Filename => Mechanism::FilenameOrder,
+            Decider::Rank => Mechanism::LoadOrder,
+        }
+    }
+}
+
+/// H19: the axis on which winner `w` beat its losers, the same under every reading in
+/// `all`; `Undetermined` when the readings disagree on it (the winner may still stand).
+pub(crate) fn decided_by(
+    t: &SourceTable,
+    cands: &[Cand<'_>],
+    w: usize,
+    (readings, all): (&Readings, &[[usize; 4]]),
+) -> Mechanism {
+    let mut found: Option<Mechanism> = None;
+    for ix in all {
+        let r = readings.at(*ix);
+        let best = (0..cands.len())
+            .filter(|&j| j != w)
+            .filter_map(|j| compare(t, &cands[w], &cands[j], r).ok().map(|(_, d)| d))
+            .max();
+        let m = best.map_or(Mechanism::Undetermined, Decider::mechanism);
+        if found.is_some_and(|f| f != m) {
+            return Mechanism::Undetermined;
+        }
+        found = Some(m);
+    }
+    found.unwrap_or(Mechanism::Undetermined)
 }
 
 fn stem(raw: &str) -> &str {
@@ -142,7 +189,10 @@ pub(crate) fn compare(
             return Err(ResolutionGap::ParseIncomplete);
         };
         let o = if r.in_file_last { x.cmp(&y) } else { y.cmp(&x) };
-        return Ok((o, Decider::Filename));
+        return Ok((o, Decider::InFile));
+    }
+    if a.tier != b.tier {
+        return Ok((a.tier.cmp(&b.tier), Decider::Tier));
     }
     if a.path == b.path {
         return rank(t, a, b);

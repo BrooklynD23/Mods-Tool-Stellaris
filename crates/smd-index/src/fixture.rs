@@ -17,6 +17,8 @@ use crate::defs::{PathClass, SymbolRules};
 use crate::index::ScanIndex;
 use crate::overlay_rules::{OverlayRules, ReplacePathScope};
 
+mod facts;
+
 /// Content address of `content`, in the form walk records carry.
 #[must_use]
 pub fn blob_of(content: &str) -> Blob {

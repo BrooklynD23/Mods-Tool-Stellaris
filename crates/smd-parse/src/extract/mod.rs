@@ -43,8 +43,13 @@ struct Open {
 /// `depth_key`: every key at the class's `level` is a definition. Above level 0 the
 /// symbol is the enclosing keys joined with `.` (`NGameplay.MAX_X`), so equal names in
 /// different groups stay distinct. `@`-variables are file-local and not definitions.
+///
+/// Under the `define` extractor the same walk emits `DefineKey { group, key }` instead,
+/// split at the first `.` of the qualified symbol; a key with no enclosing group is not a
+/// define and emits nothing.
 pub struct DepthKey<'a> {
     pub(crate) out: Out<'a>,
+    define: bool,
     level: u16,
     domain: DomainId,
     children: &'a [Box<str>],
@@ -56,7 +61,8 @@ impl<'a> DepthKey<'a> {
     pub(crate) fn new(out: Out<'a>, class: &'a DirClass, domain: DomainId) -> DepthKey<'a> {
         let children = &*class.additive_children;
         let level = u16::from(class.level);
-        DepthKey { out, level, domain, children, path: Vec::new(), cur: None }
+        let define = class.extractor == "define";
+        DepthKey { out, define, level, domain, children, path: Vec::new(), cur: None }
     }
 
     /// The qualified symbol for `key` at the extraction level, if every ancestor is named.
@@ -74,6 +80,14 @@ impl<'a> DepthKey<'a> {
     }
 
     fn emit(&mut self, symbol: Box<str>, at: Span, (body, split): ([u8; 16], Option<Split>)) {
+        if self.define {
+            if let Some((group, key)) = symbol.split_once('.') {
+                let (group, key) = (group.into(), key.into());
+                let payload = FactPayload::DefineKey { group, key, value_hash: body };
+                self.out.facts.push(RawFact { span: at, payload });
+            }
+            return;
+        }
         let domain = self.domain;
         let def = FactPayload::Definition { domain, symbol: symbol.clone(), body_hash: body };
         self.out.facts.push(RawFact { span: at, payload: def });

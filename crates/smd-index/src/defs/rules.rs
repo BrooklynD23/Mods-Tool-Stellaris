@@ -20,8 +20,8 @@ pub struct PathClass {
     pub merge: MergeMode,
     /// Filename direction (Stage D); `None` = unknown, enumerated.
     pub order: Option<FileOrder>,
-    /// Stage D tier, compared before the filename key; higher wins. Read by the
-    /// localisation resolver (H3); the definition resolver does not compare it yet.
+    /// Stage D tier, compared before the filename key; higher wins. Compared by the
+    /// definition resolver (M3) and the localisation resolver (H3).
     pub tier: u8,
 }
 

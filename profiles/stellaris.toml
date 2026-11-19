@@ -190,6 +190,7 @@ domain = "define"
 merge  = "merge_by_key"     # CORROBORATED (V16): one definition per define KEY, not per file.
 merge_confidence = "corroborated"
 level  = 1
+extractor = "define"        # DefineKey facts, read by pdx.defines_overlap (not symbol rules)
 # Scoring consequence: pdx.defines_overlap must fire on KEY collision, not file overlap.
 # Two mods each shipping a one-key defines file with different keys is a non-event.
 
@@ -198,6 +199,7 @@ glob   = "unchecked_defines/**/*.txt"
 domain = "define"
 merge  = "merge_by_key"
 level  = 1
+extractor = "define"
 
 [[dir]]
 glob   = "common/traits/**/*.txt"

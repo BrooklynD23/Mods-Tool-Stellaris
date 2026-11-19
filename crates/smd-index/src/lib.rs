@@ -19,12 +19,17 @@
 //! keys `core.symbol_deleted` examines. Per-path classification arrives as
 //! [`SymbolRules`].
 //!
-//! The localisation layer (M4): `LocKey` facts go into a [`LocTable`] keyed
-//! `(LangId, key)`; [`ScanIndex::resolve_loc`] compares the class `tier` first (H3), then
-//! the same Stage D as definitions.
+//! M3: [`ScanIndex::events`], [`ScanIndex::namespaces`] and [`ScanIndex::defines`] hold
+//! the `EventId`, `Namespace` and `DefineKey` facts; [`ScanIndex::resolve_event`] and
+//! [`ScanIndex::resolve_define`] run the same Stages C/D. Stage D compares `tier` first and
+//! reports the axis that decided as the `Mechanism` (H19). [`ScanIndex::replace_hits`] is
+//! the declaration-side view of `replace_path` drops.
 //!
-//! Not yet: the event table, `tier` for definitions, a separate merge scope (the domain is
-//! the scope), the `winning` bitset, `reorder`, and the on-disk cache.
+//! M4: `LocKey` facts go into a [`LocTable`] keyed `(LangId, key)`;
+//! [`ScanIndex::resolve_loc`] compares the class `tier` first (H3), then the same Stage D.
+//!
+//! Not yet: a separate merge scope (the domain is the scope), the `winning` bitset,
+//! `reorder`, and the on-disk cache.
 //!
 //! The crate names no game and no directory: per-path `same_path` behaviour and the
 //! `replace_path_scope` reading arrive as [`OverlayRules`].
@@ -37,12 +42,14 @@ mod derived;
 pub mod fixture;
 mod index;
 mod interner;
+mod keyed;
 mod loc;
 mod meta;
 mod overlay;
 mod overlay_rules;
 mod replace;
 mod resolve;
+mod shadow;
 mod stage_a;
 
 #[cfg(test)]
@@ -54,9 +61,11 @@ pub use derived::{BitSet, Derived};
 pub use fixture::{FIXTURE_DOMAIN, FIXTURE_LANG, FileShape, PlaysetBuilder};
 pub use index::ScanIndex;
 pub use interner::{Interner, InternerBuilder};
+pub use keyed::{EventKey, KeyTable};
 pub use loc::{LocSite, LocTable, LocVerdict};
 pub use meta::{ModDescriptors, PlaysetMeta, pattern_text, version_text};
 pub use overlay::{Contribution, OverlayTable};
 pub use overlay_rules::{OverlayRules, ReplacePathScope};
 pub use replace::{ReplaceDecl, covers, normalise_prefix};
+pub use shadow::ReplaceHit;
 pub use stage_a::PathVerdict;

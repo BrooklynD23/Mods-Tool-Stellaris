@@ -39,7 +39,7 @@ pub struct DirClass {
     pub kind: FileKind,
     /// `FileParser::id()` the profile names for this path; empty when none.
     pub parser: &'static str,
-    /// `"depth_key"`, `"pdx_event"` or `"none"`.
+    /// `"depth_key"`, `"define"`, `"pdx_event"` or `"none"`.
     pub extractor: &'static str,
     /// Which depth's keys are definitions.
     pub level: u8,
@@ -95,6 +95,7 @@ fn extractor(v: Option<&str>, kind: FileKind) -> Result<&'static str, ProfileErr
         _ if kind == FileKind::Asset => Ok("none"),
         None | Some("depth_key") => Ok("depth_key"),
         Some("pdx_event") => Ok("pdx_event"),
+        Some("define") => Ok("define"),
         Some("none") => Ok("none"),
         Some(other) => Err(bad("extractor", other)),
     }

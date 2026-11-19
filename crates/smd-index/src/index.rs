@@ -36,6 +36,7 @@ pub struct ScanIndex {
     pub(crate) diags: Arc<Vec<Diagnostic>>,
     pub(crate) meta: Arc<PlaysetMeta>,
     pub(crate) defs: Arc<DefinitionTable>,
+    pub(crate) keyed: Arc<crate::keyed::FactTables>,
     pub(crate) classes: Arc<[PathClass]>,
     pub(crate) readings: smd_profiles::KeyReadings,
     pub(crate) domains: Arc<[Box<str>]>,

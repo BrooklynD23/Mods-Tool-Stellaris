@@ -13,6 +13,7 @@ use crate::defs::{self, BuildCtx, FactBatch, SymbolRules};
 use crate::derived::{BitSet, Derived};
 use crate::index::ScanIndex;
 use crate::interner::InternerBuilder;
+use crate::keyed;
 use crate::loc;
 use crate::meta::PlaysetMeta;
 use crate::overlay::{Contribution, OverlayTable};
@@ -136,9 +137,9 @@ impl IndexBuilder {
         self
     }
 
-    /// Assign ids (ascending `NormPath` bytes), build the overlay, and run Stages A and B.
-    #[must_use]
-    pub fn build(self) -> ScanIndex {
+    /// Every path and string the index will refer to, unfrozen: record paths and raw names,
+    /// metadata strings, `replace_path` prefixes, and the strings each fact table cites.
+    fn interners(&self) -> (InternerBuilder, InternerBuilder) {
         let (mut pb, mut sb) = (InternerBuilder::new(), InternerBuilder::new());
         for r in self.inputs.iter().flat_map(|i| &i.records) {
             pb.insert(r.path.as_str());
@@ -156,6 +157,14 @@ impl IndexBuilder {
         }
         defs::intern(&mut sb, &self.facts, &self.symbol_rules.domains);
         loc::intern(&mut sb, &self.facts);
+        keyed::intern(&mut sb, &self.facts);
+        (pb, sb)
+    }
+
+    /// Assign ids (ascending `NormPath` bytes), build the overlay, and run Stages A and B.
+    #[must_use]
+    pub fn build(self) -> ScanIndex {
+        let (pb, sb) = self.interners();
         let (paths, symbols) = (Arc::new(pb.freeze()), Arc::new(sb.freeze()));
         let mut rows: Vec<Row<'_>> = Vec::new();
         for i in &self.inputs {
@@ -175,6 +184,7 @@ impl IndexBuilder {
             BuildCtx { paths: &paths, symbols: &symbols, overlay: &overlay, classes: &classes };
         let defs = Arc::new(defs::build(&self.facts, &cx));
         let loc = Arc::new(loc::build(&self.facts, &cx));
+        let keyed = Arc::new(keyed::build(&self.facts, &cx));
         let mut content_incomplete = self.content_incomplete;
         content_incomplete.sort_by_key(|s| s.index());
         content_incomplete.dedup();
@@ -182,6 +192,7 @@ impl IndexBuilder {
             defs,
             loc,
             languages: self.symbol_rules.languages.clone(),
+            keyed,
             classes,
             readings: self.symbol_rules.readings,
             domains: self.symbol_rules.domains.clone(),
