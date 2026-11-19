@@ -319,3 +319,47 @@ TODO, in order:
    `filename_key` disagreement, additive-body residuals, cache H10 fixture (same bytes
    under two domains → two entries).
 5. Determinism sweep and cancel-under-load stress (M2 exit 3).
+
+## M4 loc/additive (scaffolded, untested)
+
+Branch `m4/loc-additive`, off the M2 merge. Builds green on Linux and the Windows
+type-check. Only the five mandatory `core.loc_collision` RuleCases and one `locyml` smoke
+check exist. Testing was deferred by the owner, so nothing below is evidence for the M4
+exit.
+
+What exists:
+
+| Piece | Where |
+| --- | --- |
+| `locyml` parser (`pdx_locyml`): `l_<lang>:` headers (repeatable), `key:N "value"`, optional ordinal, BOM, comments, escaped quotes, Windows-1252 fallback, 1024-byte key cap, `Partial` on any unreadable line | `crates/smd-parse/src/locyml.rs` |
+| Profile `[syntax] languages` (position = `LangId`), `[[dir]] tier` read into `DirClass` | `crates/smd-profiles/src/dirclass.rs`, `profiles/stellaris.toml` |
+| Engine parses every kind with a registered parser (script and localisation) | `crates/smd-engine/src/parse_pass.rs` |
+| `LocTable` keyed `(LangId, key)`; `resolve_loc`: tier first (H3), then the definition Stage D under every unknown reading; no winner over an incomplete file at or above the winner's tier; no live entry is `Unknown`, never `Deleted` | `crates/smd-index/src/loc/` |
+| H4: equal residuals no longer state `Coexist` over an incomplete scope (`ParseIncomplete`); `PartiallyMerged` emits `residual_lost = true` from `core.symbol_collision` | `crates/smd-index/src/defs/resolve.rs`, `crates/smd-rules/src/rules/symbol_collision.rs` |
+| `core.loc_collision` (five cases), `agreement = all_identical` when every live value matches | `crates/smd-rules/src/rules/loc_collision.rs` |
+| `[base]` row and explanations for `core.loc_collision` | `policy/weights.toml`, `policy/explain/en.toml` |
+
+Deliberate limits:
+
+1. Shipped `localisation/**` is still `merge = "unknown"` (V20, V39 not observed), so in a
+   real scan every loc collision is reported with `merge_mode_unknown` and no winner. The
+   tier only takes effect once `merge = "merge_by_key"` is set for the `loc` scope.
+2. `common/on_actions` stays `merge = "unknown"` (V18). The additive-body path is only
+   reachable from a profile that names `additive_children`.
+3. Only `merge_by_key` is resolved for localisation; a group spanning two domains
+   (`loc` + `loc_synced`) is `Unknown` + `merge_mode_unknown`.
+4. The definition resolver still ignores `tier` (only loc reads it).
+5. Doc 08 has no separate v1 additive rule (`pdx.on_action_overlap` is post-v1), so
+   `core.symbol_collision` carries H4.
+6. `core.symbol_collision` and `core.symbol_deleted` still have no `[base]` row.
+
+TODO, in order:
+
+1. Probe P2/P7 (V20, V39) and set the loc `merge`; then check the doc 07 worked case
+   against the game.
+2. Probe V18, then ship `merge_by_key_additive_body` + `additive_children` for
+   `common/on_actions` and an `on_actions`-shaped RuleCase.
+3. `locyml` golden corpus (multi-header, unterminated values, CRLF, non-BOM UTF-8) and a
+   fuzz target.
+4. Resolver tests: tier vs incomplete files at each tier, mixed-domain groups,
+   `Coexist` blocked by `ParseIncomplete`.

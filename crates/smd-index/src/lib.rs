@@ -19,8 +19,12 @@
 //! keys `core.symbol_deleted` examines. Per-path classification arrives as
 //! [`SymbolRules`].
 //!
-//! Not yet: the localisation and event tables, `tier`, a separate merge scope (the domain
-//! is the scope), the `winning` bitset, `reorder`, and the on-disk cache.
+//! The localisation layer (M4): `LocKey` facts go into a [`LocTable`] keyed
+//! `(LangId, key)`; [`ScanIndex::resolve_loc`] compares the class `tier` first (H3), then
+//! the same Stage D as definitions.
+//!
+//! Not yet: the event table, `tier` for definitions, a separate merge scope (the domain is
+//! the scope), the `winning` bitset, `reorder`, and the on-disk cache.
 //!
 //! The crate names no game and no directory: per-path `same_path` behaviour and the
 //! `replace_path_scope` reading arrive as [`OverlayRules`].
@@ -33,6 +37,7 @@ mod derived;
 pub mod fixture;
 mod index;
 mod interner;
+mod loc;
 mod meta;
 mod overlay;
 mod overlay_rules;
@@ -46,9 +51,10 @@ mod tests;
 pub use build::{FileRecord, IndexBuilder, SourceInput};
 pub use defs::{DefSite, DefinitionTable, IncompleteFile, PathClass, SymbolRules, SymbolVerdict};
 pub use derived::{BitSet, Derived};
-pub use fixture::{FIXTURE_DOMAIN, FileShape, PlaysetBuilder};
+pub use fixture::{FIXTURE_DOMAIN, FIXTURE_LANG, FileShape, PlaysetBuilder};
 pub use index::ScanIndex;
 pub use interner::{Interner, InternerBuilder};
+pub use loc::{LocSite, LocTable, LocVerdict};
 pub use meta::{ModDescriptors, PlaysetMeta, pattern_text, version_text};
 pub use overlay::{Contribution, OverlayTable};
 pub use overlay_rules::{OverlayRules, ReplacePathScope};

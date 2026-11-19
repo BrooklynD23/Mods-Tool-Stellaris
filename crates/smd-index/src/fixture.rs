@@ -5,9 +5,9 @@
 //! filesystem or names a game.
 
 use smd_core::{
-    Activation, Blob, Confidence, DomainId, FactPayload, FileOrder, Hasher128, MergeMode, ModKey,
-    ParseCompleteness, PlaysetProvenance, RawFact, SamePath, SnapshotMethod, SourceId, SourceMeta,
-    SourceRole, SourceTable, Span, UnparsedReason,
+    Activation, Blob, Confidence, DomainId, FactPayload, FileOrder, Hasher128, LangId, MergeMode,
+    ModKey, ParseCompleteness, PlaysetProvenance, RawFact, SamePath, SnapshotMethod, SourceId,
+    SourceMeta, SourceRole, SourceTable, Span, UnparsedReason,
 };
 use smd_fs::{NormPath, shipped_name};
 use smd_profiles::{FilenameKey, KeyReadings};
@@ -77,10 +77,14 @@ pub struct PlaysetBuilder {
     class: PathClass,
     readings: KeyReadings,
     incomplete: Vec<SourceId>,
+    tier_prefix: Option<Box<str>>,
 }
 
 /// The one domain fixture definitions belong to.
 pub const FIXTURE_DOMAIN: &str = "thing";
+
+/// The one language fixture localisation entries belong to (`LangId(0)`).
+pub const FIXTURE_LANG: &str = "lang0";
 
 impl Default for PlaysetBuilder {
     fn default() -> Self {
@@ -103,6 +107,7 @@ impl PlaysetBuilder {
                 domain: Some(DomainId(0)),
                 merge: MergeMode::MergeByKey,
                 order: Some(FileOrder::Lios),
+                tier: 0,
             },
             readings: KeyReadings {
                 filename_key: Some(FilenameKey::Basename),
@@ -110,6 +115,7 @@ impl PlaysetBuilder {
                 in_file_last: Some(true),
             },
             incomplete: Vec::new(),
+            tier_prefix: None,
         };
         b.push(Self::meta("vanilla", "Vanilla", vec![0], Activation::Active, SourceRole::Vanilla));
         b
@@ -211,6 +217,34 @@ impl PlaysetBuilder {
         self
     }
 
+    /// Ship a fully parsed localisation file holding `(key, value)` entries in
+    /// [`FIXTURE_LANG`].
+    pub fn localise(&mut self, s: SourceId, path: &str, entries: &[(&str, &str)]) -> &mut Self {
+        let content: String = entries.iter().map(|(k, v)| format!("{k} \"{v}\"\n")).collect();
+        let shape = FileShape::of(&content).completeness(ParseCompleteness::Complete);
+        self.file_with(s, path, shape);
+        let facts = entries
+            .iter()
+            .map(|(key, value)| RawFact {
+                span: Span::default(),
+                payload: FactPayload::LocKey {
+                    lang: LangId(0),
+                    key: (*key).into(),
+                    version_ordinal: None,
+                    value_hash: blob_of(value).hash,
+                },
+            })
+            .collect();
+        self.facts.push((s, NormPath::new(path).expect("fixture path must be valid"), facts));
+        self
+    }
+
+    /// Paths under `prefix` take tier 1 (a `replace/`-style entry); others tier 0.
+    pub fn tier_under(&mut self, prefix: &str) -> &mut Self {
+        self.tier_prefix = Some(prefix.into());
+        self
+    }
+
     /// Set every path's merge mode and filename direction.
     pub fn key_layer(&mut self, merge: MergeMode, order: Option<FileOrder>) -> &mut Self {
         self.class = PathClass { merge, order, ..self.class };
@@ -268,9 +302,15 @@ impl PlaysetBuilder {
         };
         let rules = OverlayRules::uniform(self.scope, self.same_path);
         let mut b = IndexBuilder::new(SourceTable::new(self.metas), provenance, rules);
-        let class = self.class;
+        let (class, tier_prefix) = (self.class, self.tier_prefix);
+        let classify = move |p: &str| {
+            let top = tier_prefix.as_deref().is_some_and(|t| p.starts_with(t));
+            PathClass { tier: u8::from(top), ..class }
+        };
         let domains = vec![FIXTURE_DOMAIN.into()];
-        b.symbol_rules(SymbolRules::new(move |_| class, self.readings, domains));
+        let rules = SymbolRules::new(classify, self.readings, domains)
+            .with_languages(vec![FIXTURE_LANG.into()].into());
+        b.symbol_rules(rules);
         b.content_incomplete(self.incomplete);
         for (s, p, f) in self.facts {
             b.add_facts(s, &p, f);

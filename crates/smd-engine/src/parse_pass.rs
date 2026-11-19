@@ -1,5 +1,5 @@
 //! The parse stage (doc 06): after a source's walk and hash pass, read and parse every
-//! file whose profile class is script, record its `ParseCompleteness` on the walk record,
+//! file whose profile class has a parser (script, localisation), record its `ParseCompleteness` on the walk record,
 //! and keep its `RawFact`s for the index.
 //!
 //! Sequential, like the rest of the engine. The cache is in memory for one scan, so its
@@ -9,9 +9,7 @@
 use std::io::ErrorKind;
 use std::sync::Arc;
 
-use smd_core::{
-    FileKind, ModKey, ParseCompleteness, RawDiagnostic, RawFact, SourceId, UnparsedReason,
-};
+use smd_core::{ModKey, ParseCompleteness, RawDiagnostic, RawFact, SourceId, UnparsedReason};
 use smd_fs::{NormPath, ReadOnlyRoot, WalkOutcome, WalkRecord, codes};
 use smd_parse::{ParseCache, ParseCacheKey, ParseInput, ParseOutput, parse_file, parser_for};
 use smd_profiles::{DirClass, Profile};
@@ -130,7 +128,8 @@ pub(crate) fn parse_source(
             continue;
         }
         let class = cx.profile.dir_class(path);
-        if class.kind != FileKind::Script {
+        // Kinds with no registered parser (assets, unclassified paths) are not read.
+        if parser_for(class.kind).is_none() {
             continue;
         }
         let out = match read(root, rec, cap) {

@@ -38,6 +38,7 @@ const DIR: &[&str] = &[
 const SYNTAX: &[&str] = &[
     "script",
     "localisation",
+    "languages",
     "descriptor",
     "operators",
     "variables",

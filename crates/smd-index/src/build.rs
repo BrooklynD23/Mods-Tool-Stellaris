@@ -13,6 +13,7 @@ use crate::defs::{self, BuildCtx, FactBatch, SymbolRules};
 use crate::derived::{BitSet, Derived};
 use crate::index::ScanIndex;
 use crate::interner::InternerBuilder;
+use crate::loc;
 use crate::meta::PlaysetMeta;
 use crate::overlay::{Contribution, OverlayTable};
 use crate::overlay_rules::OverlayRules;
@@ -154,6 +155,7 @@ impl IndexBuilder {
             }
         }
         defs::intern(&mut sb, &self.facts, &self.symbol_rules.domains);
+        loc::intern(&mut sb, &self.facts);
         let (paths, symbols) = (Arc::new(pb.freeze()), Arc::new(sb.freeze()));
         let mut rows: Vec<Row<'_>> = Vec::new();
         for i in &self.inputs {
@@ -172,11 +174,14 @@ impl IndexBuilder {
         let cx =
             BuildCtx { paths: &paths, symbols: &symbols, overlay: &overlay, classes: &classes };
         let defs = Arc::new(defs::build(&self.facts, &cx));
+        let loc = Arc::new(loc::build(&self.facts, &cx));
         let mut content_incomplete = self.content_incomplete;
         content_incomplete.sort_by_key(|s| s.index());
         content_incomplete.dedup();
         let mut index = ScanIndex {
             defs,
+            loc,
+            languages: self.symbol_rules.languages.clone(),
             classes,
             readings: self.symbol_rules.readings,
             domains: self.symbol_rules.domains.clone(),

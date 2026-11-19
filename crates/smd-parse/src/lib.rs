@@ -1,6 +1,6 @@
 //! `smd-parse` — lexers, the parser registry, and fact emission.
 //!
-//! **Owns:** lexers for PDX script (and, later, localisation), the [`FileParser`] registry,
+//! **Owns:** lexers for PDX script and localisation, the [`FileParser`] registry,
 //! dispatch by [`FileKind`](smd_core::FileKind), fact emission, the parse-cache key.
 //!
 //! **Must never:** know about traits, civics, or any game concept; store anything.
@@ -22,8 +22,8 @@
 //! | `pdx_event` | `Namespace`, `EventId` |
 //! | `none` | nothing (syntax diagnostics only) |
 //!
-//! Adding a syntax (`locyml` for localisation) is a module implementing [`FileParser`] and
-//! one entry in [`PARSERS`].
+//! [`LocYmlParser`] (`pdx_locyml`) handles `FileKind::Localisation` and emits `LocKey`.
+//! Adding a syntax is a module implementing [`FileParser`] and one entry in [`PARSERS`].
 
 #![forbid(unsafe_code)]
 
@@ -31,12 +31,14 @@ mod cache;
 mod clausewitz;
 pub mod extract;
 pub mod lexer;
+pub mod locyml;
 mod registry;
 pub mod script;
 pub mod text;
 
 pub use cache::{ParseCache, ParseCacheKey};
 pub use clausewitz::ClausewitzScriptParser;
+pub use locyml::LocYmlParser;
 pub use registry::{
     FILE_CAP, FileParser, PARSERS, ParseInput, ParseOutput, parse_file, parser_for,
 };

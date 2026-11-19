@@ -54,7 +54,7 @@ pub enum Expectation {
     None,
     /// A finding on the subject, with this winner and (if given) carrying this gap.
     Fires {
-        /// The subject's text: a normalised path, or a symbol name.
+        /// The subject's text: a normalised path, a symbol name, or a loc key.
         path: &'static str,
         /// The winner assertion.
         winner: WinnerExpect,
@@ -127,10 +127,11 @@ pub fn run_case(rule: &dyn Rule, case: &RuleCase) -> Result<(), String> {
             fail(format!("expected none, got {}", findings.len()))
         };
     };
-    // A path subject's text is its path; a symbol subject's is the symbol name.
+    // A path subject's text is its path; a symbol or loc subject's is the name or key.
     let Some((f, resolved)) =
         findings.iter().map(|f| (f, index.resolve_finding(f))).find(|(f, r)| {
-            matches!(f.subject, Subject::Path(_) | Subject::Symbol(_)) && &*r.subject_text == path
+            matches!(f.subject, Subject::Path(_) | Subject::Symbol(_) | Subject::LocKey { .. })
+                && &*r.subject_text == path
         })
     else {
         return fail(format!("no finding on {path}"));

@@ -17,6 +17,7 @@ fn class(extractor: &'static str, level: u8, children: &[&str]) -> DirClass {
         merge: MergeMode::MergeByKey,
         order: None,
         additive_children: children.iter().map(|c| (*c).into()).collect(),
+        ..DirClass::default()
     }
 }
 
@@ -78,4 +79,33 @@ fn additive_split_and_events() {
         &class("pdx_event", 0, &[]),
     );
     assert_eq!(ev.facts.len(), 3);
+}
+
+#[test]
+fn locyml_entries_ordinals_and_unknowns() {
+    let class = DirClass {
+        kind: FileKind::Localisation,
+        parser: "pdx_locyml",
+        languages: vec!["english".into(), "french".into()].into(),
+        ..DirClass::default()
+    };
+    let src =
+        "\u{feff}l_english:\n # c\n a:0 \"x \\\"q\\\" y\"\n b \"v\" # t\nl_french:\n a:1 \"x\"\n";
+    let out = run(src, &class);
+    let keys: Vec<_> = out
+        .facts
+        .iter()
+        .map(|f| match &f.payload {
+            FactPayload::LocKey { lang, key, version_ordinal, .. } => {
+                (lang.0, key.to_string(), *version_ordinal)
+            }
+            other => panic!("locyml emits only LocKey, got {other:?}"),
+        })
+        .collect();
+    let want = [(0, "a".into(), Some(0)), (0, "b".into(), None), (1, "a".into(), Some(1))];
+    assert_eq!(keys, want);
+    assert_eq!(out.completeness, ParseCompleteness::Complete);
+    let bad = run("l_klingon:\n a \"x\"\nl_english:\n broken\n", &class);
+    assert!(bad.facts.is_empty());
+    assert_eq!(bad.completeness, ParseCompleteness::Partial, "unread keys are unknown");
 }

@@ -30,13 +30,13 @@ pub struct SymbolVerdict {
     pub dead: SmallVec<[DefSite; 2]>,
 }
 
-type Gaps = SmallVec<[ResolutionGap; 1]>;
+pub(crate) type Gaps = SmallVec<[ResolutionGap; 1]>;
 
 fn contender(d: &DefSite) -> Contender {
     Contender { source: d.site.source, path: d.site.path, slot: Some(d.file_slot) }
 }
 
-fn unknown(gaps: Gaps) -> Resolution {
+pub(crate) fn unknown(gaps: Gaps) -> Resolution {
     Resolution {
         outcome: Outcome::Unknown,
         winner: None,
@@ -47,20 +47,20 @@ fn unknown(gaps: Gaps) -> Resolution {
     }
 }
 
-fn stated(outcome: Outcome, mechanism: Mechanism, agreement: Agreement) -> Resolution {
+pub(crate) fn stated(outcome: Outcome, mechanism: Mechanism, agreement: Agreement) -> Resolution {
     Resolution { outcome, mechanism, agreement, ..unknown(Gaps::new()) }
 }
 
 impl ScanIndex {
-    fn activation_of(&self, s: SourceId) -> Activation {
+    pub(crate) fn activation_of(&self, s: SourceId) -> Activation {
         self.sources.get(s).map_or(Activation::Unknown, |m| m.activation)
     }
 
-    fn is_vanilla(&self, s: SourceId) -> bool {
+    pub(crate) fn is_vanilla(&self, s: SourceId) -> bool {
         self.sources.get(s).is_some_and(|m| m.role == SourceRole::Vanilla)
     }
 
-    fn cand(&self, source: SourceId, path: PathId, ordinal: Option<u32>) -> Cand<'_> {
+    pub(crate) fn cand(&self, source: SourceId, path: PathId, ordinal: Option<u32>) -> Cand<'_> {
         let text = self.path_text(path);
         let raw = self
             .overlay
@@ -156,6 +156,11 @@ impl ScanIndex {
             return unknown(SmallVec::from_slice(&[ResolutionGap::ChildDigestsUnavailable]));
         };
         if res.iter().all(|h| *h == res[0]) {
+            // H4: "nothing is lost" is a claim about every definition in scope; an unseen
+            // one in an incomplete file could carry a different residual and win.
+            if self.scope_incomplete(key) {
+                return unknown(SmallVec::from_slice(&[ResolutionGap::ParseIncomplete]));
+            }
             return stated(Outcome::Coexist, Mechanism::DirectoryMerge, Agreement::AllIdentical);
         }
         let mut r = self.by_precedence(key, live, order, &res);
@@ -260,10 +265,10 @@ impl ScanIndex {
     }
 }
 
-type Top = Result<usize, SmallVec<[ResolutionGap; 2]>>;
+pub(crate) type Top = Result<usize, SmallVec<[ResolutionGap; 2]>>;
 
 /// One gap per enumerated parameter whose value alone changes the result.
-fn flips(readings: &Readings, all: &[[usize; 4]], results: &[Top]) -> Gaps {
+pub(crate) fn flips(readings: &Readings, all: &[[usize; 4]], results: &[Top]) -> Gaps {
     let dims = readings.dims();
     let winner = |ix: [usize; 4]| {
         all.iter().position(|x| *x == ix).and_then(|p| results[p].as_ref().ok().copied())
@@ -285,7 +290,7 @@ fn flips(readings: &Readings, all: &[[usize; 4]], results: &[Top]) -> Gaps {
 }
 
 /// Doc 07 § Agreement; vanilla's body is excluded from the losers' comparison.
-fn agreement(hashes: &[[u8; 16]], winner: Option<usize>, vanilla: &[bool]) -> Agreement {
+pub(crate) fn agreement(hashes: &[[u8; 16]], winner: Option<usize>, vanilla: &[bool]) -> Agreement {
     if hashes.iter().all(|h| *h == hashes[0]) {
         return Agreement::AllIdentical;
     }

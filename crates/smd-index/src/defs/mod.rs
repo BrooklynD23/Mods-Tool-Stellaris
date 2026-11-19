@@ -1,9 +1,9 @@
 //! The definition layer (doc 07 § `DefinitionTable`): every `Definition` fact, sited and
 //! interned, grouped by [`SymbolKey`], and resolved through Stages C and D.
 
-mod resolve;
+pub(crate) mod resolve;
 mod rules;
-mod stage_d;
+pub(crate) mod stage_d;
 
 pub use resolve::SymbolVerdict;
 pub use rules::{PathClass, SymbolRules};
@@ -152,8 +152,8 @@ fn add_batch(
                     d.residual_hash = Some(*residual_hash);
                 }
             }
-            // Owned by tables that are not built yet (LocTable, EventTable, defines,
-            // references, M3/M4); they are not definitions, so this table skips them.
+            // `LocKey` belongs to `LocTable` (crate::loc). The rest are owned by tables that
+            // are not built yet (EventTable, defines, references, M3); none is a definition.
             FactPayload::LocKey { .. }
             | FactPayload::Reference { .. }
             | FactPayload::Namespace { .. }

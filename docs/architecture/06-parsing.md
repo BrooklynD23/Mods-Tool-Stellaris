@@ -3,7 +3,9 @@
 > **Status (M2, scaffolded, untested):** `crates/smd-parse` implements the iterative
 > script parser, the `FileParser` registry, the `depth_key` / `pdx_event` extractors,
 > `AdditiveSplit`, body hashing, and the full layer-2 cache key with an in-memory cache.
-> Not built: `smd-locyml` (a `locyml` module), the SQLite store and layer 1, fuzzing, the
+> **M4 (scaffolded, untested):** localisation is the `smd_parse::locyml` module
+> (`LocYmlParser`, id `pdx_locyml`), one entry in `PARSERS`, not a separate crate; see
+> § Localisation parsing. Not built: the SQLite store and layer 1, fuzzing, the
 > golden corpus. Two deviations from the text below: the parser returns a `ParseOutput`
 > value instead of pushing into a `FactSink`, and the registry is an explicit list
 > (`PARSERS`) rather than `inventory`, matching the rule registry. See
@@ -214,6 +216,15 @@ The parser extracts `(lang, key, version_ordinal, value_hash)` and keeps the raw
 only for the diff view. Notes: the leading space is conventional but not required; the
 `:0` ordinal is optional; `l_english` may appear more than once in a file; `replace/`
 subdirectories under `localisation/` take precedence over the base directory.
+
+As built (M4): a header is `l_<name>:` where `<name>` must be in the profile's
+`[syntax] languages` (its position is the `LangId`); an unlisted language, an entry
+before any header, a key over 1024 bytes, or any line that is not a header, entry,
+comment, or blank is a diagnostic and makes the file `Partial` — its keys are unknown,
+not absent, and the resolver will not state a winner over it at its tier or above. The
+value is the text between the first `"` and the last unescaped `"` of the line; its hash
+covers the bytes as written (escapes kept). Non-UTF-8 falls back to Windows-1252 with a
+diagnostic, as for script.
 
 ## Parser registry
 
