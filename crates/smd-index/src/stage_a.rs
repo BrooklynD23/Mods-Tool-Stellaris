@@ -5,7 +5,7 @@ use std::cmp::Ordering;
 use smallvec::SmallVec;
 use smd_core::{
     Activation, Agreement, Blob, Contender, Mechanism, Outcome, ParseCompleteness, PathId,
-    Resolution, ResolutionGap, SamePath, ShadowCause, SourceTable, UnparsedReason,
+    Resolution, ResolutionGap, SamePath, ShadowCause, SourceId, SourceTable, UnparsedReason,
 };
 
 use crate::overlay::Contribution;
@@ -33,6 +33,8 @@ pub(crate) struct PathInput<'a> {
     pub same_path: SamePath,
     pub decls: &'a [ReplaceDecl],
     pub scope: ReplacePathScope,
+    /// Content-incomplete sources (H50).
+    pub incomplete: &'a [SourceId],
 }
 
 type LiveVec<'a> = SmallVec<[(&'a Contribution, Doubt); 2]>;
@@ -150,6 +152,15 @@ fn partition<'a>(inp: &PathInput<'a>) -> (LiveVec<'a>, ShadowVec) {
     (live, shadows)
 }
 
+/// Whether a non-`Inactive` source the walk did not see completely could hold a copy of
+/// this path that nothing dropped. Doc 05: content-incomplete is "for any key and any
+/// directory", so the whole source counts, not just the subtree below the refused link.
+fn deletion_unconfirmed(inp: &PathInput<'_>) -> bool {
+    inp.incomplete
+        .iter()
+        .any(|s| inp.sources.get(*s).is_none_or(|m| m.activation != Activation::Inactive))
+}
+
 /// Resolve one path.
 pub(crate) fn resolve(inp: &PathInput<'_>) -> PathVerdict {
     let (live, mut shadows) = partition(inp);
@@ -178,8 +189,13 @@ pub(crate) fn resolve(inp: &PathInput<'_>) -> PathVerdict {
             _ => Mechanism::SamePath,
         };
     } else if live.is_empty() && !shadows.is_empty() {
-        resolution.outcome = Outcome::Deleted;
-        resolution.mechanism = Mechanism::ReplacePath;
+        if deletion_unconfirmed(inp) {
+            // H50: an unseen copy in a content-incomplete source may survive the drop.
+            resolution.gaps.push(ResolutionGap::ParseIncomplete);
+        } else {
+            resolution.outcome = Outcome::Deleted;
+            resolution.mechanism = Mechanism::ReplacePath;
+        }
     }
     resolution.discarded = shadows.iter().map(|(c, _)| *c).collect();
     shadows.sort_by_key(|(c, _)| c.source.index());
