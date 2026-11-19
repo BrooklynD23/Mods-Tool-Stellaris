@@ -168,6 +168,10 @@ fn placeholder(name: &str, f: &ResolvedFinding) -> Option<String> {
         },
         "losers" => Some(join(&names(f, Role::Shadowed))).filter(|s| !s.is_empty()),
         "loser_first" => names(f, Role::Shadowed).first().map(|s| (*s).to_owned()),
+        "winner_path" => match f.participants.iter().filter(|p| p.role == Role::Winner).count() {
+            1 => f.participants.iter().find(|p| p.role == Role::Winner).map(|p| p.path.to_string()),
+            _ => None,
+        },
         key => f.facts.iter().find(|(k, _)| *k == key).map(|(_, v)| match v {
             ResolvedEvidence::Int(i) => i.to_string(),
             ResolvedEvidence::Bool(b) => b.to_string(),

@@ -17,7 +17,10 @@
 ///   `SingleWinner`; a catalogue entry using it must be a variant guarded on that.
 /// - `losers` — the `Role::Shadowed` participants, joined.
 /// - `loser_first` — the first shadowed participant, for "if you prefer X's version".
-pub const DERIVED_PLACEHOLDERS: [&str; 5] = ["n", "subject", "winner", "losers", "loser_first"];
+/// - `winner_path` — the file the single `Role::Winner` participant's site is in, for
+///   advice that must name a file rather than a mod (H19: the filename axis decided).
+pub const DERIVED_PLACEHOLDERS: [&str; 6] =
+    ["n", "subject", "winner", "losers", "loser_first", "winner_path"];
 
 /// Whether a `{placeholder}` name is one the policy layer derives.
 #[must_use]

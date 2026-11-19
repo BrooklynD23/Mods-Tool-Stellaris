@@ -16,6 +16,7 @@ fn class(extractor: &'static str, level: u8, children: &[&str]) -> DirClass {
         domain_name: Some("thing".into()),
         merge: MergeMode::MergeByKey,
         order: None,
+        tier: 0,
         additive_children: children.iter().map(|c| (*c).into()).collect(),
     }
 }
@@ -47,6 +48,9 @@ fn depth_key_levels_bodies_and_recovery() {
     assert_eq!(out.facts[0].payload, reformatted.facts[0].payload, "whitespace is not a change");
     let defines = run("NG = { K = 1 J = { x } }", &class("depth_key", 1, &[]));
     assert_eq!(symbols(&defines), ["NG.K", "NG.J"]);
+    let keys = run("NG = { K = 1 }", &class("define", 1, &[]));
+    assert!(matches!(&keys.facts[..], [f] if matches!(&f.payload,
+        FactPayload::DefineKey { group, key, .. } if &**group == "NG" && &**key == "K")));
     let open = run("a = { b = { c = 1 }", &class("depth_key", 0, &[]));
     assert_eq!((symbols(&open), open.completeness), (vec!["a".into()], ParseCompleteness::Partial));
 }

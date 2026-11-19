@@ -15,6 +15,7 @@ pub(crate) struct RawExtract {
     extractor: Option<String>,
     parser: Option<String>,
     order: Option<String>,
+    tier: Option<u8>,
     #[serde(default)]
     additive_children: Vec<String>,
 }
@@ -36,7 +37,7 @@ pub struct DirClass {
     pub kind: FileKind,
     /// `FileParser::id()` the profile names for this path; empty when none.
     pub parser: &'static str,
-    /// `"depth_key"`, `"pdx_event"` or `"none"`.
+    /// `"depth_key"`, `"define"`, `"pdx_event"` or `"none"`.
     pub extractor: &'static str,
     /// Which depth's keys are definitions.
     pub level: u8,
@@ -48,6 +49,8 @@ pub struct DirClass {
     pub merge: MergeMode,
     /// Filename direction; `None` = unknown.
     pub order: Option<FileOrder>,
+    /// Stage D tier: compared before the filename key; higher wins (doc 07).
+    pub tier: u8,
     /// Children that accumulate (`merge_by_key_additive_body` only).
     pub additive_children: Box<[Box<str>]>,
 }
@@ -86,6 +89,7 @@ fn extractor(v: Option<&str>, kind: FileKind) -> Result<&'static str, ProfileErr
         _ if kind == FileKind::Asset => Ok("none"),
         None | Some("depth_key") => Ok("depth_key"),
         Some("pdx_event") => Ok("pdx_event"),
+        Some("define") => Ok("define"),
         Some("none") => Ok("none"),
         Some(other) => Err(bad("extractor", other)),
     }
@@ -152,6 +156,7 @@ impl RawExtract {
             domain_name: self.domain.as_deref().map(Into::into),
             merge,
             order,
+            tier: self.tier.unwrap_or(0),
             additive_children: additive,
         })
     }

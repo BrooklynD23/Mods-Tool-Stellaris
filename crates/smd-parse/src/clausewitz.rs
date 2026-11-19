@@ -42,7 +42,7 @@ impl FileParser for ClausewitzScriptParser {
         let out = Out { bytes: input.bytes, enc, facts: Vec::new(), diags };
         let (bytes, cancelled, class) = (input.bytes, input.cancelled, input.class);
         let out = match (class.extractor, class.domain) {
-            ("depth_key", Some(domain)) => {
+            ("depth_key" | "define", Some(domain)) => {
                 let mut sink = DepthKey::new(out, class, domain);
                 parse(bytes, start, &mut sink, cancelled);
                 sink.out
