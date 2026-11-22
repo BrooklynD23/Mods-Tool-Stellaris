@@ -35,10 +35,6 @@ deps = []
 layer = 1
 deps = ["smd-core"]
 
-[crates.smd-testkit]
-layer = 1
-deps = ["smd-core"]
-
 [crates.smd-profiles]
 layer = 2
 deps = ["smd-core", "smd-fs"]
@@ -50,21 +46,25 @@ game_names_allowed = true
 layer = 3
 deps = ["smd-core", "smd-fs", "smd-profiles"]
 
-[crates.smd-parse]
+[crates.smd-index]
 layer = 3
 deps = ["smd-core", "smd-fs", "smd-profiles"]
 
-[crates.smd-index]
+# Parsing is one crate with a module per syntax (doc 02): lexing is the hot path, and a
+# crate boundary there costs a virtual call per token across crates nothing inlines.
+[crates.smd-parse]
 layer = 3
 deps = ["smd-core", "smd-fs", "smd-profiles"]
 
 [crates.smd-rules]
 layer = 4
-deps = ["smd-core", "smd-profiles", "smd-index", "smd-testkit"]
+deps = ["smd-core", "smd-profiles", "smd-index"]
 
+# Valuation. Reads findings already resolved to text, so it needs no model crate; it
+# borrows the profile glob matcher for `path_glob` modifiers.
 [crates.smd-policy]
 layer = 4
-deps = ["smd-core", "smd-profiles", "smd-index", "smd-testkit"]
+deps = ["smd-core", "smd-profiles"]
 
 [crates.smd-engine]
 layer = 5
@@ -73,35 +73,26 @@ deps = [
     "smd-fs",
     "smd-profiles",
     "smd-ingest",
-    "smd-parse",
     "smd-index",
+    "smd-parse",
     "smd-rules",
     "smd-policy",
-    "smd-testkit",
 ]
 
 [crates.smd-api]
 layer = 6
-deps = ["smd-core", "smd-engine", "smd-testkit"]
+deps = ["smd-core", "smd-engine"]
 
 # `smd-report` depends on `smd-core` alone — that is the whole point of `ResolvedFinding`.
 # It sits above `smd-api` only so that the two shell crates, which consume both, have
 # somewhere strictly lower to point at.
 [crates.smd-report]
 layer = 7
-deps = ["smd-core", "smd-testkit"]
+deps = ["smd-core"]
 
 [crates.smd-cli]
 layer = 8
-deps = ["smd-core", "smd-api", "smd-report", "smd-testkit"]
-
-[crates.smd-gui]
-layer = 8
-deps = ["smd-core", "smd-api", "smd-report", "smd-testkit"]
-
-[crates.smd-py]
-layer = 8
-deps = ["smd-core", "smd-api"]
+deps = ["smd-core", "smd-api", "smd-report"]
 
 [crates.xtask]
 layer = 9

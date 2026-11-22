@@ -1,14 +1,40 @@
 //! The rule registry, as an explicit sorted function. See the crate docs for what replaces it.
 
 use crate::Rule;
-use crate::rules::FileOverwrite;
+use crate::rules::{
+    DefinesOverlap, DepMissing, DepOrder, EventIdDup, FileOverwrite, LocCollision,
+    MetaDescriptorMismatch, MetaVersionDrift, NamespaceShare, ReplacePathShadow, SymbolCollision,
+    SymbolDeleted,
+};
 
 static FILE_OVERWRITE: FileOverwrite = FileOverwrite;
+static LOC_COLLISION: LocCollision = LocCollision;
+static SYMBOL_COLLISION: SymbolCollision = SymbolCollision;
+static SYMBOL_DELETED: SymbolDeleted = SymbolDeleted;
+static DEP_MISSING: DepMissing = DepMissing;
+static DEP_ORDER: DepOrder = DepOrder;
+static META_DESCRIPTOR_MISMATCH: MetaDescriptorMismatch = MetaDescriptorMismatch;
+static META_VERSION_DRIFT: MetaVersionDrift = MetaVersionDrift;
+static EVENT_ID_DUP: EventIdDup = EventIdDup;
+static NAMESPACE_SHARE: NamespaceShare = NamespaceShare;
+static DEFINES_OVERLAP: DefinesOverlap = DefinesOverlap;
+static REPLACE_PATH_SHADOW: ReplacePathShadow = ReplacePathShadow;
 
 /// Every shipped rule, sorted by id.
 #[must_use]
 pub fn registry() -> Vec<&'static dyn Rule> {
-    let mut v: Vec<&'static dyn Rule> = vec![&FILE_OVERWRITE];
+    let mut v: Vec<&'static dyn Rule> =
+        vec![&FILE_OVERWRITE, &LOC_COLLISION, &SYMBOL_COLLISION, &SYMBOL_DELETED];
+    v.extend([
+        &DEP_MISSING as &dyn Rule,
+        &DEP_ORDER,
+        &META_DESCRIPTOR_MISMATCH,
+        &META_VERSION_DRIFT,
+        &EVENT_ID_DUP,
+        &NAMESPACE_SHARE,
+        &DEFINES_OVERLAP,
+        &REPLACE_PATH_SHADOW,
+    ]);
     v.sort_by_key(|r| r.id());
     v
 }

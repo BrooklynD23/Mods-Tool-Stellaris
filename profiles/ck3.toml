@@ -1,0 +1,265 @@
+# profiles/ck3.toml
+#
+# Game profile for Crusader Kings III. Schema: docs/architecture/10-game-profiles.md.
+#
+# PROVENANCE (M8): authored from doc 10 and general public knowledge of the game's
+# install layout. NOTHING in this file was observed on a running install, probed, or
+# corroborated by two independent sources. Every value is UNVERIFIED. There is no
+# docs/VERIFY.md section for this game yet, so doc 10 § Profile testing item 4 ("every
+# unknown has an open VERIFY item") is NOT satisfied — opening those items is the first
+# job before this profile is relied on.
+#
+# The point of this file is the M8 exit criterion: a second Paradox game supported by TOML
+# alone. Its values are hypotheses to probe, not facts.
+#
+# Unlike profiles/stellaris.toml, no [[dir]] here claims `merge_by_key`: the Stellaris
+# profile states it only where VERIFY records CORROBORATED, and nothing here is. Every
+# script directory is therefore `merge = "unknown"`, which is a first-class answer.
+
+[game]
+id       = "ck3"
+name     = "Crusader Kings III"
+steam_id = 1158310                  # UNVERIFIED (public store page)
+
+[locations]
+# UNVERIFIED: same Paradox Interactive Documents layout as the other launcher-v2 titles.
+user_dir.windows = "{DOCUMENTS}/Paradox Interactive/Crusader Kings III"
+user_dir.linux   = "{XDG_DATA_HOME}/Paradox Interactive/Crusader Kings III"
+user_dir.macos   = "{HOME}/Documents/Paradox Interactive/Crusader Kings III"
+user_dir.proton  = "{PROTON_PREFIX}/drive_c/users/steamuser/Documents/Paradox Interactive/Crusader Kings III"
+workshop         = "{STEAM_LIB}/steamapps/workshop/content/1158310"   # UNVERIFIED
+install          = "{STEAM_LIB}/steamapps/common/Crusader Kings III"  # UNVERIFIED
+mods_subdir      = "mod"            # UNVERIFIED; also hard-coded in smd-ingest today
+# UNVERIFIED: vanilla script and assets live under <install>/game/, not the install root
+# (the root holds binaries/, launcher/, game/). Mods mirror the game/ tree at their root.
+content_subdir   = "game"
+steam_library_index = ["config/libraryfolders.vdf", "steamapps/libraryfolders.vdf"]
+
+[stores]
+executable = "binaries/ck3.exe"     # UNVERIFIED; relative to the install directory
+gog_display_name_prefix = "Crusader Kings III"           # UNVERIFIED
+xbox_install = "XboxGames/Crusader Kings III/Content"    # UNVERIFIED placeholder guess
+extra_user_dirs = []
+
+[load_order]
+# UNVERIFIED: the same launcher (launcher-v2.sqlite, dlc_load.json) as Stellaris.
+sources = ["launcher_v2_sqlite", "dlc_load_json", "directory_scan"]
+
+# UNVERIFIED: same-path whole-file replacement, as in every Clausewitz title.
+same_filename_replaces_whole_file = true
+replace_path_scope = "unknown"      # vanilla_only | vanilla_and_earlier
+later_wins = true                   # UNVERIFIED
+vanilla_is_lowest = true            # UNVERIFIED
+vanilla_in_filename_axis = "unknown"
+filename_compare = "ordinal"
+# UNKNOWN: whether differently-named files resolve first- or last-in-order is not
+# established for this game; the resolver enumerates both readings.
+default_order = "unknown"
+filename_key = "unknown"            # basename_noext | basename | dir_relative
+in_file_duplicate = "unknown"       # first | last
+
+[syntax]
+script       = "clausewitz"
+localisation = "pdx_locyml"
+descriptor   = "clausewitz_kv"
+operators    = ["=", "==", ">", "<", ">=", "<=", "!=", "?="]   # UNVERIFIED
+variables      = "at_prefix"        # UNVERIFIED
+inline_scripts = true               # UNVERIFIED (common/inline_scripts? not confirmed)
+encoding.default = "utf8"           # UNVERIFIED
+encoding.bom_required = ["localization/**"]   # UNVERIFIED: loc files carry a UTF-8 BOM
+
+[version]
+# UNVERIFIED: launcher-settings.json under <install>/launcher/, not beside the executable.
+source  = "launcher/launcher-settings.json"
+source_dir = "install"
+fields  = ["rawVersion", "version"]
+pattern = "wildcard_dotted"
+# Empty = no claim: no version of this game was checked against this file.
+verified_range = []
+pattern_forms_confirmed = false
+
+# ---------------------------------------------------------------------------
+# Directory classification — paths are relative to the content root (game/ for vanilla,
+# the mod root for a mod). Every entry UNVERIFIED.
+# ---------------------------------------------------------------------------
+
+[[dir]]
+glob   = "common/defines/**/*.txt"
+domain = "define"
+merge  = "unknown"
+level  = 1
+
+[[dir]]
+glob   = "common/traits/**/*.txt"
+domain = "trait"
+merge  = "unknown"
+
+[[dir]]
+glob   = "common/buildings/**/*.txt"
+domain = "building"
+merge  = "unknown"
+
+[[dir]]
+glob   = "common/decisions/**/*.txt"
+domain = "decision"
+merge  = "unknown"
+
+[[dir]]
+glob   = "common/character_interactions/**/*.txt"
+domain = "character_interaction"
+merge  = "unknown"
+
+[[dir]]
+glob   = "common/casus_belli_types/**/*.txt"
+domain = "casus_belli"
+merge  = "unknown"
+
+[[dir]]
+glob   = "common/culture/**/*.txt"
+domain = "culture"
+merge  = "unknown"
+
+[[dir]]
+glob   = "common/religion/**/*.txt"
+domain = "religion"
+merge  = "unknown"
+
+[[dir]]
+glob   = "common/landed_titles/**/*.txt"
+domain = "landed_title"
+merge  = "unknown"
+
+[[dir]]
+glob   = "common/laws/**/*.txt"
+domain = "law"
+merge  = "unknown"
+
+[[dir]]
+glob   = "common/modifiers/**/*.txt"
+domain = "modifier"
+merge  = "unknown"
+
+[[dir]]
+glob   = "common/opinion_modifiers/**/*.txt"
+domain = "opinion_modifier"
+merge  = "unknown"
+
+[[dir]]
+glob   = "common/schemes/**/*.txt"
+domain = "scheme"
+merge  = "unknown"
+
+[[dir]]
+glob   = "common/lifestyle_perks/**/*.txt"
+domain = "lifestyle_perk"
+merge  = "unknown"
+
+[[dir]]
+glob   = "common/scripted_effects/**/*.txt"
+domain = "scripted_effect"
+merge  = "unknown"
+
+[[dir]]
+glob   = "common/scripted_triggers/**/*.txt"
+domain = "scripted_trigger"
+merge  = "unknown"
+
+[[dir]]
+glob   = "common/script_values/**/*.txt"
+domain = "script_value"
+merge  = "unknown"
+
+[[dir]]
+glob   = "common/on_action/**/*.txt"
+domain = "on_action"
+merge  = "unknown"          # Same open question as Stellaris on_actions: which children accumulate.
+
+[[dir]]
+glob   = "common/game_rules/**/*.txt"
+domain = "game_rule"
+merge  = "unknown"
+
+[[dir]]
+glob   = "common/coat_of_arms/**/*.txt"
+domain = "coat_of_arms"
+merge  = "unknown"
+
+[[dir]]
+glob   = "events/**/*.txt"
+domain = "event"
+merge  = "unknown"
+extractor = "pdx_event"
+
+[[dir]]
+glob   = "history/**/*.txt"
+domain = "history"
+merge  = "unknown"
+
+# --- Localisation (note the US spelling of the directory) -------------------------
+
+[[dir]]
+glob   = "localization/**/*.yml"
+domain = "loc"
+parser = "pdx_locyml"
+scope  = "loc"
+merge  = "unknown"
+same_path = "unknown"
+
+[[dir]]
+glob   = "localization/replace/**/*.yml"   # UNVERIFIED; <lang>/replace/ may also apply
+domain = "loc"
+parser = "pdx_locyml"
+scope  = "loc"
+tier   = 1
+merge  = "unknown"
+same_path = "unknown"
+level  = 1
+
+# --- Non-script trees -----------------------------------------------------------
+
+[[dir]]
+glob   = "gui/**/*.gui"
+domain = "gui"
+merge  = "unknown"
+
+[[dir]]
+glob   = "gfx/**"
+domain = "asset"
+parser = "none"
+merge  = "path_only"
+
+[[dir]]
+glob   = "sound/**"
+domain = "asset"
+parser = "none"
+merge  = "path_only"
+
+[[dir]]
+glob   = "music/**"
+domain = "asset"
+parser = "none"
+merge  = "path_only"
+
+[[dir]]
+glob   = "fonts/**"
+domain = "asset"
+parser = "none"
+merge  = "path_only"
+
+[[dir]]
+glob   = "map_data/**"
+domain = "map_data"
+merge  = "unknown"
+
+[benign]
+paths = [
+  "thumbnail.png",
+  "descriptor.mod",
+  "readme*",
+  ".git/**",
+  "*.md",
+  "*.editorconfig",
+  "/*",           # UNVERIFIED: root-level files are not game content
+  ".*",
+  "**/.*/**",
+]

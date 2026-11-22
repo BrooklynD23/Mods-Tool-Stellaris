@@ -30,6 +30,10 @@
 ### 1. `core.file_overwrite` `common/traits/00_traits.txt`
 
 - certainty: completeness=unparsed activation=conditional order=fallback semantics=unmodelled
+- note: Some files involved could not be read; what they hold is unknown\.
+- note: Would collide only if both mods are enabled; the launcher could not be read\.
+- note: Load order unknown\: which mod wins is not stated\.
+- note: The game behaviour here is not modelled; treat this as a lead, not a verdict\.
 - gaps: order_unknown
 - files: 2
 - identical: false
@@ -44,6 +48,10 @@ Participants (2):
 ### 2. `core.file_overwrite` `localisation/english/l_english.yml`
 
 - certainty: completeness=partial activation=conditional order=fallback semantics=unmodelled
+- note: Some files involved were only partly read; this finding may be incomplete\.
+- note: Would collide only if both mods are enabled; the launcher could not be read\.
+- note: Load order unknown\: which mod wins is not stated\.
+- note: The game behaviour here is not modelled; treat this as a lead, not a verdict\.
 - gaps: order_unknown
 - files: 2
 - identical: false
@@ -59,6 +67,10 @@ Participants (3):
 ### 3. `core.file_overwrite` `events/pirate_events.txt`
 
 - certainty: completeness=unparsed activation=conditional order=fallback semantics=unmodelled
+- note: Some files involved could not be read; what they hold is unknown\.
+- note: Would collide only if both mods are enabled; the launcher could not be read\.
+- note: Load order unknown\: which mod wins is not stated\.
+- note: The game behaviour here is not modelled; treat this as a lead, not a verdict\.
 - gaps: order_unknown
 - files: 2
 - identical: false

@@ -5,12 +5,14 @@ use smd_core::{
     ScanCompleteness,
 };
 
-use crate::model::{DiagnosticRow, InventoryRow, RenderOptions, ReportHeader, ReportModel};
+use crate::model::{
+    DiagnosticRow, FindingScore, InventoryRow, RenderOptions, ReportHeader, ReportModel,
+};
 use crate::redact::Redactor;
 use crate::view::{
     CertaintyView, ContentIncompleteView, DiagView, FindingView, HeaderView, INCOMPLETE_NOTE,
-    InventoryView, NO_CONFLICTS_SENTENCE, NOTHING_SCANNED_SENTENCE, ParticipantView, UnparsedView,
-    View,
+    InventoryView, NO_CONFLICTS_SENTENCE, NOTHING_SCANNED_SENTENCE, ParticipantView, PolicyView,
+    UnparsedView, View,
 };
 
 /// Build the view for a full report, then redact every string of it in one pass.
@@ -24,7 +26,11 @@ pub(crate) fn view(model: &ReportModel, opts: &RenderOptions) -> View {
         scan_complete,
         summary: (scan_complete && model.findings.is_empty()).then(|| summary(c.files_total)),
         incomplete_note: (!scan_complete).then_some(INCOMPLETE_NOTE),
-        findings: model.findings[..shown].iter().map(|f| finding(f, opts)).collect(),
+        findings: model.findings[..shown]
+            .iter()
+            .enumerate()
+            .map(|(i, f)| finding(f, model.scores.get(i), opts))
+            .collect(),
         findings_hidden: model.findings.len() - shown,
         findings_more: more(model.findings.len() - shown, "findings"),
         diagnostics: diagnostics(&model.diagnostics, &Redactor::new(&opts.redaction, false)),
@@ -64,7 +70,11 @@ fn more(hidden: usize, what: &str) -> Option<String> {
 }
 
 fn is_complete(c: &ScanCompleteness) -> bool {
-    c.partial == 0 && c.unparsed.iter().all(|(_, n)| *n == 0) && c.content_incomplete.is_empty()
+    c.partial == 0
+        && c.unparsed.iter().all(|(_, n)| *n == 0)
+        && c.content_incomplete.is_empty()
+        && !c.discovery_incomplete
+        && !c.game_version_unverified
 }
 
 fn header(h: &ReportHeader) -> HeaderView {
@@ -83,6 +93,8 @@ fn header(h: &ReportHeader) -> HeaderView {
             .map(|(why, n)| UnparsedView { reason: snake(&format!("{why:?}")), count: *n })
             .collect(),
         domains: c.domains.iter().map(ToString::to_string).collect(),
+        discovery_incomplete: c.discovery_incomplete,
+        game_version_unverified: c.game_version_unverified,
         content_incomplete: c
             .content_incomplete
             .iter()
@@ -118,22 +130,39 @@ fn inventory(row: &InventoryRow) -> InventoryView {
     }
 }
 
-fn finding(f: &ResolvedFinding, opts: &RenderOptions) -> FindingView {
+fn policy(f: &ResolvedFinding, s: &FindingScore) -> PolicyView {
+    PolicyView {
+        id: s.id.clone(),
+        score: f.score,
+        severity: snake(&format!("{:?}", f.severity)),
+        suppressed: s.suppressed,
+        title: s.title.clone(),
+        body: s.body.clone(),
+        why: s.why.clone(),
+        action: s.action.clone(),
+        qualifiers: s.qualifiers.clone(),
+    }
+}
+
+fn finding(f: &ResolvedFinding, score: Option<&FindingScore>, opts: &RenderOptions) -> FindingView {
     let shown = f.participants.len().min(opts.caps.max_participants);
+    let certainty = CertaintyView {
+        completeness: f.certainty.completeness.as_tag(),
+        activation: f.certainty.activation.as_tag(),
+        order: f.certainty.order.as_tag(),
+        semantics: f.certainty.semantics.as_tag(),
+    };
     FindingView {
         rule: f.rule.as_str().to_owned(),
         subject: f.subject_text.to_string(),
-        certainty: CertaintyView {
-            completeness: f.certainty.completeness.as_tag(),
-            activation: f.certainty.activation.as_tag(),
-            order: f.certainty.order.as_tag(),
-            semantics: f.certainty.semantics.as_tag(),
-        },
+        qualifiers: crate::qualifier::sentences(&certainty),
+        certainty,
         gaps: f.gaps.iter().map(|g| g.as_tag()).collect(),
         participants: f.participants[..shown].iter().map(participant).collect(),
         participants_hidden: f.participants.len() - shown,
         participants_more: more(f.participants.len() - shown, "participants"),
         facts: f.facts.iter().map(|(k, v)| ((*k).to_owned(), evidence(v))).collect(),
+        policy: score.map(|s| policy(f, s)),
     }
 }
 

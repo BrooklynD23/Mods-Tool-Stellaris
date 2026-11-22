@@ -1,0 +1,231 @@
+# policy/explain/en.toml — the English explanation catalogue (doc 09 § Explanations).
+#
+# Keyed by rule id. A rule entry may carry a default (title/body/why/action) and
+# `variant.<evidence key>.<tag>` entries; variants are tried in evidence-key order
+# (alphabetical) and the first whose tag matches the finding wins, else the default.
+# Placeholders: the rule's declared evidence keys, plus the derived set in smd-core
+# (`{n}`, `{subject}`, `{winner}`, `{losers}`, `{loser_first}`).
+#
+# Language discipline (doc 09): never "broken", "will crash", "incompatible".
+
+["core.file_overwrite"]
+title  = "{n} sources ship the same file “{subject}”"
+body   = "More than one source contains this exact path. Which copy the game uses could not be stated."
+action = "Options: check for a compatibility patch, or disable one of the mods."
+
+["core.file_overwrite".variant.agreement.all_identical]
+title  = "{n} sources ship an identical “{subject}”"
+body   = "The copies are byte-identical, so which one wins does not matter."
+why    = "One mod has almost certainly vendored a copy of the other's file."
+action = "No action needed."
+
+["core.file_overwrite".variant.mechanism.same_path]
+title  = "{n} sources ship “{subject}”; {winner}'s copy replaces the others"
+body   = """
+{winner}'s copy of this file is the one the game reads. The copies from {losers} are \
+discarded whole — including any entries only they contain.\
+"""
+why    = "A same-path file is not merged. The later copy replaces the earlier one wholesale."
+action = "Check whether a compatibility patch exists, or change the load order if you prefer {loser_first}'s version."
+
+["core.loc_collision"]
+title  = "{n} entries for the localisation key “{subject}”"
+body   = "More than one file defines this key in the same language. Which text the game shows could not be stated."
+action = "Options: check for a compatibility patch, or disable one of the mods."
+
+["core.loc_collision".variant.agreement.all_identical]
+title  = "{n} identical entries for the localisation key “{subject}”"
+body   = "Every entry carries the same text, so whichever one wins, the player reads the same words."
+action = "No action needed."
+
+["core.loc_collision".variant.mechanism.replace_tier]
+title  = "{winner}'s replace entry for “{subject}” takes precedence"
+body   = "{winner} defines this key under a replace directory, which is read ahead of every ordinary entry regardless of load order. The text from {losers} is not shown."
+why    = "Replace-directory localisation outranks ordinary localisation before filename or load order is compared."
+action = "If you prefer {loser_first}'s text, a patch must also use a replace directory."
+
+["core.loc_collision".variant.mechanism.filename_order]
+title  = "{winner}'s entry for “{subject}” takes precedence by file name"
+body   = "{winner}'s file sorts ahead of the others in this directory, so its text is shown. The text from {losers} is not."
+action = "Check whether a compatibility patch exists."
+
+["core.loc_collision".variant.mechanism.load_order]
+title  = "{winner}'s entry for “{subject}” takes precedence by load order"
+body   = "{winner} loads later, so its text is shown. The text from {losers} is not."
+action = "Change the load order if you prefer {loser_first}'s text."
+
+# --- key-level rules (M2/M3). Advice is keyed to the axis that decided (H19): a reorder
+# is suggested only under `mechanism.load_order`; where the filename axis (FIOS/LIOS)
+# decided, the deciding file is named instead. ------------------------------------------
+
+["core.symbol_collision"]
+title  = "{n} definitions of {domain} “{subject}”"
+body   = "More than one live file defines this object. Which definition the game uses could not be stated."
+action = "Check whether a compatibility patch exists for these mods."
+
+["core.symbol_collision".variant.agreement.all_identical]
+title  = "{n} identical definitions of {domain} “{subject}”"
+body   = "The definitions are identical, so which one wins does not matter."
+action = "No action needed."
+
+["core.symbol_collision".variant.mechanism.load_order]
+title  = "{n} mods define {domain} “{subject}”; {winner}'s definition is used"
+body   = "{winner} loads later, so its definition is the one the game uses. The definitions from {losers} are discarded entirely — not merged."
+why    = "Two definitions of one object are not merged. The winning one replaces the others wholesale."
+action = "Check whether a compatibility patch exists, or change the load order if you prefer {loser_first}'s version."
+
+["core.symbol_collision".variant.mechanism.filename_order]
+title  = "{n} mods define {domain} “{subject}”; the file {winner_path} decides"
+body   = "In this directory file names, not the load order, decide which definition is used: {winner}'s file {winner_path} sorts where it wins. The definitions from {losers} are discarded entirely."
+action = "Reordering the mods will not change the winner here. Check whether a compatibility patch exists; only renaming {winner_path} (or the losing files) would."
+
+["core.symbol_collision".variant.mechanism.in_file_order]
+title  = "{winner} defines {domain} “{subject}” twice in {winner_path}"
+body   = "One file holds more than one definition of this object; its position in the file decides which is used."
+action = "Neither the load order nor file names change this. Report it to the author of {winner}."
+
+["core.symbol_collision".variant.mechanism.replace_tier]
+title  = "{winner}'s replacement of {domain} “{subject}” is used"
+body   = "{winner_path} is in a replacement directory, which is read before any filename or load-order rule. The definitions from {losers} are discarded."
+action = "No reordering changes this; it is how the replacement directory works."
+
+["core.symbol_deleted"]
+title  = "Could not verify that {domain} “{subject}” still exists"
+body   = "Every known definition of this object is in a file that may not reach the game, and the inputs needed to be sure were not all available."
+action = "Check the listed gaps; the finding may be a false alarm."
+
+["core.symbol_deleted".variant.outcome.deleted]
+title  = "{domain} “{subject}” is defined nowhere the game reads"
+body   = "Every file that defined this object was replaced or dropped, so the game no longer sees it."
+why    = "Anything that refers to it by name now refers to nothing."
+action = "Check whether a compatibility patch exists, or disable the mod whose file replaces the definition's file."
+
+["pdx.event_id_dup"]
+title  = "{n} events share the id “{subject}”"
+body   = "More than one live events file uses this event id. Which event the game keeps could not be stated."
+why    = "Two events with one id cannot both exist; whichever is dropped never fires."
+action = "Check whether a compatibility patch exists for these mods."
+
+["pdx.event_id_dup".variant.mechanism.load_order]
+title  = "{n} events share the id “{subject}”; {winner}'s is kept"
+body   = "{winner} loads later, so its event with this id is the one kept. The events from {losers} never fire."
+why    = "Two events with one id cannot both exist."
+action = "Check whether a compatibility patch exists, or change the load order if you prefer {loser_first}'s event."
+
+["pdx.event_id_dup".variant.mechanism.filename_order]
+title  = "{n} events share the id “{subject}”; the file {winner_path} decides"
+body   = "File names, not the load order, decide which event with this id is kept: {winner}'s file {winner_path}. The events from {losers} never fire."
+why    = "Two events with one id cannot both exist."
+action = "Reordering the mods will not change this. Report the clash to the mod authors; one of them must change the id."
+
+["pdx.event_id_dup".variant.mechanism.in_file_order]
+title  = "{winner} uses the event id “{subject}” twice in {winner_path}"
+body   = "One file holds two events with this id; only one is kept."
+action = "Report it to the author of {winner}."
+
+["pdx.namespace_share"]
+title  = "{sources} unrelated mods declare the event namespace “{subject}”"
+body   = "These mods use one event namespace without depending on each other. No event id clashes yet, but any future one would."
+why    = "A shared namespace is how two mods end up with the same event id after an update."
+action = "No action needed now. If events start misbehaving, check these mods first."
+
+["pdx.defines_overlap"]
+title  = "{n} values for the define “{subject}”"
+body   = "More than one live defines file sets this key. Which value the game uses could not be stated."
+action = "Check whether a compatibility patch exists for these mods."
+
+["pdx.defines_overlap".variant.agreement.all_identical]
+title  = "{n} identical values for the define “{subject}”"
+body   = "Every file sets the same value, so which one wins does not matter."
+action = "No action needed."
+
+["pdx.defines_overlap".variant.mechanism.load_order]
+title  = "{n} mods set the define “{subject}”; {winner}'s value is used"
+body   = "{winner} loads later, so its value is the one the game uses. The values from {losers} are ignored."
+why    = "A define is read everywhere; a changed value changes every system that reads it."
+action = "Check whether a compatibility patch exists, or change the load order if you prefer {loser_first}'s value."
+
+["pdx.defines_overlap".variant.mechanism.filename_order]
+title  = "{n} mods set the define “{subject}”; the file {winner_path} decides"
+body   = "File names, not the load order, decide which value is used: {winner}'s file {winner_path}. The values from {losers} are ignored."
+why    = "A define is read everywhere; a changed value changes every system that reads it."
+action = "Reordering the mods will not change this. Check whether a compatibility patch exists."
+
+["pdx.defines_overlap".variant.mechanism.in_file_order]
+title  = "{winner} sets the define “{subject}” twice in {winner_path}"
+body   = "One file sets this key more than once; its position in the file decides which value is used."
+action = "Report it to the author of {winner}."
+
+["pdx.replace_path_shadow"]
+title  = "{subject}: replace_path drops {files} file(s) from other mods"
+body   = "This mod declares replace_path for a directory, and files other mods ship there are, or may be, discarded whole."
+why    = "replace_path is usually meant to clear the base game's files; dropping another mod's files is usually a surprise."
+action = "Check whether the declaring mod is meant to be used together with the others listed."
+
+# --- certainty qualifiers: one row per non-best value of every axis (required) ---------
+
+[certainty.completeness.partial]
+text = "A file involved was only partly read; the copies may differ in ways not seen."
+
+[certainty.completeness.unparsed]
+text = "A file involved could not be read; this finding may be incomplete."
+
+[certainty.activation.inferred]
+text = "Which mods are enabled was inferred, not read from the launcher."
+
+[certainty.activation.conditional]
+text = "Would collide only if all these mods are enabled; the launcher could not say."
+
+[certainty.order.inferred]
+text = "Load order was inferred from a secondary source."
+
+[certainty.order.fallback]
+text = "Load order unknown: which mod wins is not stated."
+
+[certainty.semantics.assumed]
+text = "How the game merges this directory is assumed from prior art, not verified."
+
+[certainty.semantics.unmodelled]
+text = "How the game merges this directory is not modelled."
+
+# --- M4 descriptor-level rules ---------------------------------------------------------
+
+["dep.missing".variant.state.not_found]
+title  = "{subject} needs “{dependency}”, which was not found"
+body   = "{subject} declares a dependency on “{dependency}”, and no discovered mod has that name."
+why    = "Dependencies are declared by display name. A renamed, unsubscribed or undiscovered mod looks the same from here."
+action = "Subscribe to or install “{dependency}”, or check whether it was renamed."
+
+["dep.missing".variant.state.not_enabled]
+title  = "{subject} needs “{dependency}”, which is switched off"
+body   = "“{dependency}” is installed but not in the enabled playset."
+why    = "A mod whose dependency is not loaded usually references objects that do not exist."
+action = "Enable “{dependency}” in the launcher."
+
+["dep.missing".variant.state.activation_unknown]
+title  = "{subject} needs “{dependency}”; whether it is enabled is unknown"
+body   = "“{dependency}” is installed, but the enabled set could not be read, so whether it loads is not stated."
+action = "Check in the launcher that “{dependency}” is enabled."
+
+["dep.order".variant.order.after]
+title  = "“{dependency}” loads after {subject}, which needs it"
+body   = "{subject} depends on “{dependency}”, but “{dependency}” is later in the load order."
+why    = "A dependency is expected to load first so the dependent mod's changes apply on top of it."
+action = "Move “{dependency}” above {subject} in the load order."
+
+["dep.order".variant.order.unknown]
+title  = "Whether “{dependency}” loads before {subject} is unknown"
+body   = "{subject} depends on “{dependency}”, but the load order could not be established."
+action = "Check in the launcher that “{dependency}” is above {subject}."
+
+["meta.version_drift"]
+title  = "{subject} declares support for {supported_version}, not {game_version}"
+body   = "The mod's supported_version is {supported_version}; the installed game is {game_version}."
+why    = "An out-of-date mod often still works, but is the usual suspect when combined with other findings."
+action = "Look for an updated version of the mod."
+
+["meta.descriptor_mismatch"]
+title  = "{subject}: launcher and mod disagree on {field}"
+body   = "The launcher's .mod file says {field} = “{launcher}”; the mod's own descriptor.mod says “{inner}”."
+why    = "The launcher's copy goes stale when a mod updates; the launcher copy is the one that decides loading."
+action = "Re-sync the mod in the launcher, or resubscribe."

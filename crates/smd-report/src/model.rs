@@ -20,6 +20,30 @@ pub struct ReportModel {
     pub findings: Vec<ResolvedFinding>,
     /// Scan diagnostics, as text.
     pub diagnostics: Vec<DiagnosticRow>,
+    /// Empty for an unscored report (the default, and M1's output). When not empty,
+    /// `scores[i]` belongs to `findings[i]` and each finding prints its score, band,
+    /// finding id and explanation.
+    pub scores: Vec<FindingScore>,
+}
+
+/// What policy said about one finding, as text. The score and band themselves are read
+/// from the finding.
+#[derive(Clone, PartialEq, Eq, Debug, Default)]
+pub struct FindingScore {
+    /// The stable finding id `smd suppress` takes.
+    pub id: String,
+    /// One-line explanation; `None` when the catalogue has no entry.
+    pub title: Option<String>,
+    /// What happens.
+    pub body: Option<String>,
+    /// Why it matters.
+    pub why: Option<String>,
+    /// What the user can do.
+    pub action: Option<String>,
+    /// One sentence per uncertain axis; never omitted.
+    pub qualifiers: Vec<String>,
+    /// A user suppression hides it. It is still printed, marked.
+    pub suppressed: bool,
 }
 
 /// The part of a report that is never optional: where the order came from, how much of the

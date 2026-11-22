@@ -15,7 +15,10 @@ use smd_core::{
 use crate::codes::IngestDiagnostic;
 use crate::discovery::{UNASSIGNED, VANILLA_KEY};
 use crate::order::OrderChain;
-use crate::{ContentState, DiscoveredMod, Discovery, DiscoveryOptions, UnreadReason, discover};
+use crate::{
+    ContentState, DiscoveredMod, Discovery, DiscoveryOptions, UnreadReason, discover,
+    discover_with_launcher,
+};
 
 /// What ingest knows about one source beyond its [`SourceMeta`].
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -30,6 +33,9 @@ pub struct ModRecord {
     pub mod_file: Option<Box<str>>,
     /// The descriptor as read.
     pub descriptor: Descriptor,
+    /// The content directory's own `descriptor.mod`, when it is a second copy beside a
+    /// launcher `*.mod` and was read cleanly; `None` is no claim.
+    pub inner_descriptor: Option<Descriptor>,
     /// Descriptor diagnostics, sited at this source.
     pub diagnostics: Vec<Diagnostic>,
     /// The canonical content directory; `Some` only when `content` is `Readable`.
@@ -73,6 +79,7 @@ fn vanilla(install: Option<&PathBuf>) -> (SourceMeta, ModRecord) {
         dir_name: "".into(),
         mod_file: None,
         descriptor: Descriptor::default(),
+        inner_descriptor: None,
         diagnostics: Vec::new(),
         content_root: install.cloned(),
         content: install
@@ -93,6 +100,8 @@ fn place(playset: &Playset, key: &ModKey) -> (Vec<u32>, Activation) {
     let activation = match (playset.activation, entry) {
         (Confidence::Fallback, _) => Activation::Unknown,
         (_, Some(e)) if e.enabled => Activation::Active,
+        // An entry the join could not place may be this mod: absence proves nothing.
+        (_, None) if playset.unmatched > 0 => Activation::Unknown,
         _ => Activation::Inactive,
     };
     (rank, activation)
@@ -120,6 +129,7 @@ fn row(id: SourceId, m: &DiscoveredMod, playset: &Playset) -> (SourceMeta, ModRe
         dir_name: m.dir_name.clone(),
         mod_file: m.mod_file.clone(),
         descriptor: m.descriptor.clone(),
+        inner_descriptor: meta::inner_descriptor(m, id),
         diagnostics,
         content_root: m.content_root.clone(),
         content: m.content,
@@ -128,7 +138,8 @@ fn row(id: SourceId, m: &DiscoveredMod, playset: &Playset) -> (SourceMeta, ModRe
 }
 
 fn completeness(found: &Discovery) -> ScanCompleteness {
-    let mut c = ScanCompleteness::default();
+    let mut c =
+        ScanCompleteness { discovery_incomplete: found.incomplete, ..ScanCompleteness::default() };
     if found.install.is_none() {
         // Vanilla is `Active` with nothing read; an empty vanilla is not a scanned one.
         let reason = ContentIncompleteReason::Truncated;
@@ -154,7 +165,10 @@ pub fn inventory(
     chain: &OrderChain,
     opts: &DiscoveryOptions,
 ) -> Inventory {
-    let found = discover(loc, opts);
+    let found = match chain.launcher() {
+        Some(l) => discover_with_launcher(loc, opts, l),
+        None => discover(loc, opts),
+    };
     let outcome = chain.run_with(loc, &found);
     let (v_meta, v_record) = vanilla(found.install.as_ref());
     let mut metas = vec![v_meta];
@@ -164,6 +178,11 @@ pub fn inventory(
         metas.push(meta);
         records.push(record);
     }
+    let declared: Vec<&[Box<str>]> =
+        records.iter().map(|r| r.descriptor.dependencies.as_slice()).collect();
+    let deps = meta::resolve_deps(&metas, &declared);
+    let metas: Vec<SourceMeta> =
+        metas.into_iter().zip(deps).map(|(m, deps)| SourceMeta { deps, ..m }).collect();
     let provenance = PlaysetProvenance {
         order_source: outcome.order_source,
         order: outcome.playset.order,
@@ -182,5 +201,8 @@ pub fn inventory(
     }
 }
 
+mod meta;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_unmatched;

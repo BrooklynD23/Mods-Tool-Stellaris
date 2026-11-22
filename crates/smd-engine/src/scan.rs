@@ -5,17 +5,21 @@
 
 use std::collections::BTreeSet;
 
-use smd_core::{DiagSeverity, ModKey, ResolvedFinding, ResolvedLocations};
-use smd_index::{IndexBuilder, OverlayRules, ReplacePathScope, ScanIndex};
+use smd_core::{DiagSeverity, ModKey, ResolvedFinding, ResolvedLocations, ScanCompleteness};
+use smd_index::{
+    IndexBuilder, ModDescriptors, OverlayRules, PathClass, PlaysetMeta, ReplacePathScope,
+    ScanIndex, SymbolRules,
+};
 use smd_ingest::{
-    DiscoveryOptions, Inventory, KEY_INSTALL, KEY_USER_DIR, KEY_WORKSHOP, OrderChain,
-    SourceOptions, inventory,
+    DiscoveryOptions, Inventory, KEY_INSTALL, KEY_USER_DIR, KEY_VANILLA_CONTENT, OrderChain,
+    SourceOptions, check_game_version, inventory, workshop_key,
 };
 use smd_profiles::Profile;
 use smd_rules::{Rule, RuleCtx, run_all};
 
 use crate::certainty::certainty_of;
 use crate::output::{ScanDiagnostic, ScanOutput};
+use crate::parse_pass::Parsed;
 use crate::request::{ScanError, ScanRequest};
 use crate::rows;
 use crate::walk::{absorb, walk_sources};
@@ -27,35 +31,30 @@ use crate::walk::{absorb, walk_sources};
 /// or the cancellation token fires. A scan that ran is always `Ok`, however incomplete;
 /// its completeness says how much.
 pub fn scan(req: &ScanRequest) -> Result<ScanOutput, ScanError> {
-    let profile = Profile::shipped_default().map_err(ScanError::Profile)?;
-    let loc = locations(req)?;
+    let profile = Profile::shipped(req.game.as_deref()).map_err(ScanError::Profile)?;
+    let loc = locations(req, &profile)?;
     let disc = DiscoveryOptions { home: req.home.clone() };
     let opts = SourceOptions { discovery: disc.clone(), ..SourceOptions::default() };
     let (chain, mut diags) = from_profile(&profile, &opts);
     let inv = inventory(&loc, &chain, &disc);
     diags.extend(inv.diagnostics.iter().map(rows::from_ingest));
+    let gv = check_game_version(&loc, &profile);
+    diags.extend(gv.diagnostics.iter().map(rows::from_ingest));
     cancelled(req)?;
     let walked = walk_sources(&inv, &profile, req)?;
     diags.extend(walked.diagnostics);
     let mut completeness = inv.completeness.clone();
     absorb(&mut completeness, walked.completeness);
-    if inv.discovery_incomplete {
-        // Not a mod: smd-core has no discovery-incomplete field or Unreadable reason yet,
-        // so this rides content_incomplete under a synthetic key and says so in the text.
-        let key = ModKey("(discovery)".into());
-        let why = Some(
-            "not a mod: mod discovery was incomplete, so mods may be missing from this scan".into(),
-        );
-        completeness.content_incomplete.push((
-            key,
-            smd_core::ContentIncompleteReason::Truncated,
-            why,
-        ));
-    }
-    let index = build_index(&inv, &profile, walked.inputs);
+    completeness.discovery_incomplete |= req.locations_incomplete;
+    completeness.game_version_unverified = !gv.diagnostics.is_empty();
+    let gv = gv.raw.as_deref().and_then(smd_profiles::parse_game_version);
+    completeness.domains.sort();
+    completeness.domains.dedup();
     let incomplete: BTreeSet<ModKey> =
         completeness.content_incomplete.iter().map(|(k, _, _)| k.clone()).collect();
-    let findings = run_rules(&index, req, &incomplete, &mut diags)?;
+    let index = build_index(&inv, &profile, (walked.inputs, walked.parsed), gv, &incomplete);
+    let findings = run_rules(&index, req, (&incomplete, &completeness), &mut diags)?;
+    let (findings, annotations) = crate::policy::apply(req, findings, &mut diags)?;
     diags.sort_by(|a, b| (&a.location, &a.code, &a.detail).cmp(&(&b.location, &b.code, &b.detail)));
     Ok(ScanOutput {
         provenance: inv.provenance.clone(),
@@ -63,6 +62,7 @@ pub fn scan(req: &ScanRequest) -> Result<ScanOutput, ScanError> {
         inventory: rows::inventory_rows(&inv),
         findings,
         diagnostics: diags,
+        annotations,
     })
 }
 
@@ -70,10 +70,7 @@ fn cancelled(req: &ScanRequest) -> Result<(), ScanError> {
     if req.cancel.is_cancelled() { Err(ScanError::Cancelled) } else { Ok(()) }
 }
 
-fn locations(req: &ScanRequest) -> Result<ResolvedLocations, ScanError> {
-    if req.workshop_dirs.len() > 1 {
-        return Err(ScanError::Unsupported("more than one workshop directory"));
-    }
+fn locations(req: &ScanRequest, profile: &Profile) -> Result<ResolvedLocations, ScanError> {
     let check = |role: &'static str, path: &std::path::Path| {
         smd_fs::ReadOnlyRoot::open(path).map(|_| ()).map_err(|e| ScanError::RootUnreadable {
             role,
@@ -86,9 +83,16 @@ fn locations(req: &ScanRequest) -> Result<ResolvedLocations, ScanError> {
     let mut loc = ResolvedLocations::new();
     loc.insert(KEY_INSTALL, req.game_dir.clone());
     loc.insert(KEY_USER_DIR, req.user_dir.clone());
+    if let Some(sub) = &profile.locations().content_subdir {
+        loc.insert(KEY_VANILLA_CONTENT, req.game_dir.join(sub));
+    }
+    let mut distinct: Vec<&std::path::PathBuf> = Vec::new();
     for ws in &req.workshop_dirs {
         check("workshop", ws)?;
-        loc.insert(KEY_WORKSHOP, ws.clone());
+        if !distinct.iter().any(|d| smd_fs::same_host_dir(d, ws)) {
+            distinct.push(ws);
+            loc.insert(&workshop_key(distinct.len() - 1), ws.clone());
+        }
     }
     Ok(loc)
 }
@@ -98,10 +102,22 @@ fn from_profile(profile: &Profile, opts: &SourceOptions) -> (OrderChain, Vec<Sca
     (chain, diags.iter().map(rows::from_ingest).collect())
 }
 
+fn symbol_rules(profile: &Profile) -> SymbolRules {
+    let shared = profile.clone();
+    let classify = move |path: &str| {
+        let c = shared.dir_class(path);
+        PathClass { domain: c.domain, merge: c.merge, order: c.order, tier: c.tier }
+    };
+    SymbolRules::new(classify, profile.key_readings(), profile.domain_names().to_vec())
+        .with_languages(profile.languages())
+}
+
 fn build_index(
     inv: &Inventory,
     profile: &Profile,
-    inputs: Vec<smd_index::SourceInput>,
+    (inputs, parsed): (Vec<smd_index::SourceInput>, Vec<Parsed>),
+    game_version: Option<smd_core::GameVersion>,
+    incomplete: &BTreeSet<ModKey>,
 ) -> ScanIndex {
     let scope = match profile.replace_path_scope() {
         smd_profiles::ReplacePathScope::VanillaOnly => ReplacePathScope::VanillaOnly,
@@ -114,13 +130,33 @@ fn build_index(
     for input in inputs {
         builder.add_source(input);
     }
+    builder.set_meta(meta_of(inv, game_version));
+    builder.symbol_rules(symbol_rules(profile));
+    for p in parsed {
+        builder.add_facts(p.source, &p.path, p.facts);
+    }
+    builder.content_incomplete(
+        inv.records.iter().filter(|r| incomplete.contains(&r.key)).map(|r| r.source),
+    );
     builder.build()
+}
+
+fn meta_of(inv: &Inventory, game_version: Option<smd_core::GameVersion>) -> PlaysetMeta {
+    let descriptors = inv
+        .records
+        .iter()
+        .map(|r| ModDescriptors {
+            declared: r.descriptor.clone(),
+            inner: r.inner_descriptor.clone(),
+        })
+        .collect();
+    PlaysetMeta { game_version, descriptors }
 }
 
 fn run_rules(
     index: &ScanIndex,
     req: &ScanRequest,
-    incomplete: &BTreeSet<ModKey>,
+    incomplete: (&BTreeSet<ModKey>, &ScanCompleteness),
     diags: &mut Vec<ScanDiagnostic>,
 ) -> Result<Vec<ResolvedFinding>, ScanError> {
     let all = smd_rules::registry();
@@ -139,7 +175,7 @@ fn run_rules(
     diags.extend(out.diagnostics.iter().map(rows::from_core));
     let mut found = out.findings;
     for f in &mut found {
-        f.certainty = certainty_of(index, f, incomplete);
+        f.certainty = certainty_of(index, f, incomplete.0, incomplete.1);
     }
     let mut resolved: Vec<ResolvedFinding> =
         found.iter().map(|f| index.resolve_finding(f)).collect();

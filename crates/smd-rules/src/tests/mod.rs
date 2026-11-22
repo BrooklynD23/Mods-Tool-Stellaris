@@ -77,6 +77,15 @@ fn file_overwrite_cases_cover_all_kinds() {
 }
 
 #[test]
+fn every_registered_rule_passes_its_cases() {
+    for rule in registry() {
+        for case in rule.cases() {
+            crate::run_case(rule, case).unwrap_or_else(|e| panic!("{}: {e}", rule.id()));
+        }
+    }
+}
+
+#[test]
 fn resolve_finding_is_text_only() {
     let mut b = PlaysetBuilder::new();
     seeded(&mut b, 1);

@@ -22,8 +22,11 @@ to text only at render time.
 #[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct SymbolKey { pub domain: DomainId, pub symbol: SymbolId }
 
-/// Stable across runs and machines. Workshop id when present, else a hash of the
-/// descriptor's identifying fields. Used for cache keys, suppressions, and saved config.
+/// Stable across runs and machines. `steam:<id>` or `pdx:<id>` when the mod has a platform
+/// id (the platform is part of the key: ids of different platforms may be the same number),
+/// else `h-<hash>` of the descriptor's name, directory name and archive file name. The
+/// descriptor `version` is not hashed: a version bump keeps the key. Treat as an opaque
+/// string (reports and JSON do). Used for cache keys, suppressions, and saved config.
 pub struct ModKey(pub Box<str>);
 
 impl SourceId {
@@ -71,7 +74,7 @@ pub struct SourceMeta {
 
 pub enum Activation { Active, Inactive, Unknown }
 
-pub enum SourceRole { Vanilla, Dlc, Workshop, Local, Archive }
+pub enum SourceRole { Vanilla, Dlc, Workshop, ParadoxMods, Local, Archive }
 
 /// Scan-wide; one per scan, from the `LoadOrderSource` chain (§ `05`). The only home of
 /// order and activation confidence — there is no per-source copy to disagree with it.
@@ -689,7 +692,11 @@ diagnostics is still a successful scan.
    declared in order, and a snapshot test pins the assignment — rkyv and postcard encode
    a variant by position, not by name, so an inserted variant does not fail to decode: it
    decodes every fact already in the cache as the wrong kind.
-2. Adding a variant to any other `#[non_exhaustive]` enum is allowed; none are serialised.
+2. Adding a variant to any other `#[non_exhaustive]` enum is allowed. Some of them derive
+   serde behind `smd-core`'s `serde` feature for the parse cache (`files.rs`, `facts.rs`,
+   `diagnostic.rs`, `ids.rs`, `capability.rs`, `sources.rs`). No crate enables that
+   feature yet; when the cache lands (M2), a positional format makes those enums subject
+   to rule 1 too, unless `CONTRACT_VERSION` is bumped on every added variant.
 3. Adding a struct field is allowed only if it has a `Default`.
 4. `Capabilities` (§ `08`) is a `u32`, of which seven bits are used. A bitflags set that
    must never be narrowed costs nothing to declare wide now and a contract bump later.

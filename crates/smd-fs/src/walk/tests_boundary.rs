@@ -1,6 +1,7 @@
 //! Boundary cases: links with unreachable targets, loops, unreadable directories.
 
 use std::fs;
+#[cfg(unix)]
 use std::os::unix::fs::{PermissionsExt, symlink};
 use std::path::Path;
 
@@ -9,9 +10,13 @@ use smd_core::{ContentIncompleteReason, ParseCompleteness, UnparsedReason};
 use crate::{ReadOnlyRoot, WalkLimits, WalkOutcome};
 
 fn walk_with(root: &Path, limits: &WalkLimits) -> WalkOutcome {
-    ReadOnlyRoot::open(root).unwrap().walk(limits)
+    let r = ReadOnlyRoot::open(root).unwrap();
+    let mut out = r.walk(limits);
+    r.hash_records(&mut out, limits, &|_| true);
+    out
 }
 
+#[cfg(unix)]
 fn walk_root(root: &Path) -> WalkOutcome {
     walk_with(root, &WalkLimits::default())
 }
@@ -30,6 +35,7 @@ fn find<'a>(o: &'a WalkOutcome, key: &str) -> &'a crate::WalkRecord {
     o.records.iter().find(|r| r.path.as_str() == key).unwrap()
 }
 
+#[cfg(unix)]
 fn assert_refused_link(out: &WalkOutcome, rel: &str) {
     let r = out.records.iter().find(|r| r.path.as_str() == rel).expect("link record");
     assert_eq!(r.completeness, ParseCompleteness::Unparsed(UnparsedReason::Refused));
@@ -40,6 +46,7 @@ fn assert_refused_link(out: &WalkOutcome, rel: &str) {
 }
 
 #[test]
+#[cfg(unix)]
 fn dangling_link_still_content_incomplete() {
     let root = tempfile::tempdir().unwrap();
     symlink("/nonexistent/smd-target", root.path().join("gone")).unwrap();
@@ -47,6 +54,7 @@ fn dangling_link_still_content_incomplete() {
 }
 
 #[test]
+#[cfg(unix)]
 fn symlink_loop_still_content_incomplete() {
     let root = tempfile::tempdir().unwrap();
     symlink("b", root.path().join("a")).unwrap();
@@ -57,6 +65,7 @@ fn symlink_loop_still_content_incomplete() {
 }
 
 #[test]
+#[cfg(unix)]
 fn link_into_unreachable_directory_still_content_incomplete() {
     let holder = tempfile::tempdir().unwrap();
     let locked = holder.path().join("locked");
@@ -70,6 +79,7 @@ fn link_into_unreachable_directory_still_content_incomplete() {
 }
 
 #[test]
+#[cfg(unix)]
 fn unreadable_directory_is_truncated() {
     let root = tempfile::tempdir().unwrap();
     let locked = root.path().join("locked");

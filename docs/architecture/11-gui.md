@@ -199,6 +199,26 @@ are kept. Its proof is a test, not a review: a fixture install under a home dire
 account name chosen to be unique strings, every export format generated, and the build
 fails if either string appears in any output byte.
 
+The rules as built (`smd-report/src/escape/markdown.rs`, `smd-report/src/redact.rs`):
+
+- **Markdown text.** `\` `` ` `` `*` `_` `{` `}` `[` `]` `(` `)` `#` `+` `-` `.` `!` `|`
+  `~` `:` `@` `$` are backslash-escaped; `<` `>` `&` become entities; control characters
+  are escaped as in the terminal. Escaping `:` and `@` is what stops GFM autolinks.
+- **Code spans** (rule ids, subjects, paths, mod keys): fenced with one more backtick
+  than the longest backtick run in the content, padded with a space when the content
+  starts or ends with a backtick, and `|` written `\|` so a span cannot split a table
+  cell. A mod display name holding a backtick is rendered as such a span; any other
+  name is escaped text.
+- **Vocabulary tags** (`not_applicable`, `workshop`) are written bare only when they are
+  lowercase ASCII, digits and `_`; anything else is escaped like data.
+- **Redaction order.** It runs once over the view model's strings, before any sink
+  escapes them, so every format sees the same redacted text (a JSON-escaped Windows path
+  cannot slip past it). Home prefix → `~` (case-insensitive); the account name →
+  `<user>` everywhere except mod display names (an author's name is theirs, not
+  personal data of this machine); `userdata/<digits>` → `userdata/<id>`. The account
+  name comes from `USER`/`USERNAME`, else the home directory's last component; a very
+  short account name over-redacts, which is the safe direction.
+
 ### Gates (REVIEW-2026-10)
 
 | Gate | Closes when | Milestone |

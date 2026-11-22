@@ -2,8 +2,8 @@
 
 use smallvec::SmallVec;
 use smd_core::{
-    Diagnostic, EvidenceValue, Finding, ModKey, Participant, ResolvedEvidence, ResolvedFinding,
-    ResolvedParticipant, SourceId, Subject, SubjectPart,
+    Diagnostic, EventOrdinal, EvidenceValue, Finding, ModKey, Participant, ResolvedEvidence,
+    ResolvedFinding, ResolvedOrdinal, ResolvedParticipant, SourceId, Subject, SubjectPart,
 };
 
 use crate::index::ScanIndex;
@@ -80,7 +80,33 @@ impl ScanIndex {
             }
             Subject::Symbol(k) => {
                 let name = self.symbols.get(k.symbol.0);
-                (name.into(), vec![text(&k.domain.0.to_string()), text(name)])
+                let domain = match self.domain_name(k.domain) {
+                    "" => k.domain.0.to_string(),
+                    d => d.to_owned(),
+                };
+                (name.into(), vec![text(&domain), text(name)])
+            }
+            Subject::LocKey { lang, key } => {
+                let name = self.symbols.get(key.0);
+                let lang = match self.lang_name(*lang) {
+                    "" => lang.0.to_string(),
+                    l => l.to_owned(),
+                };
+                (name.into(), vec![text(&lang), text(name)])
+            }
+            Subject::Event { namespace, ordinal } => {
+                let ns = self.symbols.get(namespace.0);
+                let ord = match ordinal {
+                    EventOrdinal::Num(n) => ResolvedOrdinal::Num(*n),
+                    EventOrdinal::Name(s) => ResolvedOrdinal::Name(self.symbols.get(s.0).into()),
+                    _ => ResolvedOrdinal::Name(Diagnostic::UNHANDLED.into()),
+                };
+                let shown = match &ord {
+                    ResolvedOrdinal::Num(n) => format!("{ns}.{n}"),
+                    ResolvedOrdinal::Name(s) => format!("{ns}.{s}"),
+                    _ => format!("{ns}.{}", Diagnostic::UNHANDLED),
+                };
+                (shown.into(), vec![text(ns), SubjectPart::Ordinal(ord)])
             }
             other => (
                 format!("{} ({other:?})", Diagnostic::UNHANDLED).into(),

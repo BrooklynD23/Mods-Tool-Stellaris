@@ -57,6 +57,20 @@ mods_subdir      = "mod"
 # so the resolver must search every library rather than assume co-location.
 steam_library_index = ["config/libraryfolders.vdf", "steamapps/libraryfolders.vdf"]
 
+[stores]
+# How to recognise an install that Steam did not make. Read by smd-ingest's locator.
+executable = "stellaris.exe"
+# Uninstall-registry DisplayName prefix of a GOG (or other installer) entry; the entry's
+# InstallLocation is accepted only when it holds `executable`.
+gog_display_name_prefix = "Stellaris"
+# Xbox / Game Pass: under a drive root, `XboxGames/<name>/Content`.
+xbox_install = "XboxGames/Stellaris/Content"
+# Extra user_dir templates, tried after the OS default.
+# UNVERIFIED: the Game Pass edition may keep its data in a different Documents subfolder.
+# The entry below is a placeholder guess, not an observed path; confirm on a Game Pass
+# machine (docs/VERIFY.md) and replace or drop it.
+extra_user_dirs = ["{DOCUMENTS}/Paradox Interactive/Stellaris Game Pass"]
+
 [load_order]
 sources    = ["launcher_v2_sqlite", "dlc_load_json", "directory_scan"]
 
@@ -116,6 +130,11 @@ in_file_duplicate = "unknown"       # first | last
 [syntax]
 script       = "clausewitz"
 localisation = "pdx_locyml"
+# The `l_<name>:` header names a localisation file's language. A header naming anything
+# else is a diagnostic and its keys are not extracted (the file is Partial). Order is the
+# LangId assignment; append only.
+languages = ["english", "braz_por", "french", "german", "polish", "russian", "spanish",
+             "simp_chinese", "japanese", "korean"]
 descriptor   = "clausewitz_kv"
 
 # CORROBORATED (CWTools operator enum + Irony): exactly these eight, no others.
@@ -140,6 +159,10 @@ source  = "launcher-settings.json"
 source_dir = "install"
 fields  = ["rawVersion", "version"]
 pattern = "wildcard_dotted"    # 3.13.*
+# Game versions this profile's data was checked against (wildcard patterns). A scan warns
+# (`ingest.game_version_unverified`) when the installed version falls outside, or cannot
+# be read. NOT empirically verified (docs/VERIFY.md); widen only after a probe pass.
+verified_range = ["4.*"]
 # The set of supported_version wildcard shapes occurring in the wild is unresolved
 # (docs/VERIFY.md § Version). Best resolved by scraping workshop descriptors, not by a
 # probe mod. Until then the parser should accept unknown shapes rather than reject them.
@@ -167,6 +190,7 @@ domain = "define"
 merge  = "merge_by_key"     # CORROBORATED (V16): one definition per define KEY, not per file.
 merge_confidence = "corroborated"
 level  = 1
+extractor = "define"        # DefineKey facts, read by pdx.defines_overlap (not symbol rules)
 # Scoring consequence: pdx.defines_overlap must fire on KEY collision, not file overlap.
 # Two mods each shipping a one-key defines file with different keys is a non-event.
 
@@ -175,6 +199,7 @@ glob   = "unchecked_defines/**/*.txt"
 domain = "define"
 merge  = "merge_by_key"
 level  = 1
+extractor = "define"
 
 [[dir]]
 glob   = "common/traits/**/*.txt"
@@ -609,11 +634,16 @@ same_path = "unknown"       # VERIFY V39.
 glob   = "interface/**/*.gui"
 domain = "gui"
 merge  = "unknown"          # No source addresses .gui merge semantics.
+# Hash only until a named extractor exists: a .gui definition is named by its `name = `
+# field, not by a block key, so `depth_key` would report every file's `guiTypes` wrapper
+# as one symbol colliding across every mod (M2).
+parser = "none"
 
 [[dir]]
 glob   = "interface/**/*.gfx"
 domain = "gui_sprite"
 merge  = "unknown"
+parser = "none"             # As for .gui: `spriteTypes` wraps every file's definitions.
 
 [[dir]]
 glob   = "gfx/**"
@@ -674,6 +704,7 @@ encoding = "utf8_bom"       # SINGLE SOURCE (Irony): BOM is REQUIRED here specif
 glob   = "common/inline_scripts/**/*.txt"
 domain = "inline_script"
 merge  = "unknown"
+parser = "none"             # The file itself is the definition; Stage A covers it.
 # Textually substituted at parse time, so a collision here propagates into every call
 # site. Treated by Irony as a first-class Stellaris mechanism.
 

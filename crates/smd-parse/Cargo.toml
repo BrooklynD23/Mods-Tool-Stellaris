@@ -1,6 +1,6 @@
 [package]
 name = "smd-parse"
-description = "Lexers, the parser registry, and fact emission."
+description = "Lexers, the parser registry, and fact emission. Knows no game concept and stores nothing."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

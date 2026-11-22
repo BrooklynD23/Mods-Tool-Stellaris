@@ -18,24 +18,31 @@ stellaris-mod-doctor/
 │   ├── smd-fs/                 # paths, Steam discovery, VFS, hashing
 │   ├── smd-profiles/           # GameProfile trait + TOML loader + shipped profiles
 │   ├── smd-ingest/             # mod discovery, descriptors, load-order sources
-│   ├── smd-parse/              # lexers, parser registry, fact emission
+│   ├── smd-parse/              # lexers, parser registry, fact emission (re-added at M2)
 │   ├── smd-index/              # overlay, symbol table, resolver, cache
 │   ├── smd-rules/              # rule engine + one file per rule
-│   ├── smd-policy/             # scoring, severity bands, explanation catalogue
+│   ├── smd-policy/             # (M5) scoring, severity bands, explanation catalogue
 │   ├── smd-report/             # renderers: json, markdown, html, table
 │   ├── smd-engine/             # orchestration: the pipeline + job supervisor
 │   ├── smd-api/                # stable command/query surface + TS type export
-│   ├── smd-testkit/            # fixture builders, synthetic corpus generator
+│   ├── (smd-testkit/)          # planned: fixture builders, synthetic corpus generator
 │   ├── smd-cli/                # [bin] thin adapter
-│   ├── smd-gui/                # [bin] Tauri shell, thin adapter
-│   └── smd-py/                 # optional PyO3 binding (feature-gated, not in default)
+│   ├── (smd-gui/)              # planned (M7): [bin] Tauri shell, thin adapter
+│   └── (smd-py/)               # planned: optional PyO3 binding (feature-gated, not in default)
 ├── ui/                         # Svelte front-end, built into smd-gui
 ├── profiles/                   # shipped game profile data (TOML)
 ├── policy/                     # shipped scoring + explanation data (TOML)
 └── docs/
 ```
 
-Fifteen crates; fourteen in a default build, since `smd-py` is feature-gated out.
+Parenthesised crates are **planned, not yet crates**: the five 12-line stubs
+(`smd-parse`, `smd-policy`, `smd-testkit`, `smd-gui`, `smd-py`) were deleted because
+nothing depended on them and they only guarded layer positions that `layers.toml`
+records on arrival. Eleven crates exist today (plus `xtask`); `smd-parse` was re-added at
+M2. The design below is the
+target: each planned crate is re-added, with its `layers.toml` entry, at the milestone
+named in `15-roadmap.md`. Fifteen crates at full build-out; fourteen in a default build,
+since `smd-py` is feature-gated out.
 
 The count is deliberate in both directions, because "modular" and "many crates" are not
 the same property and the brief asked for the first. The requirement is about files and
@@ -65,7 +72,7 @@ separation, at the boundary that costs nothing.
 | `smd-report` | `Renderer` trait + impls over `ResolvedFinding` | Compute findings; depend on anything but `smd-core` |
 | `smd-engine` | Stage wiring, the thread pool, channels, cancellation, progress, error collection | Contain domain rules |
 | `smd-api` | `Command`/`Query`/`Event` enums, serde + TS export | Be imported by anything below it |
-| `smd-testkit` | Fixture builders, synthetic corpus generator | Appear in a non-dev dependency of a shipping crate |
+| `smd-testkit` *(planned)* | Fixture builders, synthetic corpus generator | Appear in a non-dev dependency of a shipping crate |
 
 The two most important lines in that table: **`smd-rules` never assigns a number**, and
 **`smd-index` never assigns a meaning.** Detection, valuation, and presentation are three

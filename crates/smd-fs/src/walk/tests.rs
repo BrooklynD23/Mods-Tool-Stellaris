@@ -1,13 +1,18 @@
 use std::fs;
 use std::io::Write;
+#[cfg(unix)]
 use std::os::unix::fs::symlink;
 use std::path::Path;
+#[cfg(unix)]
 use std::time::Duration;
 
-use smd_core::{ContentIncompleteReason, ModKey, ParseCompleteness, UnparsedReason};
+#[cfg(unix)]
+use smd_core::{ContentIncompleteReason, ModKey};
+use smd_core::{ParseCompleteness, UnparsedReason};
 
 use super::*;
 use crate::ReadOnlyRoot;
+#[cfg(unix)]
 use crate::hash_reader;
 
 fn put(root: &Path, rel: &str, bytes: &[u8]) {
@@ -16,8 +21,12 @@ fn put(root: &Path, rel: &str, bytes: &[u8]) {
     fs::write(p, bytes).unwrap();
 }
 
+/// Walk, then hash every file, as the eager walk used to.
 fn walk_root(root: &Path, limits: &WalkLimits) -> WalkOutcome {
-    ReadOnlyRoot::open(root).unwrap().walk(limits)
+    let r = ReadOnlyRoot::open(root).unwrap();
+    let mut out = r.walk(limits);
+    r.hash_records(&mut out, limits, &|_| true);
+    out
 }
 
 fn codes_of(o: &WalkOutcome) -> Vec<&'static str> {
@@ -29,6 +38,7 @@ fn find<'a>(o: &'a WalkOutcome, key: &str) -> &'a WalkRecord {
 }
 
 #[test]
+#[cfg(unix)]
 fn h22_file_symlink_refused() {
     let outside = tempfile::tempdir().unwrap();
     let canary = b"CANARY-7f3a91-never-read";
@@ -53,6 +63,7 @@ fn h22_file_symlink_refused() {
 }
 
 #[test]
+#[cfg(unix)]
 fn h22_dir_symlink_makes_source_content_incomplete() {
     let outside = tempfile::tempdir().unwrap();
     put(outside.path(), "x.txt", b"outside");
@@ -77,6 +88,7 @@ fn h22_dir_symlink_makes_source_content_incomplete() {
 }
 
 #[test]
+#[cfg(unix)]
 fn h22_fifo_never_opened() {
     let root = tempfile::tempdir().unwrap();
     put(root.path(), "a.txt", b"a");
@@ -145,6 +157,7 @@ fn h22_invalid_unicode_name() {
 }
 
 #[test]
+#[cfg(unix)]
 fn root_that_is_a_link_is_canonicalised() {
     let real = tempfile::tempdir().unwrap();
     put(real.path(), "x/y.txt", b"y");
@@ -203,6 +216,7 @@ fn walk_is_deterministic() {
 }
 
 #[test]
+#[cfg(unix)]
 fn read_file_refuses_a_swapped_in_link() {
     let outside = tempfile::tempdir().unwrap();
     put(outside.path(), "s.txt", b"secret");

@@ -1,7 +1,10 @@
 //! `ScanOutcome` to `ReportModel`: field-for-field, no logic.
 
-use smd_api::{ModRow, ScanDiagnostic, ScanOutcome};
-use smd_report::{DiagnosticRow, InventoryRow, ReportHeader, ReportModel};
+use smd_api::{Annotation, LocateOutput, LocatedMod, ModRow, ScanDiagnostic, ScanOutcome};
+use smd_report::{
+    DiagnosticRow, FindingScore, InventoryRow, LocateCandidate, LocateMod, LocateReport,
+    ReportHeader, ReportModel,
+};
 
 fn inventory(m: ModRow) -> InventoryRow {
     InventoryRow {
@@ -21,6 +24,19 @@ fn diagnostic(d: ScanDiagnostic) -> DiagnosticRow {
     DiagnosticRow { code: d.code, level: d.level, location: d.location, detail: d.detail }
 }
 
+fn score(a: Annotation) -> FindingScore {
+    let e = a.explanation;
+    FindingScore {
+        id: a.id,
+        title: e.as_ref().map(|e| e.title.clone()),
+        body: e.as_ref().and_then(|e| e.body.clone()),
+        why: e.as_ref().and_then(|e| e.why.clone()),
+        action: e.as_ref().and_then(|e| e.action.clone()),
+        qualifiers: e.map(|e| e.qualifiers).unwrap_or_default(),
+        suppressed: a.suppressed,
+    }
+}
+
 /// The renderer input for a finished scan. The findings are already in `smd-core`'s text
 /// sort order and are passed through untouched.
 #[must_use]
@@ -33,5 +49,52 @@ pub fn report_model(o: ScanOutcome) -> ReportModel {
         },
         findings: o.findings,
         diagnostics: o.diagnostics.into_iter().map(diagnostic).collect(),
+        scores: o.annotations.into_iter().map(score).collect(),
+    }
+}
+
+fn text(p: &std::path::Path) -> String {
+    p.display().to_string()
+}
+
+fn located_mod(m: LocatedMod) -> LocateMod {
+    LocateMod {
+        key: m.key,
+        name: m.name,
+        version: m.version,
+        supported_version: m.supported_version,
+        role: m.role.to_owned(),
+        mod_file: m.mod_file,
+        content_root: m.content_root.as_deref().map(text),
+        readable: m.readable,
+        remote_file_id: m.remote_file_id,
+        origin: m.origin.to_owned(),
+    }
+}
+
+/// The renderer input for `smd locate`: field-for-field, paths as text.
+#[must_use]
+pub fn locate_report(o: LocateOutput) -> LocateReport {
+    let l = o.located;
+    LocateReport {
+        store: l.store.as_str().to_owned(),
+        game_dir: l.game_dir.as_deref().map(text),
+        user_dir: l.user_dir.as_deref().map(text),
+        workshop_dirs: l.workshop_dirs.iter().map(|p| text(p)).collect(),
+        steam_libraries: l.steam_libraries.iter().map(|p| text(p)).collect(),
+        candidates: l
+            .candidates
+            .iter()
+            .map(|c| LocateCandidate {
+                key: c.key.to_owned(),
+                path: text(&c.path),
+                origin: c.origin.as_str().to_owned(),
+                exists: c.exists,
+            })
+            .collect(),
+        mods: o.mods.into_iter().map(located_mod).collect(),
+        diagnostics: o.diagnostics.into_iter().map(diagnostic).collect(),
+        incomplete: o.incomplete,
+        game_version: o.game_version,
     }
 }

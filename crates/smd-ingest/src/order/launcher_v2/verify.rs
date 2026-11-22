@@ -37,6 +37,7 @@ impl Fail {
 }
 
 /// A snapshot that passed every check.
+#[derive(Debug, PartialEq, Eq)]
 pub(super) struct Verified {
     pub schema: Schema,
     pub rows: Rows,

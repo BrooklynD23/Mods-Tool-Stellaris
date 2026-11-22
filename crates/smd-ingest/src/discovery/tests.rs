@@ -15,9 +15,9 @@ fn local_and_workshop_mods_are_found_with_keys() {
     assert_eq!(d.install.as_deref(), Some(w.install.as_path()));
     let keys: Vec<&str> = d.mods.iter().map(|m| m.key.as_str()).collect();
     assert_eq!(keys.len(), 2);
-    assert!(keys.contains(&"2001"), "workshop id is the key: {keys:?}");
+    assert!(keys.contains(&"steam:2001"), "workshop id is the key: {keys:?}");
     assert!(keys.iter().any(|k| k.starts_with("h-")), "local mods are hashed: {keys:?}");
-    let ws = d.mods.iter().find(|m| m.key.as_str() == "2001").expect("workshop mod");
+    let ws = d.mods.iter().find(|m| m.key.as_str() == "steam:2001").expect("workshop mod");
     assert_eq!(ws.role, SourceRole::Workshop);
     assert_eq!(ws.content, ContentState::Readable);
     assert_eq!(ws.mod_file.as_deref(), Some("ugc_2001.mod"));
@@ -34,7 +34,7 @@ fn unclaimed_workshop_directories_are_read_from_their_descriptor() {
     fs::write(w.workshop.join("888").join("descriptor.mod"), "name=\"Claimed\"\n").unwrap();
     let d = discover(&w.locations(), &w.options());
     assert_eq!(d.mods.len(), 2, "{:?}", d.mods.iter().map(|m| &m.key).collect::<Vec<_>>());
-    let direct = d.mods.iter().find(|m| m.key.as_str() == "777").expect("direct");
+    let direct = d.mods.iter().find(|m| m.key.as_str() == "steam:777").expect("direct");
     assert_eq!(&*direct.name, "Direct");
     assert_eq!(direct.mod_file, None);
 }
@@ -258,4 +258,34 @@ fn a_mod_file_and_its_workshop_directory_are_one_inventory_row() {
     let d = discover(&w.locations(), &w.options());
     assert_eq!(d.mods.len(), 1);
     assert!(d.diagnostics.iter().all(|x| x.code != codes::DUPLICATE_KEY));
+}
+
+#[test]
+fn several_workshop_roots_are_all_read_and_an_identical_root_once() {
+    let w = World::new();
+    w.workshop_mod("2001", "One");
+    let second = w.tmp.path().join("lib2-workshop");
+    fs::create_dir_all(second.join("2002")).unwrap();
+    fs::write(second.join("2002").join("descriptor.mod"), "name=\"Two\"\n").unwrap();
+    let mut loc = w.locations();
+    loc.insert(&workshop_key(1), second);
+    loc.insert(
+        &workshop_key(2),
+        PathBuf::from(format!("{}/./", crate::testutil::plain(&w.workshop))),
+    );
+    let d = discover(&loc, &w.options());
+    let mut names: Vec<&str> = d.mods.iter().map(|m| &*m.name).collect();
+    names.sort_unstable();
+    assert_eq!(names, ["One", "Two"], "the repeated root adds nothing");
+    assert!(d.diagnostics.iter().all(|x| x.code != codes::DUPLICATE_KEY));
+}
+
+#[test]
+fn a_missing_second_workshop_root_makes_discovery_incomplete() {
+    let w = World::new();
+    let mut loc = w.locations();
+    loc.insert(&workshop_key(1), w.tmp.path().join("gone"));
+    let d = discover(&loc, &w.options());
+    assert!(d.incomplete);
+    assert!(d.diagnostics.iter().any(|x| &*x.subject == "workshop.1"));
 }

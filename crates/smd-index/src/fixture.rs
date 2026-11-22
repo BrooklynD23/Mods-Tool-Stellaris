@@ -5,14 +5,19 @@
 //! filesystem or names a game.
 
 use smd_core::{
-    Activation, Blob, Confidence, Hasher128, ModKey, ParseCompleteness, PlaysetProvenance,
-    SamePath, SnapshotMethod, SourceId, SourceMeta, SourceRole, SourceTable, UnparsedReason,
+    Activation, Blob, Confidence, DomainId, FactPayload, FileOrder, Hasher128, LangId, MergeMode,
+    ModKey, ParseCompleteness, PlaysetProvenance, RawFact, SamePath, SnapshotMethod, SourceId,
+    SourceMeta, SourceRole, SourceTable, Span, UnparsedReason,
 };
 use smd_fs::{NormPath, shipped_name};
+use smd_profiles::{FilenameKey, KeyReadings};
 
 use crate::build::{FileRecord, IndexBuilder, SourceInput};
+use crate::defs::{PathClass, SymbolRules};
 use crate::index::ScanIndex;
 use crate::overlay_rules::{OverlayRules, ReplacePathScope};
+
+mod facts;
 
 /// Content address of `content`, in the form walk records carry.
 #[must_use]
@@ -70,7 +75,18 @@ pub struct PlaysetBuilder {
     same_path: SamePath,
     scope: ReplacePathScope,
     order: Confidence,
+    facts: Vec<(SourceId, NormPath, Vec<RawFact>)>,
+    class: PathClass,
+    readings: KeyReadings,
+    incomplete: Vec<SourceId>,
+    tier_prefix: Option<Box<str>>,
 }
+
+/// The one domain fixture definitions belong to.
+pub const FIXTURE_DOMAIN: &str = "thing";
+
+/// The one language fixture localisation entries belong to (`LangId(0)`).
+pub const FIXTURE_LANG: &str = "lang0";
 
 impl Default for PlaysetBuilder {
     fn default() -> Self {
@@ -88,6 +104,20 @@ impl PlaysetBuilder {
             same_path: SamePath::Replace,
             scope: ReplacePathScope::Unknown,
             order: Confidence::Exact,
+            facts: Vec::new(),
+            class: PathClass {
+                domain: Some(DomainId(0)),
+                merge: MergeMode::MergeByKey,
+                order: Some(FileOrder::Lios),
+                tier: 0,
+            },
+            readings: KeyReadings {
+                filename_key: Some(FilenameKey::Basename),
+                vanilla_in_axis: Some(false),
+                in_file_last: Some(true),
+            },
+            incomplete: Vec::new(),
+            tier_prefix: None,
         };
         b.push(Self::meta("vanilla", "Vanilla", vec![0], Activation::Active, SourceRole::Vanilla));
         b
@@ -169,6 +199,72 @@ impl PlaysetBuilder {
         self
     }
 
+    /// Ship a fully parsed file defining `(symbol, body)` pairs in [`FIXTURE_DOMAIN`].
+    pub fn define(&mut self, s: SourceId, path: &str, defs: &[(&str, &str)]) -> &mut Self {
+        let content: String = defs.iter().map(|(k, b)| format!("{k}={b};")).collect();
+        let shape = FileShape::of(&content).completeness(ParseCompleteness::Complete);
+        self.file_with(s, path, shape);
+        let facts = defs
+            .iter()
+            .map(|(symbol, body)| RawFact {
+                span: Span::default(),
+                payload: FactPayload::Definition {
+                    domain: DomainId(0),
+                    symbol: (*symbol).into(),
+                    body_hash: blob_of(body).hash,
+                },
+            })
+            .collect();
+        self.facts.push((s, NormPath::new(path).expect("fixture path must be valid"), facts));
+        self
+    }
+
+    /// Ship a fully parsed localisation file holding `(key, value)` entries in
+    /// [`FIXTURE_LANG`].
+    pub fn localise(&mut self, s: SourceId, path: &str, entries: &[(&str, &str)]) -> &mut Self {
+        let content: String = entries.iter().map(|(k, v)| format!("{k} \"{v}\"\n")).collect();
+        let shape = FileShape::of(&content).completeness(ParseCompleteness::Complete);
+        self.file_with(s, path, shape);
+        let facts = entries
+            .iter()
+            .map(|(key, value)| RawFact {
+                span: Span::default(),
+                payload: FactPayload::LocKey {
+                    lang: LangId(0),
+                    key: (*key).into(),
+                    version_ordinal: None,
+                    value_hash: blob_of(value).hash,
+                },
+            })
+            .collect();
+        self.facts.push((s, NormPath::new(path).expect("fixture path must be valid"), facts));
+        self
+    }
+
+    /// Paths under `prefix` take tier 1 (a `replace/`-style entry); others tier 0.
+    pub fn tier_under(&mut self, prefix: &str) -> &mut Self {
+        self.tier_prefix = Some(prefix.into());
+        self
+    }
+
+    /// Set every path's merge mode and filename direction.
+    pub fn key_layer(&mut self, merge: MergeMode, order: Option<FileOrder>) -> &mut Self {
+        self.class = PathClass { merge, order, ..self.class };
+        self
+    }
+
+    /// Set the Stage D readings (default: basename key, vanilla off the axis, last wins).
+    pub fn readings(&mut self, r: KeyReadings) -> &mut Self {
+        self.readings = r;
+        self
+    }
+
+    /// Mark `s` content-incomplete, as a refused directory link would (H50).
+    pub fn content_incomplete(&mut self, s: SourceId) -> &mut Self {
+        self.incomplete.push(s);
+        self
+    }
+
     /// Set the uniform `same_path` behaviour.
     pub fn same_path(&mut self, sp: SamePath) -> &mut Self {
         self.same_path = sp;
@@ -208,6 +304,19 @@ impl PlaysetBuilder {
         };
         let rules = OverlayRules::uniform(self.scope, self.same_path);
         let mut b = IndexBuilder::new(SourceTable::new(self.metas), provenance, rules);
+        let (class, tier_prefix) = (self.class, self.tier_prefix);
+        let classify = move |p: &str| {
+            let top = tier_prefix.as_deref().is_some_and(|t| p.starts_with(t));
+            PathClass { tier: u8::from(top), ..class }
+        };
+        let domains = vec![FIXTURE_DOMAIN.into()];
+        let rules = SymbolRules::new(classify, self.readings, domains)
+            .with_languages(vec![FIXTURE_LANG.into()].into());
+        b.symbol_rules(rules);
+        b.content_incomplete(self.incomplete);
+        for (s, p, f) in self.facts {
+            b.add_facts(s, &p, f);
+        }
         for &i in order {
             let mut input = self.inputs[i].clone();
             if reverse_files {

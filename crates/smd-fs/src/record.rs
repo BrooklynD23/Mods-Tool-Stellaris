@@ -20,9 +20,13 @@ pub struct WalkRecord {
     /// The root-relative path as raw OS components. This, not `path`, is what opens the
     /// file ([`ReadOnlyRoot::read_file`](crate::ReadOnlyRoot::read_file)).
     pub os_path: Vec<OsString>,
-    /// Content address; `None` unless the file was fully read and unchanged.
+    /// Size in bytes from the listing's stat (`0` for anything not a regular file).
+    pub size: u64,
+    /// Content address; `None` until a hash pass reads the file, and after it unless the
+    /// file was fully read and unchanged.
     pub blob: Option<Blob>,
-    /// `NotApplicable` for a hashed file until a parser exists; `Unparsed(_)` otherwise.
+    /// `NotApplicable` for a regular file until a parser exists; `Unparsed(_)` when it was
+    /// refused, or when a hash pass found it unreadable, oversize or changing.
     pub completeness: ParseCompleteness,
     /// Another entry of the same source has the same identity key.
     pub ambiguous: bool,

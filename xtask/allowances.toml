@@ -10,7 +10,7 @@
 # side is a lint failure, so an exemption cannot outlive the code that needed it.
 #
 # [[allowance]]
-# file   = "crates/smd-parse/src/tables.rs"
+# file   = "crates/smd-index/src/tables.rs"
 # rule   = "file-length"
 # reason = "byte-class table; splitting it across files makes it harder to review"
 
@@ -26,3 +26,11 @@ The game-name gate's own fixtures. Checking that a real name is flagged and that
 nobody can trust. The gate's implementation file needs no exemption: its prose uses \
 placeholders."""
 
+
+[[allowance]]
+file = "crates/smd-policy/src/appdir.rs"
+rule = "game-name"
+reason = """
+The config directory is named after the working product title (doc 14 § Product name, \
+an open owner decision), not after game knowledge. One file, two constants, so the \
+rename is one edit."""

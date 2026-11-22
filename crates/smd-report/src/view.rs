@@ -42,6 +42,8 @@ pub(crate) struct HeaderView {
     pub unparsed_total: u32,
     pub unparsed: Vec<UnparsedView>,
     pub domains: Vec<String>,
+    pub discovery_incomplete: bool,
+    pub game_version_unverified: bool,
     pub content_incomplete: Vec<ContentIncompleteView>,
     pub inventory: Vec<InventoryView>,
 }
@@ -78,6 +80,8 @@ pub(crate) struct FindingView {
     pub rule: String,
     pub subject: String,
     pub certainty: CertaintyView,
+    /// One sentence per non-best certainty axis (doc 09, "The qualifier"). Never omitted.
+    pub qualifiers: Vec<&'static str>,
     pub gaps: Vec<&'static str>,
     pub participants: Vec<ParticipantView>,
     /// How many participants the per-finding cap left out.
@@ -85,6 +89,22 @@ pub(crate) struct FindingView {
     /// The explicit "... and N more participants" line, when the cap binds.
     pub participants_more: Option<String>,
     pub facts: Vec<(String, String)>,
+    /// Present only in a scored report, so unscored JSON is unchanged.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub policy: Option<PolicyView>,
+}
+
+#[derive(Serialize, Debug)]
+pub(crate) struct PolicyView {
+    pub id: String,
+    pub score: i32,
+    pub severity: String,
+    pub suppressed: bool,
+    pub title: Option<String>,
+    pub body: Option<String>,
+    pub why: Option<String>,
+    pub action: Option<String>,
+    pub qualifiers: Vec<String>,
 }
 
 #[derive(Serialize, Debug)]

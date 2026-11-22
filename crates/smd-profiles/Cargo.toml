@@ -12,12 +12,15 @@ publish.workspace = true
 smd-core = { workspace = true }
 smd-fs = { workspace = true }
 serde = { workspace = true }
+smallvec = { workspace = true }
 toml = { workspace = true }
 
 [features]
-default = ["profile-stellaris"]
+default = ["profile-stellaris", "profile-ck3"]
 # Embeds `profiles/stellaris.toml` (relative to the workspace root) into the binary.
 profile-stellaris = []
+# Embeds `profiles/ck3.toml`. Every value in it is UNVERIFIED (M8).
+profile-ck3 = []
 
 [lints]
 workspace = true

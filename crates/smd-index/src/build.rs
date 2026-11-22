@@ -4,13 +4,18 @@ use std::sync::Arc;
 
 use smallvec::SmallVec;
 use smd_core::{
-    Blob, Diagnostic, ParseCompleteness, PathId, PlaysetProvenance, SourceId, SourceTable, SymbolId,
+    Blob, Diagnostic, ParseCompleteness, PathId, PlaysetProvenance, RawFact, SourceId, SourceTable,
+    SymbolId,
 };
 use smd_fs::{NormPath, WalkRecord};
 
+use crate::defs::{self, BuildCtx, FactBatch, SymbolRules};
 use crate::derived::{BitSet, Derived};
 use crate::index::ScanIndex;
 use crate::interner::InternerBuilder;
+use crate::keyed;
+use crate::loc;
+use crate::meta::PlaysetMeta;
 use crate::overlay::{Contribution, OverlayTable};
 use crate::overlay_rules::OverlayRules;
 use crate::replace::{ReplaceDecl, normalise_prefix};
@@ -30,11 +35,11 @@ pub struct FileRecord {
     pub ambiguous: bool,
 }
 
-impl From<&WalkRecord> for FileRecord {
-    fn from(r: &WalkRecord) -> FileRecord {
+impl From<WalkRecord> for FileRecord {
+    fn from(r: WalkRecord) -> FileRecord {
         FileRecord {
-            path: r.path.clone(),
-            raw_name: r.raw_name.clone(),
+            path: r.path,
+            raw_name: r.raw_name,
             blob: r.blob,
             completeness: r.completeness,
             ambiguous: r.ambiguous,
@@ -60,6 +65,10 @@ pub struct IndexBuilder {
     rules: OverlayRules,
     inputs: Vec<SourceInput>,
     diags: Vec<Diagnostic>,
+    meta: PlaysetMeta,
+    symbol_rules: SymbolRules,
+    facts: Vec<FactBatch>,
+    content_incomplete: Vec<SourceId>,
 }
 
 type Row<'a> = (u32, u32, &'a str, Option<Blob>, &'a FileRecord);
@@ -72,7 +81,42 @@ impl IndexBuilder {
         provenance: PlaysetProvenance,
         rules: OverlayRules,
     ) -> IndexBuilder {
-        IndexBuilder { sources, provenance, rules, inputs: Vec::new(), diags: Vec::new() }
+        IndexBuilder {
+            sources,
+            provenance,
+            rules,
+            inputs: Vec::new(),
+            diags: Vec::new(),
+            meta: PlaysetMeta::default(),
+            symbol_rules: SymbolRules::default(),
+            facts: Vec::new(),
+            content_incomplete: Vec::new(),
+        }
+    }
+
+    /// The Stage C/D classification. Without it no key-level outcome is stated.
+    pub fn symbol_rules(&mut self, rules: SymbolRules) -> &mut Self {
+        self.symbol_rules = rules;
+        self
+    }
+
+    /// One file's parse facts. The file must also be among `source`'s records, or its facts
+    /// have no contribution to hang on and are dropped.
+    pub fn add_facts(
+        &mut self,
+        source: SourceId,
+        path: &NormPath,
+        facts: Vec<RawFact>,
+    ) -> &mut Self {
+        self.facts.push(FactBatch { source, path: path.as_str().into(), facts });
+        self
+    }
+
+    /// Sources whose content was not fully listed or read (doc 06): a definition could be
+    /// anywhere in them, so no `Deleted` stands while one is not `Inactive`.
+    pub fn content_incomplete(&mut self, sources: impl IntoIterator<Item = SourceId>) -> &mut Self {
+        self.content_incomplete.extend(sources);
+        self
     }
 
     /// Add one source's walk. Call order does not affect the result.
@@ -87,13 +131,22 @@ impl IndexBuilder {
         self
     }
 
-    /// Assign ids (ascending `NormPath` bytes), build the overlay, and run Stages A and B.
-    #[must_use]
-    pub fn build(self) -> ScanIndex {
+    /// Descriptors and the game version, for the `dep.*` and `meta.*` rules.
+    pub fn set_meta(&mut self, meta: PlaysetMeta) -> &mut Self {
+        self.meta = meta;
+        self
+    }
+
+    /// Every path and string the index will refer to, unfrozen: record paths and raw names,
+    /// metadata strings, `replace_path` prefixes, and the strings each fact table cites.
+    fn interners(&self) -> (InternerBuilder, InternerBuilder) {
         let (mut pb, mut sb) = (InternerBuilder::new(), InternerBuilder::new());
         for r in self.inputs.iter().flat_map(|i| &i.records) {
             pb.insert(r.path.as_str());
             sb.insert(&r.raw_name);
+        }
+        for text in self.meta.strings(&self.sources) {
+            sb.insert(&text);
         }
         // `replace_path` prefixes are subjects too (`Subject::Directory`), so they need ids.
         for prefix in self.inputs.iter().flat_map(|i| &i.replace_paths) {
@@ -102,6 +155,16 @@ impl IndexBuilder {
                 pb.insert(&prefix);
             }
         }
+        defs::intern(&mut sb, &self.facts, &self.symbol_rules.domains);
+        loc::intern(&mut sb, &self.facts);
+        keyed::intern(&mut sb, &self.facts);
+        (pb, sb)
+    }
+
+    /// Assign ids (ascending `NormPath` bytes), build the overlay, and run Stages A and B.
+    #[must_use]
+    pub fn build(self) -> ScanIndex {
+        let (pb, sb) = self.interners();
         let (paths, symbols) = (Arc::new(pb.freeze()), Arc::new(sb.freeze()));
         let mut rows: Vec<Row<'_>> = Vec::new();
         for i in &self.inputs {
@@ -115,7 +178,25 @@ impl IndexBuilder {
         let same_path: Arc<[_]> =
             paths.iter().map(|(_, t)| self.rules.same_path_of(t)).collect::<Vec<_>>().into();
         let decls = declarations(&self.inputs);
+        let classes: Arc<[_]> =
+            paths.iter().map(|(_, t)| self.symbol_rules.class_of(t)).collect::<Vec<_>>().into();
+        let cx =
+            BuildCtx { paths: &paths, symbols: &symbols, overlay: &overlay, classes: &classes };
+        let defs = Arc::new(defs::build(&self.facts, &cx));
+        let loc = Arc::new(loc::build(&self.facts, &cx));
+        let keyed = Arc::new(keyed::build(&self.facts, &cx));
+        let mut content_incomplete = self.content_incomplete;
+        content_incomplete.sort_by_key(|s| s.index());
+        content_incomplete.dedup();
         let mut index = ScanIndex {
+            defs,
+            loc,
+            languages: self.symbol_rules.languages.clone(),
+            keyed,
+            classes,
+            readings: self.symbol_rules.readings,
+            domains: self.symbol_rules.domains.clone(),
+            content_incomplete: content_incomplete.into(),
             sources: self.sources,
             provenance: self.provenance,
             paths,
@@ -126,6 +207,7 @@ impl IndexBuilder {
             scope: self.rules.scope(),
             derived: Derived::default(),
             diags: Arc::new(self.diags),
+            meta: Arc::new(self.meta),
         };
         index.derived = derive(&index);
         index

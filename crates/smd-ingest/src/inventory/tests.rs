@@ -69,7 +69,8 @@ fn archive_mod_inventoried_unread() {
     let w = World::new();
     w.mod_file("zipped", "name=\"Zipped\"\narchive=\"mod/zipped.zip\"\nremote_file_id=\"42\"\n");
     let inv = scan_only(&w);
-    let (id, meta) = inv.table.iter().find(|(_, m)| m.key.as_str() == "42").expect("inventoried");
+    let (id, meta) =
+        inv.table.iter().find(|(_, m)| m.key.as_str() == "steam:42").expect("inventoried");
     assert_eq!(meta.role, SourceRole::Archive);
     let rec = &inv.records[id.index() as usize];
     assert_eq!(rec.content, ContentState::Unread(UnreadReason::Archive));
